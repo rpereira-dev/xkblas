@@ -52,6 +52,8 @@
 #define FORMAT_TYPE kaapi_dcplx_format
 #define SIZEOF_TYPE sizeof(Complex64_t)
 #define DOT_COLOR "darkorchid2"
+#define TASK_FLOPS FLOPS_ZSYRK(arg->n,arg->k)
+#define TASK_DATA  DATA_ZSYRK(arg->n,arg->k)
 
 /**
  *
@@ -136,9 +138,6 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
         arg->n, arg->k,
         (const cuDoubleComplex*)&arg->alpha, arg->A.data, arg->lda,
         (const cuDoubleComplex*)&arg->beta, arg->B.data, arg->ldb);
-  kaapi_offloadtask_perfcounter_t* perf = &kaapi_offload_self_device()->perfcnt.task[NAME(task_fmtid)];
-  perf->flops += FLOPS_ZSYRK(arg->n,arg->k);
-  perf->ai += FLOPS_ZSYRK(arg->n,arg->k)/DATA_ZSYRK(arg->n,arg->k);
 }
 #endif
 

@@ -1635,7 +1635,8 @@ int kaapi_taskformat_init(void)
            0, //task_format_reducor,
            0, //task_format_redinit,
            0, //task_fnc_get_splitter,
-           0  //task_fnc_get_affinity
+           0, //task_fnc_get_affinity
+           0  //task_fnc_get_cost
   );
   kaapi_nop_body = kaapi_format_taskregister_func( kaapi_format_allocate(),
            (void*)kaapi_nop_body_fnc, /* key */
@@ -1656,7 +1657,8 @@ int kaapi_taskformat_init(void)
            0, //task_format_reducor,
            0, //task_format_redinit,
            0, //task_fnc_get_splitter,
-           0  //task_fnc_get_affinity
+           0, //task_fnc_get_affinity
+           0  //task_fnc_get_cost
   );
   kaapi_taskmain_body = kaapi_format_taskregister_func( kaapi_format_allocate(),
            (void*)kaapi_taskmain_body_fnc, /* key */
@@ -1677,7 +1679,8 @@ int kaapi_taskformat_init(void)
            0, //task_format_reducor,
            0, //task_format_redinit,
            0, //task_fnc_get_splitter,
-           0  //task_fnc_get_affinity
+           0, //task_fnc_get_affinity
+           0  //task_fnc_get_cost
   );
 #if 0
 #if KAAPI_THE_ORIGINAL 
@@ -1690,7 +1693,6 @@ int kaapi_taskformat_init(void)
 #endif
   return 0;
 }
-
 
 /*
 */

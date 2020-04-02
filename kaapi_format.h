@@ -107,6 +107,7 @@ struct kaapi_format {
   kaapi_fmt_fnc_redinit          redinit;
   kaapi_fmt_fnc_get_splitter	 get_splitter;
   kaapi_fmt_fnc_get_affinity	 get_affinity;
+  kaapi_fmt_fnc_get_cost         get_cost;
 
   /* fields to link the format is the internal tables */
   kaapi_format_t          *next_bybody;  /* link in hash table */
@@ -232,6 +233,22 @@ static inline int kaapi_format_get_affinity(
     const kaapi_format_t* fmt, const void* sp, kaapi_task_t* task, uint16_t flag
 )
 { return (*fmt->get_affinity)(fmt, sp, task, flag); }
+
+/*
+*/
+static inline int kaapi_format_get_cost(
+    const kaapi_format_t* fmt, const void* sp, kaapi_task_t* task,
+    double* flops, double* data
+)
+{
+  if (fmt->get_cost ==0)
+  {
+    *flops = 0; *data = 0;
+    return;
+  }
+  return (*fmt->get_cost)(fmt, sp, task, flops, data);
+}
+
 
 /*
 */

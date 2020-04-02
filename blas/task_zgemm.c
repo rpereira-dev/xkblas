@@ -53,6 +53,9 @@
 #define FORMAT_TYPE kaapi_dcplx_format
 #define SIZEOF_TYPE sizeof(Complex64_t)
 #define DOT_COLOR "chartreuse3"
+#define TASK_FLOPS FLOPS_ZGEMM(arg->m,arg->n,arg->k)
+#define TASK_DATA  DATA_ZGEMM(arg->m,arg->n,arg->k)
+
 
 /**
  *
@@ -170,8 +173,9 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
       arg->C.data, kaapi_dbg_get_name(arg->C.data), arg->m, arg->n, arg->ldc
   );
 #endif
-  cublasStatus_t res;
   double flops = FLOPS_ZGEMM(arg->m,arg->n,arg->k);
+  kaapi_stat_internal_t* kpi = &kaapi_perthread_stat[kaapi_offload_self_device()->ctxt->tid];
+  cublasStatus_t res;
 #if defined(PRECISION_s)
   if (arg->mm == XKBLAS_TENSOR_OP_MATH)
   {
@@ -187,13 +191,13 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
      && (arg->ldc % 4 == 0)
     )
     {
-      ++kaapi_perthread_stat[kaapi_offload_self_device()->ctxt->tid].counter[KAAPI_CNT_GEMM_ONTC];
-      kaapi_perthread_stat[kaapi_offload_self_device()->ctxt->tid].dcounter[KAAPI_FLOPS_GEMM_ONTC] += flops;
+      ++kpi->counter[KAAPI_CNT_GEMM_ONTC];
+      kpi->dcounter[KAAPI_FLOPS_GEMM_ONTC] += flops;
     }
     else
     {
-      ++kaapi_perthread_stat[kaapi_offload_self_device()->ctxt->tid].counter[KAAPI_CNT_GEMM_NOTONTC];
-      kaapi_perthread_stat[kaapi_offload_self_device()->ctxt->tid].dcounter[KAAPI_FLOPS_GEMM_NOTONTC] += flops;
+      ++kpi->counter[KAAPI_CNT_GEMM_NOTONTC];
+      kpi->dcounter[KAAPI_FLOPS_GEMM_NOTONTC] += flops;
     }
 
 #if 0//KAAPI_DEBUG
@@ -230,8 +234,8 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
   else
 #endif // defined(PRECISION_s)
   {
-    ++kaapi_perthread_stat[kaapi_offload_self_device()->ctxt->tid].counter[KAAPI_CNT_GEMM_NOTONTC];
-    kaapi_perthread_stat[kaapi_offload_self_device()->ctxt->tid].dcounter[KAAPI_FLOPS_GEMM_NOTONTC]+= flops;
+    ++kpi->counter[KAAPI_CNT_GEMM_NOTONTC];
+    kpi->dcounter[KAAPI_FLOPS_GEMM_NOTONTC]+= flops;
     res = cublasSetMathMode((cublasHandle_t)handle, CUBLAS_DEFAULT_MATH);
   }
   kaapi_assert(res == CUBLAS_STATUS_SUCCESS);
@@ -245,9 +249,6 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
       (const cuDoubleComplex*)&arg->beta,
       (cuDoubleComplex*)arg->C.data, arg->ldc
   );
-  kaapi_offloadtask_perfcounter_t* perf = &kaapi_offload_self_device()->perfcnt.task[NAME(task_fmtid)];
-  perf->flops += flops;
-  perf->ai += flops/DATA_ZGEMM(arg->m,arg->n,arg->k);
 }
 #endif //USE CUDA
 

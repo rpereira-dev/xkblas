@@ -730,6 +730,10 @@ typedef void (*kaapi_fmt_fnc_redinit)(
 typedef kaapi_adaptivetask_splitter_t  (*kaapi_fmt_fnc_get_splitter)(
   const kaapi_format_t*, const void*
 );
+typedef void  (*kaapi_fmt_fnc_get_cost)(
+  const kaapi_format_t*, const void*, 
+  double*, double*
+);
 
 
 /** Register a task format with dynamic definition
@@ -755,7 +759,8 @@ extern kaapi_format_id_t kaapi_format_taskregister_func(
   kaapi_fmt_fnc_reducor          reducor,
   kaapi_fmt_fnc_redinit          redinit,
   kaapi_fmt_fnc_get_splitter     get_splitter,
-  kaapi_fmt_fnc_get_affinity     get_affinity
+  kaapi_fmt_fnc_get_affinity     get_affinity,
+  kaapi_fmt_fnc_get_cost         get_cost
 );
 
 /** Register a task body into its format (a variant for the given architecture).

@@ -104,7 +104,12 @@ static void callback_epilogue(
     double delta = kaapi_get_elapsedtime()-stask->s_time;
     kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_DURATION] += delta;
     const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
-    device->perfcnt.task[fmt->fmtid].time += delta;
+    kaapi_offloadtask_perfcounter_t* perf = device->perfcnt.task[fmt->fmtid];
+    double flops = 0, data = 0;
+    kaapi_format_get_cost(fmt, kaapi_task_getargs(task), task, &flops, &data );
+    perf->time += delta;
+    perf->flops += flops;
+    perf->ai += flops/data;
   }
   ++device->cnt_exec;
   ++device->exec_count;
@@ -175,6 +180,9 @@ int kaapi_offload_device_execute_task(
   ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_TASK_ASYNC_EXEC];
   if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
   {
+    /*TODO todo: move s_time to a field in the stream: there is no reason to store
+       runtime data for task not under running
+    */
     kaapi_task_withperfcnt_t* stask = (kaapi_task_withperfcnt_t*)task;
     stask->s_time = kaapi_get_elapsedtime();
   }

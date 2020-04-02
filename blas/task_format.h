@@ -170,6 +170,18 @@ static int PNAME(fnc_get_affinity)(
   return -1;
 }
 
+static int PNAME(fnc_get_cost)(
+  const kaapi_format_t* fmt, const void* sp, kaapi_task_t* t,
+  double *f, double *d
+)
+{
+  NAME(Arg) *arg = (NAME(Arg) *)sp;
+  if (f) { *f = TASK_FLOPS; }
+  if (d) { *d = TASK_DATA; }
+  return 0;
+}
+
+
 void NAME(register_format)(void)
 {
   kaapi_format_t* fmt = kaapi_format_allocate();
@@ -197,7 +209,8 @@ void NAME(register_format)(void)
          PNAME(format_reducor),
          PNAME(format_redinit),
          PNAME(fnc_get_splitter),
-         PNAME(fnc_get_affinity)
+         PNAME(fnc_get_affinity),
+         PNAME(fnc_get_cost)
   );
 #ifdef DOT_SHAPE
   fmt->shape_dot = DOT_SHAPE;
@@ -209,6 +222,7 @@ void NAME(register_format)(void)
 
 /* undefined used macro */
 #undef STRNAME
+#undef TASK_NAME
 #undef NAME
 #undef PNAME
 #undef NPARAM
@@ -219,3 +233,7 @@ void NAME(register_format)(void)
 #undef SIZEOF_TYPE
 #undef DOT_COLOR
 #undef DOT_SHAPE
+#undef TASK_FLOPS
+#undef TASK_DATA
+
+

@@ -198,7 +198,8 @@ kaapi_format_id_t kaapi_format_taskregister_func(
     kaapi_fmt_fnc_reducor          reducor,
     kaapi_fmt_fnc_redinit          redinit,
     kaapi_fmt_fnc_get_splitter	   get_splitter,
-    kaapi_fmt_fnc_get_affinity	   get_affinity
+    kaapi_fmt_fnc_get_affinity     get_affinity,
+    kaapi_fmt_fnc_get_cost         get_cost
 )
 {
   kaapi_format_register( fmt, key, name );
@@ -217,8 +218,9 @@ kaapi_format_id_t kaapi_format_taskregister_func(
   fmt->reducor          = reducor;
   fmt->redinit          = redinit;
   fmt->get_splitter	    = get_splitter;
-  fmt->get_affinity	    = get_affinity;
-  
+  fmt->get_affinity     = get_affinity;
+  fmt->get_cost         = get_cost;
+
   memset(fmt->entrypoint, 0, sizeof(fmt->entrypoint));
   
   if (body_cpu !=0)
