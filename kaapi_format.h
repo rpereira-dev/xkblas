@@ -244,9 +244,10 @@ static inline int kaapi_format_get_cost(
   if (fmt->get_cost ==0)
   {
     *flops = 0; *data = 0;
-    return;
+    return ENOSYS;
   }
-  return (*fmt->get_cost)(fmt, sp, task, flops, data);
+  (*fmt->get_cost)(fmt, sp, task, flops, data);
+  return 0;
 }
 
 

@@ -731,7 +731,7 @@ typedef kaapi_adaptivetask_splitter_t  (*kaapi_fmt_fnc_get_splitter)(
   const kaapi_format_t*, const void*
 );
 typedef void  (*kaapi_fmt_fnc_get_cost)(
-  const kaapi_format_t*, const void*, 
+  const kaapi_format_t*, const void*, kaapi_task_t*,
   double*, double*
 );
 

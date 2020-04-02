@@ -657,6 +657,9 @@ int xkblas_map_ij_cyclic(
 #define SIZEOF_TYPE arg->eltsize
 #define DOT_COLOR "gray"
 #define DOT_SHAPE "octagon"
+#define TASK_FLOPS 0
+#define TASK_DATA  0
+
 
 typedef struct {
   kaapi_access_t a;
@@ -771,6 +774,8 @@ static void xkblas_create_taskwriteback(
 #define SIZEOF_TYPE arg->eltsize
 #define DOT_COLOR "gray0"
 #define DOT_SHAPE "invtriangle"
+#define TASK_FLOPS 0
+#define TASK_DATA  0
 
 typedef struct {
   kaapi_access_t a;
@@ -855,6 +860,8 @@ static void xkblas_create_taskinvalidate(
 #define SIZEOF_TYPE arg->eltsize
 #define DOT_COLOR "gray1"
 #define DOT_SHAPE "triangle"
+#define TASK_FLOPS 0
+#define TASK_DATA  0
 
 typedef struct {
   kaapi_access_t a;

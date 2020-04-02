@@ -104,7 +104,7 @@ static void callback_epilogue(
     double delta = kaapi_get_elapsedtime()-stask->s_time;
     kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_DURATION] += delta;
     const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
-    kaapi_offloadtask_perfcounter_t* perf = device->perfcnt.task[fmt->fmtid];
+    kaapi_offloadtask_perfcounter_t* perf = &device->perfcnt.task[fmt->fmtid];
     double flops = 0, data = 0;
     kaapi_format_get_cost(fmt, kaapi_task_getargs(task), task, &flops, &data );
     perf->time += delta;

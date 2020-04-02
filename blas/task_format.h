@@ -170,7 +170,7 @@ static int PNAME(fnc_get_affinity)(
   return -1;
 }
 
-static int PNAME(fnc_get_cost)(
+static void PNAME(fnc_get_cost)(
   const kaapi_format_t* fmt, const void* sp, kaapi_task_t* t,
   double *f, double *d
 )
@@ -178,7 +178,6 @@ static int PNAME(fnc_get_cost)(
   NAME(Arg) *arg = (NAME(Arg) *)sp;
   if (f) { *f = TASK_FLOPS; }
   if (d) { *d = TASK_DATA; }
-  return 0;
 }
 
 
