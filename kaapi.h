@@ -268,8 +268,13 @@ struct kaapi_task {
   unsigned int                 prio: 3; // iff flag KAAPI_TASK_FLAG_PRIORITY is set, else ignored
   unsigned int                 ld: 13;  // iff flag KAAPI_TASK_FLAG_LD_BOUND is set, else ignored
   kaapi_atomic16_t             wc;
+#if KAAPI_DEBUG
+  kaapi_frame_t*               frame __attribute__ ((deprecated));
+  double                       s_time __attribute__ ((deprecated));
+#else
   kaapi_frame_t*               frame;   // TODO TODO TODO: hack to pass frame on stolen task....
   double                       s_time;  // startup time
+#endif
   uint64_t                     pad;
 };
 
@@ -847,6 +852,8 @@ enum kaapi_counter_name {
   KAAPI_CNT_TASK_SPAWN= 0,
   KAAPI_CNT_TASK_ASYNC_EXEC,
   KAAPI_CNT_TASK_EXEC,
+  KAAPI_FLOPS_TASK_EXEC,
+  KAAPI_FLOPS_TASK_PENDING,
   KAAPI_CNT_TASK_DURATION,
   KAAPI_CNT_GEMM_ONTC,
   KAAPI_CNT_GEMM_NOTONTC,
