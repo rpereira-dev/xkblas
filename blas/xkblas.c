@@ -402,7 +402,7 @@ uint64_t xkblas_register_memory_async( void* ptr, size_t sz )
 {
 
 #if KAAPI_USE_CUDA
-  kaapi_driver_t* driver = kaapi_offload_deriver_bytype( KAAPI_PROC_TYPE_CUDA );
+  kaapi_driver_t* driver = kaapi_offload_driver_bytype( KAAPI_PROC_TYPE_CUDA );
   if (driver ==0) return 0;
   return driver->f_host_register( ptr, sz, 0, 0, 0, 0);
 #endif
@@ -414,7 +414,7 @@ uint64_t xkblas_register_memory_async( void* ptr, size_t sz )
 int xkblas_register_memory_test( uint64_t handle )
 {
 #if KAAPI_USE_CUDA
-  kaapi_driver_t* driver = kaapi_offload_deriver_bytype( KAAPI_PROC_TYPE_CUDA );
+  kaapi_driver_t* driver = kaapi_offload_driver_bytype( KAAPI_PROC_TYPE_CUDA );
   if (driver ==0) return 1; /* always completed */
   return driver->f_host_register_testwait( handle, 0 );
 #endif
@@ -427,7 +427,7 @@ int xkblas_register_memory_test( uint64_t handle )
 int xkblas_register_memory_wait( uint64_t handle )
 {
 #if KAAPI_USE_CUDA
-  kaapi_driver_t* driver = kaapi_offload_deriver_bytype( KAAPI_PROC_TYPE_CUDA );
+  kaapi_driver_t* driver = kaapi_offload_driver_bytype( KAAPI_PROC_TYPE_CUDA );
   if (driver ==0) return 1; /* always completed */
   return driver->f_host_register_testwait( handle, 1 );
 #endif
@@ -440,7 +440,7 @@ int xkblas_register_memory_wait( uint64_t handle )
 int xkblas_register_memory_waitall( )
 {
 #if KAAPI_USE_CUDA
-  kaapi_driver_t* driver = kaapi_offload_deriver_bytype( KAAPI_PROC_TYPE_CUDA );
+  kaapi_driver_t* driver = kaapi_offload_driver_bytype( KAAPI_PROC_TYPE_CUDA );
   if (driver ==0) return 1; /* always completed */
   return driver->f_host_register_testwait( 0, 2 );
 #endif
@@ -460,7 +460,7 @@ int xkblas_register_memory( void* ptr, size_t sz )
 int xkblas_unregister_memory( void* ptr, size_t sz )
 {
 #if KAAPI_USE_CUDA
-  kaapi_driver_t* driver = kaapi_offload_deriver_bytype( KAAPI_PROC_TYPE_CUDA );
+  kaapi_driver_t* driver = kaapi_offload_driver_bytype( KAAPI_PROC_TYPE_CUDA );
   if (driver ==0) return 0;
   return driver->f_host_unregister( ptr, sz );
 #endif

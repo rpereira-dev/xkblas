@@ -308,7 +308,7 @@ extern kaapi_device_t* kaapi_offload_device(int devid);
 
 /** \ingroup Offload
  */
-extern kaapi_driver_t* kaapi_offload_deriver_bytype( unsigned int type );
+extern kaapi_driver_t* kaapi_offload_driver_bytype( unsigned int type );
 
 
 /** \ingroup Offload

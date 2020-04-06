@@ -56,6 +56,7 @@
 #define TASK_FLOPS FLOPS_ZGEMMT(arg->n,arg->k)
 #define TASK_DATA  DATA_ZGEMMT(arg->n,arg->k)
 
+
 /**
  *
  * @ingroup CORE_Complex64_t

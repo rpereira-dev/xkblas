@@ -121,7 +121,7 @@ int __kaapi_has_enough_dataspace( kaapi_thread_t* thread, size_t size)
 /*
 */
 kaapi_rtparam_t kaapi_default_param = {
-  .stackblocsize = KAAPI_STACKBLOCSIZE,
+  .stackblocsize         = KAAPI_STACKBLOCSIZE,
   .sys_ngpus             = (uint8_t)-1,
   .ngpus                 = (uint8_t)-1,
   .gpu_set               = ~0,

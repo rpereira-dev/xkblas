@@ -681,7 +681,7 @@ int kaapi_offload_finalize(void)
 
 /*
 */
-kaapi_driver_t* kaapi_offload_deriver_bytype( unsigned int type )
+kaapi_driver_t* kaapi_offload_driver_bytype( unsigned int type )
 {
   if (type >=KAAPI_PROC_TYPE_MAX) return 0;
   return kaapi_drivers_bytype[type];
