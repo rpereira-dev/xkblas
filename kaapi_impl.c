@@ -75,6 +75,8 @@ static kaapi_counter_info_t kaapi_name_counter[] = {
   {0, "#task spawn", 0, 0},
   {0, "#task launch", 0, 0},
   {1, "#task exec", 0, 0},
+  {1, "flops exec", 0, 1},
+  {1, "flops pending", 0, 1},
   {1, "GPU Work", "s", 1},
   {1, "#Gemm on TC", 0, 0},
   {1, "#Gemm not on TC", 0, 0},
@@ -157,7 +159,7 @@ static void kaapi_usage(void)
 void kaapi_print_counter(void)
 {
   FILE* file = stdout;
-  for (int i=0; i<KAAPI_CNT_MAX; ++i)
+  for (int i=0; i< (int)KAAPI_CNT_MAX; ++i)
   {
      if (kaapi_name_counter[i].type ==0)
      {

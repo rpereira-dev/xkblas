@@ -941,14 +941,14 @@ static void kaapi_cuda_init_reqreg_list( host_register_listrequest_t* rrl )
   rrl->reg_prod = 0;
   rrl->reg_cons = 0;
   rrl->reg_sig  = 0;
-  rrl->reg_lock = PTHREAD_MUTEX_INITIALIZER;
-  rrl->reg_cond = PTHREAD_COND_INITIALIZER;
+  kaapi_assert(0 == pthread_mutex_init(&rrl->reg_lock, 0));
+  kaapi_assert(0 == pthread_cond_init(&rrl->reg_cond,0));
   memset(rrl->req, 0, sizeof(rrl->req));
 };
 
 void* kaapi_cuda_register_thread(void* dummy )
 {
-  host_register_listrequest_t* rrl = (host_register_listrequest_t*)rrl;
+  host_register_listrequest_t* rrl = (host_register_listrequest_t*)dummy;
 
   while (plugin_initialized)
   {
@@ -963,7 +963,7 @@ void* kaapi_cuda_register_thread(void* dummy )
       }
     }
 label_unlock:
-    pthread_mutex_unlock(rrl->reg_lock);
+    pthread_mutex_unlock(&rrl->reg_lock);
     if (!plugin_initialized)
       break;
     if (rrl->reg_prod > rrl->reg_cons )
@@ -1084,9 +1084,12 @@ static int cuda_stream_decode_ioinstruction(
 #endif
         stream = &cios->stream;
 
+#if 0
+      /* todo in an efficient way: implicit synchro between host_register_async and here */
       /* wait end of pining operation if any */
-      while (reg_prod != reg_sig)
+      while (rrl->reg_prod != rrl->reg_sig)
         kaapi_slowdown_cpu();
+#endif
 
       kaapi_assert_debug(*stream !=0);
       struct kaapi_io_copy* op = &instr->inst.c_io;
@@ -1764,10 +1767,10 @@ KAAPI_PLUGIN_ENTRYPOINT(finalize)(void)
 
   /* */
   void* tmp;
-  for (int i=0; i<nrrl; ++i)
+  for (int i=0; i<all_rrl_size; ++i)
   {
     pthread_cond_signal( &all_rrl[i].reg_cond );
-    kaapi_assert(0==pthread_join( &all_rrl[i].thread, &tmp ));
+    kaapi_assert(0==pthread_join( all_rrl[i].thread, &tmp ));
   }
   free( all_rrl );
   all_rrl_size = 0;
@@ -1797,7 +1800,7 @@ uint64_t KAAPI_PLUGIN_ENTRYPOINT(host_register)(
   if (ptr ==0) return (uint64_t)-1;
 
   /* Hash function from the thread id to request register list */
-  int hash = kaapi_hash_ulong( pthread_self() ) % nrrl_size;
+  int hash = kaapi_hash_ulong( pthread_self() ) % all_rrl_size;
   host_register_listrequest_t* rrl = &all_rrl[hash];
   uint64_t index = KAAPI_ATOMIC_INCR_ORIG((kaapi_atomic64_t*)&rrl->reg_prod);
   int idx = index % KAAPI_MAX_REGLIST;
@@ -1822,12 +1825,12 @@ int KAAPI_PLUGIN_ENTRYPOINT(host_register_testwait)(
     int flag
 )
 {
-  if ((flag != 2) && ((index == (uint64_t)-1) || (index >= reg_prod)))
-    return EINVAL;
-
   /* Hash function from the thread id to request register list */
-  int hash = kaapi_hash_ulong( pthread_self() ) % nrrl_size;
+  int hash = kaapi_hash_ulong( pthread_self() ) % all_rrl_size;
   host_register_listrequest_t* rrl = &all_rrl[hash];
+
+  if ((flag != 2) && ((index == (uint64_t)-1) || (index >= rrl->reg_prod)))
+    return EINVAL;
 
   switch (flag) 
   {
@@ -1859,11 +1862,13 @@ int KAAPI_PLUGIN_ENTRYPOINT(host_register_wait)(
     uint64_t index
 )
 {
-  if ((index == (uint64_t)-1) || (index >= reg_prod))
-    return EINVAL;
   /* Hash function from the thread id to request register list */
-  int hash = kaapi_hash_ulong( pthread_self() ) % nrrl_size;
+  int hash = kaapi_hash_ulong( pthread_self() ) % all_rrl_size;
   host_register_listrequest_t* rrl = &all_rrl[hash];
+
+  if ((index == (uint64_t)-1) || (index >= rrl->reg_prod))
+    return EINVAL;
+
   while (index > rrl->reg_sig)
     kaapi_slowdown_cpu();
   return 0;
