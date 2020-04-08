@@ -70,6 +70,8 @@ static xkblas_context_t*   _xkblas_list_context = 0;
 static xkblas_mode_math_t xkblas_default_math = XKBLAS_DEFAULT_MATH;
 
 
+static const char* get_xkblas_info(void);
+
 /* Return the current xkblas_context (
 */
 xkblas_context_t* xkblas_context_alloc(void)
@@ -1004,6 +1006,8 @@ int xkblas_init(void)
   {
     if ((strcasecmp(m,"TC") ==0)||(strcasecmp(m,"tensorcore") ==0)||(strcasecmp(m,"mix1632") ==0))
       xkblas_default_math = XKBLAS_TENSOR_OP_MATH;
+    else if ((strcasecmp(m,"default") ==0)||(strcasecmp(m,"notc") ==0))
+      xkblas_default_math = XKBLAS_DEFAULT_MATH;
     else
       printf("[XKBlas] unkown math mode '%s', use default\n", m);
   }
@@ -1018,7 +1022,7 @@ int xkblas_init(void)
   extern const char* get_kaapi_version(void);
   extern const char* get_kaapi_info(void);
   printf("[XKBlas init] %s\n", get_kaapi_version() );
-  printf("[XKBlas info]\n%s[XKBlas info]\n", get_kaapi_info() );
+  printf("[XKBlas info]\n%s\n\%s[XKBlas info]\n", get_kaapi_info(), get_xkblas_info() );
 
   if (getenv("KAAPI_VERBOSE")||getenv("XKBLAS_VERBOSE"))
   {
@@ -1722,3 +1726,20 @@ extern void xkblas_load_sym(void** ptr, const char* name)
   }
   //printf("[xkblas]: end load symbol %s.\n",name);
 }
+
+
+/* How it was compiled */
+const char* get_xkblas_info(void)
+{ 
+  static char buffer[8192];
+  static int isinit = 0;
+  if (isinit ==0)
+    snprintf( buffer, 8192, 
+            "  Tile Size : %i\n"
+            "  Mode Math : %s\n",
+         xkblas_get_param(),
+         (xkblas_default_math == XKBLAS_TENSOR_OP_MATH ? "TensorCore" : "Default")
+    );
+  return buffer; 
+}
+
