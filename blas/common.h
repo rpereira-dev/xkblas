@@ -339,7 +339,21 @@ static inline kaapi_thread_t* xkblas_self_thread()
   return xkblas_context_get()->kthread;
 }
 
+/* Update load information
+   GPU: GPUlid
+   startend: 1 start, 0 end
+   flops,data: complexities (arith, byte) of the kernel
+   kern: the kernel
+*/
+extern int xkbkas_update_load(
+  int GPU,
+  int startend,
+  double flops,
+  double data,
+  xkblas_kernel_t kern
+);
 
+#if KAAPI_DEBUG
 static inline void print_dmatrix(int M, int N, double*  A, int ldA)
 {
   printf("%p\nmatrix( c( ", (void*)A);
@@ -373,14 +387,6 @@ static inline void print_smatrix(int M, int N, float*  A, int ldA)
   }
   printf(" ), nrow=%i, ncol=%i, byrow=TRUE);\n", M, N);
 }
-
-
-/* Task write back to initiate write back transfer to local host main memory
-   of cached data
-*/
-extern void kaapi_blas_create_taskwriteback(
-  size_t m, size_t n,
-  const void* A, size_t lda, size_t eltsize
-);
+#endif
 
 #endif /* _kaapi_benchmark_common_h_ */
