@@ -54,8 +54,8 @@ typedef struct kaapi_memory_device kaapi_memory_device_t;
 /*
 */
 typedef struct {
-  int state;
-  int error;
+  int   error;
+  float delay; /* depending of the IO_op */
 } kaapi_io_status_t;
 
 typedef void (*kaapi_io_cbk_fnc_t)(
@@ -118,7 +118,10 @@ struct kaapi_io_barrier {
   void*                        arg[3];
 };
 
-/* io instruction kernel : to launch kernel on the device */
+/* io instruction kernel : to launch kernel on the device
+  The delay field of the status arguments of the callback, if defined, is the delay in millisecond
+  to execute the kernel.
+*/
 struct kaapi_io_kernel {
   kaapi_io_cbk_fnc_t           fnc;
   void*                        arg[3];

@@ -167,9 +167,11 @@ typedef struct kaapi_driver {
         int flag
     );
 
-    /* Memory unregistration of host memory */
-    int  (*f_host_unregister)(
-        void* ptr, size_t
+    /* Memory unregistration of host memory: asynchronous version */
+    uint64_t  (*f_host_unregister)(
+        void* ptr, size_t sz,
+        kaapi_io_cbk_fnc_t cbk,
+        void* arg0, void* arg1, void* arg2
     );
 
     /* create device object and initialize device_id field with argument */

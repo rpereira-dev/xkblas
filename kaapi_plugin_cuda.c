@@ -110,8 +110,8 @@ static __thread int thread_type = 0;
 #endif
 
 // Debug: force redefinition
-#  undef CONFIG_SYNCHRONOUS_COPY
-#  define CONFIG_SYNCHRONOUS_COPY 1
+//#  undef CONFIG_SYNCHRONOUS_COPY
+//#  define CONFIG_SYNCHRONOUS_COPY 1
 
 //#  undef CONFIG_SYNCHRONOUS_KERNEL 
 //#  define CONFIG_SYNCHRONOUS_KERNEL 0
@@ -227,6 +227,7 @@ static hwloc_topology_t topology;
 */
 static void __cudaCheckError( CUresult err,  char *file, const int line )
 {
+    extern void kaapi_memory_cache_print_all(void);
     static char msg[256];
     const char* tmp ="";
     if ( CUDA_SUCCESS != err )
@@ -640,9 +641,11 @@ static int cuda_copy(
 #endif
     io_type = KAAPI_IO_COPY_H2D;
     tstream = KAAPI_IO_STREAM_H2D;
+#if defined(KAAPI_USE_PERFCOUNTER)
     ++kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYH2D];
     kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYH2D_BYTES] +=
       kaapi_memory_view_size( view_dest );
+#endif
   }
   else if ( (kaapi_memory_asid_get_arch(src.asid) != KAAPI_PROC_TYPE_HOST)
       && (kaapi_memory_asid_get_arch(dest.asid) == KAAPI_PROC_TYPE_HOST) )
@@ -652,9 +655,11 @@ static int cuda_copy(
 #endif
     io_type = KAAPI_IO_COPY_D2H;
     tstream = KAAPI_IO_STREAM_D2H;
+#if defined(KAAPI_USE_PERFCOUNTER)
     ++kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYD2H];
     kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYD2H_BYTES] +=
       kaapi_memory_view_size( view_dest );
+#endif
   }
   else if ( (kaapi_memory_asid_get_arch(src.asid) != KAAPI_PROC_TYPE_HOST)
       && (kaapi_memory_asid_get_arch(dest.asid) != KAAPI_PROC_TYPE_HOST) )
@@ -669,9 +674,11 @@ static int cuda_copy(
 #else
     tstream = KAAPI_IO_STREAM_H2D;
 #endif
+#if defined(KAAPI_USE_PERFCOUNTER)
     ++kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYD2D];
     kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYD2D_BYTES] +=
       kaapi_memory_view_size( view_dest );
+#endif
   }
 
   /* verify iff all inputs are in local node */
@@ -721,12 +728,12 @@ process  fprintf(stdout, "cuda:%s: device %d init\n", __FUNCTION__, device->inhe
 static size_t cuda_get_mem_info(kaapi_memory_device_t* dev, size_t* mem_total, size_t* mem_limit)
 {
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev->device;
-#if 1//_PLUGIN_DEBUG
+#if _PLUGIN_DEBUG
   fprintf(stdout, "cuda:%s: device %d init\n", __FUNCTION__, device->inherited.device_id);
 #endif
   if (mem_total) *mem_total = device->prop.mem_total;
   if (mem_limit) *mem_limit = device->mem_limit;
-#if 1//_PLUGIN_DEBUG
+#if _PLUGIN_DEBUG
   fprintf(stdout, "cuda:%s: device %d init\n", __FUNCTION__, device->inherited.device_id, (mem_total ==0 ? -1 : *mem_total), (mem_limit ==0 ? -1 : *mem_limit));
 #endif
   return device->prop.mem_total;
@@ -778,10 +785,13 @@ static void kaapi_cuda_init_cuda_stream(
        Using such insertions, it is able to compute (online) the bandwidth of communication.
        + enable timing
      */
-    res = cuEventCreate(&cios->end_events[k], CU_EVENT_DISABLE_TIMING);
-    CudaCheckError(res);
 #if defined(KAAPI_USE_PERFCOUNTER)
+    res = cuEventCreate(&cios->end_events[k], CU_EVENT_DEFAULT);
+    CudaCheckError(res);
     res = cuEventCreate(&cios->start_events[k], CU_EVENT_DEFAULT);
+    CudaCheckError(res);
+#else
+    res = cuEventCreate(&cios->end_events[k], CU_EVENT_DISABLE_TIMING);
     CudaCheckError(res);
 #endif
   }
@@ -896,12 +906,18 @@ static void cuda_stream_free(
 }
 
 
-/*
+/* also encode state...
 */
 typedef enum host_register_request_op {
   DEVICE_REGISTER_REQUEST,
   DEVICE_UNREGISTER_REQUEST
 } host_register_request_op_t;
+
+typedef enum register_state {
+  REQUEST_POST,
+  REQUEST_WAIT,
+  REQUEST_DONE
+} request_state_t;
 
 /* Request for asynchronous memory pining operation.
    Store request for pining memory region (ptr,size).
@@ -913,59 +929,61 @@ typedef enum host_register_request_op {
 */
 typedef struct host_register_request {
   host_register_request_op_t op;
-  void* ptr;
-  size_t size;
+  request_state_t            state;
+  pthread_mutex_t            lock;
+  pthread_cond_t             cond;
+  void*                      ptr;
+  size_t                     size;
+#if defined(KAAPI_USE_PERFCOUNTER)
+  double                     t0;    /* time to the post op */
+#endif
   kaapi_io_cbk_fnc_t cbk;
   void* arg0; void* arg1; void* arg2;
 } host_register_request_t;
 
 
-typedef struct host_register_listrequest {
+typedef struct host_register_queue {
   #define KAAPI_MAX_REGLIST 16
   pthread_t         thread;
   volatile uint64_t reg_prod;  /* index of the next request to store */
   volatile uint64_t reg_cons;  /* index of the next request to read */
-  volatile uint64_t reg_sig;  /* index of the last request completed */
-  pthread_mutex_t reg_lock;
-  pthread_cond_t reg_cond;
+  pthread_mutex_t   reg_lock;
+  pthread_cond_t    reg_cond;
+  pthread_cond_t    reg_cond_waitall;
   host_register_request_t req[KAAPI_MAX_REGLIST];
-} host_register_listrequest_t;
+} host_register_queue_t;
 
 
 /* array of lists of requests */
 static int all_rrl_size = 0;
-static host_register_listrequest_t* all_rrl = 0;
+static host_register_queue_t* all_rrl = 0;
 
-static void kaapi_cuda_init_reqreg_list( host_register_listrequest_t* rrl )
+static void kaapi_cuda_init_reqreg_list( host_register_queue_t* rrl )
 {
   rrl->reg_prod = 0;
   rrl->reg_cons = 0;
-  rrl->reg_sig  = 0;
   kaapi_assert(0 == pthread_mutex_init(&rrl->reg_lock, 0));
-  kaapi_assert(0 == pthread_cond_init(&rrl->reg_cond,0));
+  kaapi_assert(0 == pthread_cond_init(&rrl->reg_cond, 0));
+  kaapi_assert(0 == pthread_cond_init(&rrl->reg_cond_waitall, 0));
   memset(rrl->req, 0, sizeof(rrl->req));
+  for (int i=0; i<KAAPI_MAX_REGLIST; ++i)
+  {
+    kaapi_assert(0 == pthread_mutex_init(&rrl->req[i].lock, 0));
+    kaapi_assert(0 == pthread_cond_init(&rrl->req[i].cond, 0));
+  }
 };
 
 void* kaapi_cuda_register_thread(void* dummy )
 {
-  host_register_listrequest_t* rrl = (host_register_listrequest_t*)dummy;
-
-  while (plugin_initialized)
+  host_register_queue_t* rrl = (host_register_queue_t*)dummy;
+  int tid = (rrl-all_rrl);
+  kaapi_assert( tid < KAAPI_MAX_THREAD_CUDA_COUNT);
+  kaapi_assert(0 == pthread_mutex_lock(&rrl->reg_lock));
+  while (1)
   {
-    pthread_mutex_lock(&rrl->reg_lock);
-    if (rrl->reg_prod == rrl->reg_cons)
-    {
-      while (rrl->reg_prod == rrl->reg_cons)
-      {
-        if (!plugin_initialized)
-          goto label_unlock;
-        pthread_cond_wait(&rrl->reg_cond, &rrl->reg_lock);
-      }
-    }
-label_unlock:
-    pthread_mutex_unlock(&rrl->reg_lock);
-    if (!plugin_initialized)
-      break;
+    while (plugin_initialized && (rrl->reg_prod == rrl->reg_cons))
+      kaapi_assert(0 == pthread_cond_wait(&rrl->reg_cond, &rrl->reg_lock));
+
     if (rrl->reg_prod > rrl->reg_cons )
     {
       uint64_t index = rrl->reg_cons % KAAPI_MAX_REGLIST;
@@ -977,18 +995,19 @@ label_unlock:
       void* arg1;
       void* arg2;
 
-      while ( (ptr=rrl->req[index].ptr) ==0)
-        kaapi_slowdown_cpu();
+      ptr  = rrl->req[index].ptr;
       op   = rrl->req[index].op;
       size = rrl->req[index].size;
       cbk  = rrl->req[index].cbk;
       arg0 = rrl->req[index].arg0;
       arg1 = rrl->req[index].arg1;
       arg2 = rrl->req[index].arg2;
-      rrl->req[index].ptr = 0;
-      kaapi_writemem_barrier();
-      /* next after this instruction, register_list request index may be reused */
-      ++rrl->reg_cons;
+
+
+      kaapi_assert(0 == pthread_mutex_unlock(&rrl->reg_lock));
+#if defined(KAAPI_USE_PERFCOUNTER)
+      double t0p = kaapi_get_elapsedtime();
+#endif
 
       cudaError_t err;
       if (op == DEVICE_REGISTER_REQUEST)
@@ -1009,23 +1028,44 @@ label_unlock:
           printf("***[%s]: cudaHostUnregister error: %i\n", __func__, err);
         }
       }
+#if defined(KAAPI_USE_PERFCOUNTER)
+      double t1 = kaapi_get_elapsedtime();
+#endif
 
       if (cbk !=0)
       {
         kaapi_io_status_t ios = {0, err };
         cbk(ios, 0, arg0, arg1, arg2);
       }
+#if defined(KAAPI_USE_PERFCOUNTER)
+      double t1p = kaapi_get_elapsedtime();
 
-      /* signal ok: */
-#if ARCH_TSO
-      /* this is a compiler barrier */
-      kaapi_writemem_barrier();
-#else
-      kaapi_mem_barrier();
+      //TODO: toverhead += (t0p-rrl->req[index].t0) + (t1p-t1);
+      if (op == DEVICE_REGISTER_REQUEST)
+        kaapi_perthread_asyncpin[tid].dcounter[KAAPI_TIME_OS_PIN] += t1-t0p;
+      else
+        kaapi_perthread_asyncpin[tid].dcounter[KAAPI_TIME_OS_UNPIN] += t1-t0p;
+      kaapi_perthread_asyncpin[tid].dcounter[KAAPI_TIME_OVERHEAD_PIN]
+          += (t0p-rrl->req[index].t0) + (t1p-t1);
 #endif
-      ++rrl->reg_sig;
+
+      kaapi_assert(0 == pthread_mutex_lock(&rrl->reg_lock));
+      /* request lock */
+      kaapi_assert(0 == pthread_mutex_lock(&rrl->req[index].lock));
+      request_state_t state = rrl->req[index].state;
+      rrl->req[index].state = REQUEST_DONE;
+      if (state == REQUEST_WAIT)
+        kaapi_assert(0 == pthread_cond_signal( &rrl->req[index].cond ));
+      kaapi_assert(0 == pthread_mutex_unlock( &rrl->req[index].lock));
+      kaapi_assert_debug( rrl->reg_cons % KAAPI_MAX_REGLIST == index );
+      ++rrl->reg_cons;
+      /* always broadcast to waiters on all requests: may be optimized */
+      kaapi_assert(0 == pthread_cond_broadcast( &rrl->reg_cond_waitall ));
     }
+    /* if queue empty and plugin dinitialized then exit */
+    else if (!plugin_initialized) break;
   }
+  kaapi_assert(0 == pthread_mutex_unlock(&rrl->reg_lock));
   return 0;
 }
 
@@ -1076,13 +1116,12 @@ static int cuda_stream_decode_ioinstruction(
 #if KAAPI_HAVE_IO_THREADS
       kaapi_assert_debug( (thread_type == 1) || (thread_type == 2) );
 #endif
-#if 1
-      //stream = (instr->inst.c_io.prio == 0 ? &cios->stream_low : &cios->stream);
+
       if (instr->type == KAAPI_IO_COPY_D2D)
         stream = &cios->stream_low;
       else
-#endif
         stream = &cios->stream;
+      kaapi_assert_debug(*stream !=0);
 
 #if 0
       /* todo in an efficient way: implicit synchro between host_register_async and here */
@@ -1091,7 +1130,12 @@ static int cuda_stream_decode_ioinstruction(
         kaapi_slowdown_cpu();
 #endif
 
-      kaapi_assert_debug(*stream !=0);
+#if CONFIG_USE_EVENT && defined(KAAPI_USE_PERFCOUNTER)
+      res = cuEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
+      kaapi_assert(res == CUDA_SUCCESS);
+      //printf("Start event recorded for IO %s at pos: %i\n", name_io[instr->type], ios->pos_wp );
+#endif
+
       struct kaapi_io_copy* op = &instr->inst.c_io;
 
       /* switch among view_src type (1D, 2D or 3D).
@@ -1110,7 +1154,7 @@ static int cuda_stream_decode_ioinstruction(
       {
         type = KAAPI_MEMORY_VIEW_1D;
       }
-      kaapi_assert( test||(instr->type!=KAAPI_IO_COPY_D2D) );
+      kaapi_assert_debug( test || (instr->type != KAAPI_IO_COPY_D2D) );
 
       void* src  = kaapi_memory_view2pointer((void*)op->src, op->view_src);
       void* dest = kaapi_memory_view2pointer((void*)op->dest, op->view_dest);
@@ -1188,7 +1232,7 @@ static int cuda_stream_decode_ioinstruction(
               pcopy.dstMemoryType = CU_MEMORYTYPE_DEVICE;
               pcopy.dstDevice     = (CUdeviceptr)dest;
               COUNTER_CNT_H2D++;
-              COUNTER_SIZE_H2D+= size;
+              COUNTER_SIZE_H2D   += size;
 #if LOG_DBG
               printf("%s: pos: %i, instr '%s' 2D data: src:%p, dest:%p, size:%i\n", __FUNCTION__, ios->pos_r, name_io[instr->type], (void*)src, (void*)dest, (int)size);
 #endif
@@ -1199,7 +1243,7 @@ static int cuda_stream_decode_ioinstruction(
               pcopy.dstMemoryType = CU_MEMORYTYPE_HOST;
               pcopy.dstHost       = dest;
               COUNTER_CNT_D2H++;
-              COUNTER_SIZE_D2H+= size;
+              COUNTER_SIZE_D2H   += size;
 #if LOG_DBG
               printf("%s: pos: %i, instr '%s' 2D data: src:%p, dest:%p, size:%i\n", __FUNCTION__, ios->pos_r, name_io[instr->type], (void*)src, (void*)dest, (int)size);
 #endif
@@ -1210,7 +1254,7 @@ static int cuda_stream_decode_ioinstruction(
               pcopy.dstMemoryType = CU_MEMORYTYPE_DEVICE;
               pcopy.dstDevice     = (CUdeviceptr)dest;
               COUNTER_CNT_D2D++;
-              COUNTER_SIZE_D2D+= size;
+              COUNTER_SIZE_D2D   += size;
 #if LOG_DBG
               printf("%s: pos: %i, instr '%s' 2D data: src:%p, dest:%p, size:%i\n", __FUNCTION__, ios->pos_r, name_io[instr->type], (void*)src, (void*)dest, (int)size);
 #endif
@@ -1231,6 +1275,7 @@ static int cuda_stream_decode_ioinstruction(
             kaapi_abort( __LINE__, __FILE__, "Invalid storage");
           }
 
+//printf("%s:: copy: %p->%p ~~ srcPitch:%i, destPich:%i, Width:%i, Height:%i\n",__func__, src, dest, pcopy.srcPitch, pcopy.dstPitch, pcopy.WidthInBytes, pcopy.Height);
           res = cuMemcpy2DAsync( &pcopy, *stream );
           CudaCheckErrorWithDump(res, 
             printf("%p:: tid: %i,  type: %s, %p -> %p, size:%i\n", 
@@ -1245,6 +1290,7 @@ static int cuda_stream_decode_ioinstruction(
           kaapi_assert(false); 
           break;
       };
+
 #if CONFIG_SYNCHRONOUS_COPY
       res = cuStreamSynchronize( *stream );
       CudaCheckError(res);
@@ -1252,6 +1298,7 @@ static int cuda_stream_decode_ioinstruction(
 #elif CONFIG_USE_EVENT 
       res = cuEventRecord( cios->end_events[ ios->pos_wp % ios->count ], *stream );
       CudaCheckError(res);
+      //printf("End event recorded for IO %s at pos: %i\n", name_io[instr->type], ios->pos_wp );
 #else // no use event, no synchronous == synchronous
       #error "Unsupported configuration"
 #endif
@@ -1285,6 +1332,10 @@ static int cuda_stream_decode_ioinstruction(
           op->task,
           (void*)*stream
       );
+#if CONFIG_USE_EVENT && defined(KAAPI_USE_PERFCOUNTER)
+      res = cuEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
+      kaapi_assert(res == CUDA_SUCCESS);
+#endif
       kaapi_offload_device_execute_task(
         &device->inherited,
         op->frame,
@@ -1310,7 +1361,7 @@ static int cuda_stream_decode_ioinstruction(
 
 
 /* The purpose of this function is to increase ios->ok_p
-   whithout calling callback
+   but whithout calling callback
  */
 static int cuda_stream_advance_pending(
     kaapi_device_t* device,
@@ -1354,6 +1405,10 @@ static int cuda_stream_advance_pending(
         kaapi_assert((res == CUDA_ERROR_NOT_READY)  || (res == CUDA_SUCCESS));
         if (res == CUDA_ERROR_NOT_READY)
           return EINPROGRESS;
+#if KAAPI_DEBUG && defined(KAAPI_USE_PERFCOUNTER)
+        res = cuEventQuery( cios->start_events[idx] );
+        kaapi_assert(res == CUDA_SUCCESS);
+#endif
 #if LOG_DBG
         printf("%s:: instruction pos:%i, instr '%s' ok\n", __func__, ios->ok_p,  name_io[op.type]);
 #endif
@@ -1410,7 +1465,11 @@ redo:
               res = cuEventQuery( cios->end_events[idx] );
               if (res != CUDA_SUCCESS)
                 printf("   invalid state at: %lu non fifo order ?\n", i );
-              kaapi_assert((res == CUDA_SUCCESS));
+              kaapi_assert(res == CUDA_SUCCESS);
+#if defined(KAAPI_USE_PERFCOUNTER)
+              res = cuEventQuery( cios->start_events[idx] );
+              kaapi_assert(res == CUDA_SUCCESS);
+#endif
             }
           }
 #endif
@@ -1487,6 +1546,8 @@ static int cuda_stream_process_pending(
     int blocking
 )
 {
+  kaapi_cuda_io_stream_t* cios = (kaapi_cuda_io_stream_t*)ios;
+
 #if KAAPI_HAVE_IO_THREADS
   /* only make progression by the calling thread if type is KERNEL type */
   if (ios->type == KAAPI_IO_STREAM_KERN)
@@ -1511,14 +1572,31 @@ static int cuda_stream_process_pending(
       case KAAPI_IO_COPY_D2D:
       case KAAPI_IO_END:
       case KAAPI_IO_BARRIER:
+      {
         ios->pending[ios->pos_rp % ios->count].type = KAAPI_IO_NOP;
+#if defined(KAAPI_USE_PERFCOUNTER)
+        CUresult res;
+#if KAAPI_DEBUG
+        CUresult res_dbg;
+        res_dbg = cuEventQuery( cios->start_events[idx] );
+        if (res_dbg != CUDA_SUCCESS)
+          printf("   invalid start_event state at: %lu \n", idx );
+#endif
+        res = cuEventElapsedTime ( &status.delay, cios->start_events[idx], cios->end_events[idx] );
+        if (res != CUDA_SUCCESS) {
+          printf("   invalid Cuda event state at: %lu non fifo order ?\n", idx );
+          status.delay = 0;
+          kaapi_assert(0);
+        }
+#endif
         if (op.inst.cbk.fnc)
-{
+        {
 #if LOG_DBG
           printf("Cbk on : %i  ->%s\n", pos, name_io[op.type] );
 #endif
           op.inst.cbk.fnc(status, ios, op.inst.cbk.arg[0], op.inst.cbk.arg[1], op.inst.cbk.arg[2]);
-}
+        }
+      }
 
 
       case KAAPI_IO_NOP:
@@ -1736,9 +1814,9 @@ KAAPI_PLUGIN_ENTRYPOINT(init)(void)
   int nrrl = getenv("KAAPI_RRL_SIZE") ? atoi(getenv("KAAPI_RRL_SIZE")) : 1;
   if (nrrl <=0) nrrl = 1;
   if (nrrl >= kaapi_default_param.ngpus) nrrl = kaapi_default_param.ngpus;
-  printf("*** NEW: #rrl=%i\n", nrrl);
+  //printf("*** NEW: #rrl=%i\n", nrrl);
   all_rrl_size =nrrl;
-  all_rrl = (host_register_listrequest_t*)malloc(all_rrl_size* sizeof(host_register_listrequest_t));
+  all_rrl = (host_register_queue_t*)malloc(all_rrl_size* sizeof(host_register_queue_t));
   for (int i=0; i<nrrl; ++i)
   {
     kaapi_cuda_init_reqreg_list(&all_rrl[i]);
@@ -1769,8 +1847,8 @@ KAAPI_PLUGIN_ENTRYPOINT(finalize)(void)
   void* tmp;
   for (int i=0; i<all_rrl_size; ++i)
   {
-    pthread_cond_signal( &all_rrl[i].reg_cond );
-    kaapi_assert(0==pthread_join( all_rrl[i].thread, &tmp ));
+    kaapi_assert(0 == pthread_cond_signal( &all_rrl[i].reg_cond ));
+    kaapi_assert(0 == pthread_join( all_rrl[i].thread, &tmp ));
   }
   free( all_rrl );
   all_rrl_size = 0;
@@ -1788,6 +1866,38 @@ KAAPI_PLUGIN_ENTRYPOINT(finalize)(void)
 }
 
 
+static uint64_t post_request(
+    host_register_request_op_t op,
+    void* ptr, size_t size,
+    kaapi_io_cbk_fnc_t cbk,
+    void* arg0, void* arg1, void* arg2
+)
+{
+  if (ptr ==0) return (uint64_t)-1;
+
+  /* Hash function from the thread id to request register list */
+  int hash = kaapi_hash_ulong( pthread_self() ) % all_rrl_size;
+  host_register_queue_t* rrl = &all_rrl[hash];
+  kaapi_assert(0 == pthread_mutex_lock( &rrl->reg_lock ));
+  uint64_t index = rrl->reg_prod;
+  ++rrl->reg_prod;
+  int idx = index % KAAPI_MAX_REGLIST;
+  rrl->req[idx].op   = op;
+  rrl->req[idx].state= REQUEST_POST;
+  rrl->req[idx].size = size;
+  rrl->req[idx].cbk  = cbk;
+  rrl->req[idx].arg0 = arg0;
+  rrl->req[idx].arg1 = arg1;
+  rrl->req[idx].arg2 = arg2;
+  rrl->req[idx].ptr  = ptr;
+#if defined(KAAPI_USE_PERFCOUNTER)
+  rrl->req[idx].t0   = kaapi_get_elapsedtime();
+#endif
+  kaapi_assert(0 == pthread_cond_signal( &rrl->reg_cond ));
+  kaapi_assert(0 == pthread_mutex_unlock( &rrl->reg_lock ));
+  return index;
+}
+
 /*
 */
 KAAPI_CLASS_ENTRYPOINT
@@ -1798,22 +1908,20 @@ uint64_t KAAPI_PLUGIN_ENTRYPOINT(host_register)(
 )
 {
   if (ptr ==0) return (uint64_t)-1;
+  return post_request( DEVICE_REGISTER_REQUEST, ptr, size, cbk, arg0, arg1, arg2 );
+}
 
-  /* Hash function from the thread id to request register list */
-  int hash = kaapi_hash_ulong( pthread_self() ) % all_rrl_size;
-  host_register_listrequest_t* rrl = &all_rrl[hash];
-  uint64_t index = KAAPI_ATOMIC_INCR_ORIG((kaapi_atomic64_t*)&rrl->reg_prod);
-  int idx = index % KAAPI_MAX_REGLIST;
-  rrl->req[idx].op   = DEVICE_REGISTER_REQUEST;
-  rrl->req[idx].size = size;
-  rrl->req[idx].cbk  = cbk;
-  rrl->req[idx].arg0 = arg0;
-  rrl->req[idx].arg1 = arg1;
-  rrl->req[idx].arg2 = arg2;
-  kaapi_writemem_barrier();
-  rrl->req[idx].ptr = ptr;
-  pthread_cond_signal( &rrl->reg_cond );
-  return index;
+/*
+*/
+KAAPI_CLASS_ENTRYPOINT
+uint64_t KAAPI_PLUGIN_ENTRYPOINT(host_unregister)(
+    void* ptr, size_t size,
+    kaapi_io_cbk_fnc_t cbk,
+    void* arg0, void* arg1, void* arg2
+)
+{
+  if (ptr ==0) return (uint64_t)-1;
+  return post_request( DEVICE_UNREGISTER_REQUEST, ptr, size, cbk, arg0, arg1, arg2 );
 }
 
 
@@ -1827,25 +1935,52 @@ int KAAPI_PLUGIN_ENTRYPOINT(host_register_testwait)(
 {
   /* Hash function from the thread id to request register list */
   int hash = kaapi_hash_ulong( pthread_self() ) % all_rrl_size;
-  host_register_listrequest_t* rrl = &all_rrl[hash];
+  host_register_queue_t* rrl = &all_rrl[hash];
 
   if ((flag != 2) && ((index == (uint64_t)-1) || (index >= rrl->reg_prod)))
     return EINVAL;
 
   switch (flag) 
   {
-    case 0: /* test */
-      if (index <= rrl->reg_sig) return 0;
+    case 0: /* test: do not lock if test is true, else may it is a false negative */
+      if (index <= rrl->reg_cons) return 0;
       return EINPROGRESS;
+
     case 1: /* wait */
-      while (index >= rrl->reg_sig)
-        kaapi_slowdown_cpu();
-      return 0;
+      /*TODO: cannot compute the time between T0 of the post_request and now if the index < rrl->reg_cons
+        because it means that requests have been proceed but we lost t0 in the request struct.
+        One solution: sum t0, sum twait here and at the end returns sum twait - sum t0 as the sum of the delay.
+        One case should be take into account: is post without corresponding wait=> each wait should account for all request between rrl->reg_cons until the current index !.
+        Other solution: keep the list of waiting requests index increment on wait_request.
+      */
+      kaapi_assert(0 == pthread_mutex_lock( &rrl->reg_lock ));
+      if (index >= rrl->reg_cons)
+      {
+        int idx = index % KAAPI_MAX_REGLIST;
+        kaapi_assert(0 == pthread_mutex_lock( &rrl->req[idx].lock ));
+        kaapi_assert(0 == pthread_mutex_unlock( &rrl->reg_lock ));
+        kaapi_assert_debug((rrl->req[idx].state == REQUEST_POST) || (rrl->req[idx].state == REQUEST_DONE));
+        if (rrl->req[idx].state == REQUEST_POST)
+        {
+          rrl->req[idx].state = REQUEST_WAIT;
+          kaapi_assert(0 == pthread_cond_wait( &rrl->req[idx].cond, &rrl->req[idx].lock ));
+          kaapi_assert_debug( rrl->req[idx].state == REQUEST_DONE );
+          kaapi_assert(0 == pthread_mutex_unlock( &rrl->req[idx].lock ));
+        }
+        return 0;
+      }
+      else {
+        kaapi_assert(0 == pthread_mutex_unlock( &rrl->reg_lock ));
+        return 0;
+      }
+
     case 2: /* wait all */
     {
+      kaapi_assert(0 == pthread_mutex_lock( &rrl->reg_lock ));
       uint64_t pos = rrl->reg_prod;
-      while (pos > rrl->reg_sig)
-        kaapi_slowdown_cpu();
+      while (pos > rrl->reg_cons)
+        kaapi_assert(0 == pthread_cond_wait( &rrl->reg_cond_waitall, &rrl->reg_lock ));
+      kaapi_assert(0 == pthread_mutex_unlock( &rrl->reg_lock ));
       return 0;
     }
     default: 
@@ -1854,45 +1989,6 @@ int KAAPI_PLUGIN_ENTRYPOINT(host_register_testwait)(
   return 0;
 }
 
-
-/*
-*/
-KAAPI_CLASS_ENTRYPOINT
-int KAAPI_PLUGIN_ENTRYPOINT(host_register_wait)(
-    uint64_t index
-)
-{
-  /* Hash function from the thread id to request register list */
-  int hash = kaapi_hash_ulong( pthread_self() ) % all_rrl_size;
-  host_register_listrequest_t* rrl = &all_rrl[hash];
-
-  if ((index == (uint64_t)-1) || (index >= rrl->reg_prod))
-    return EINVAL;
-
-  while (index > rrl->reg_sig)
-    kaapi_slowdown_cpu();
-  return 0;
-}
-
-
-/*
-*/
-KAAPI_CLASS_ENTRYPOINT
-int KAAPI_PLUGIN_ENTRYPOINT(host_unregister)(
-    void* ptr, size_t size
-)
-{
-  /* do not ensure synchronisation here: directly call unregister */
-  //CUresult err = cuMemHostUnregister(ptr);
-  //if (!( (CUDA_SUCCESS == err) || (CUDA_ERROR_HOST_MEMORY_NOT_REGISTERED == err)))
-  cudaError_t err = cudaHostUnregister(ptr);
-  if (!( (cudaSuccess == err) || (cudaErrorHostMemoryNotRegistered == err)))
-  {
-    printf("***[%s]: error: %i\n", __func__, err);
-    return EINVAL;
-  }
-  return 0;
-}
 
 
 /*
@@ -2110,6 +2206,10 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_commit)(kaapi_device_t
       kaapi_assert_debug(rank !=0);
       if (cuda_perf_device[ device1*cuda_count_perfrank+ rank] & (1<<device2))
         device->affinity[rank-1] |= (1UL<<kaapi_memory_asid_get_lid(kaapi_device_list[j]->inherited.memdev.asid));
+    }
+    else
+    { /* add device with itself */
+      device->affinity[0] |= (1UL<<kaapi_memory_asid_get_lid(kaapi_device_list[j]->inherited.memdev.asid));
     }
   }
   CUcontext ctx;

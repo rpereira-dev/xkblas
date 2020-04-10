@@ -188,11 +188,19 @@ extern void* xkblas_malloc( size_t sz );
  */
 extern void xkblas_free( void* ptr, size_t sz );
 
-/* Non blocking host registration of the memory block (ptr, sz).
+/* Non blocking call host registration of the memory block (ptr, sz).
    Returns an handle that could be employed for wait or testing
    the completion of the request.
  */
 extern uint64_t xkblas_register_memory_async( void* ptr, size_t sz );
+
+/* Non blocking call to host unregistration of the memory block (ptr, sz).
+   Memory bloc (ptr,sz) should have been previously registered with 
+   xkblas_register_memory_async or xkblas_register_memory.
+   Returns an handle that could be employed for wait or testing
+   the completion of the request.
+ */
+extern uint64_t xkblas_unregister_memory_async( void* ptr, size_t sz );
 
 /* Test completion of the asynchronous host registration operation with
    given handle. Handle should has been returned by previous call to
@@ -219,7 +227,7 @@ extern int xkblas_register_memory_waitall( );
  */
 extern int xkblas_register_memory( void* ptr, size_t sz );
 
-/* Unregister previously host registrered memory block (ptr, sz).
+/* Blocking version of xkblas_unregister_memory_async
  */
 extern int xkblas_unregister_memory( void* ptr, size_t sz );
 

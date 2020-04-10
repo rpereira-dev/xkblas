@@ -57,9 +57,13 @@ int kaapi_stat_get_counter( int num, uint64_t* counter )
   uint64_t retval = 0;
   if ((num <0) || (num >= KAAPI_CNT_MAX))
     return EINVAL;
+#if defined(KAAPI_USE_PERFCOUNTER)
   for (int i=0; i<sizeof(kaapi_perthread_stat)/sizeof(kaapi_stat_internal_t); ++i)
     retval += kaapi_perthread_stat[i].counter[num];
   *counter = retval;
+#else
+  *counter = 0;
+#endif
   return 0;
 }
 
@@ -68,9 +72,13 @@ int kaapi_stat_get_dcounter( int num, double* counter )
   double retval = 0;
   if ((num <0) || (num >= KAAPI_CNT_MAX))
     return EINVAL;
+#if defined(KAAPI_USE_PERFCOUNTER)
   for (int i=0; i<KAAPI_MAX_THREAD_COUNT; ++i)
     retval += kaapi_perthread_stat[i].dcounter[num];
   *counter = retval;
+#else
+  *counter = 0;
+#endif
   return 0;
 }
 
@@ -86,7 +94,9 @@ int kaapi_stat_getdiff_counter( int num, uint64_t* counter )
 */
 extern int kaapi_stat_reset_counters(void)
 {
+#if defined(KAAPI_USE_PERFCOUNTER)
   memset( kaapi_perthread_stat, 0, sizeof(kaapi_perthread_stat));
+#endif
   return 0;
 }
 
@@ -709,7 +719,9 @@ kaapi_thread_t* kaapi_thread_bind(int proctype, size_t user_size)
     free(ctxt);
     return 0;
   }
+#if defined(KAAPI_USE_PERFCOUNTER)
   memset(&kaapi_perthread_stat[ctxt->tid], 0, sizeof(kaapi_perthread_stat[ctxt->tid]));
+#endif
 
   if (0 != kaapi_queue_init(ctxt->queue, bloc0, QUEUE_DEFAULT_SIZE))
   {
@@ -1210,8 +1222,10 @@ int kaapi_sched_sync( kaapi_thread_t* thread )
   */
   KAAPI_ATOMIC_ADD(&unlink->spawn_count, (uint32_t)thread->cnt);
 
+#if defined(KAAPI_USE_PERFCOUNTER)
   /* stat */
   kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_TASK_SPAWN] += thread->cnt;
+#endif
 
   thread->cnt = 0;
 
@@ -1257,7 +1271,9 @@ exec_start:
 #if KAAPI_DEBUG
       task->flags |= KAAPI_TASK_FLAG_EXEC;
 #endif
+#if defined(KAAPI_USE_PERFCOUNTER)
       ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_TASK_EXEC];
+#endif
       ++exec_cnt;
 
       /* new task(s) ? */
@@ -1299,7 +1315,9 @@ exec_start:
       qf.T[p] = unlink->save_T[p];
     if (1) //qf.H > qf.T)
     {
+#if defined(KAAPI_USE_PERFCOUNTER)
       ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_SUSPEND];
+#endif
       if (!_kaapi_queue_frame_ready(&qf))
       {
         LOGDEBUG(
@@ -1397,7 +1415,9 @@ int kaapi_sched_idle( kaapi_thread_t* thread, int (*f_fini)(void*), void* arg )
         {
           case KAAPI_REQUEST_S_OK:
           {
+#if defined(KAAPI_USE_PERFCOUNTER)
             ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_STEAL_OK];
+#endif
             if (ctxt->queue ==0) {
               kaapi_queue_t* queue = kaapi_data_push(thread, sizeof(kaapi_queue_t));
               kaapi_task_t** bloc0= kaapi_data_push(&ctxt->thread, sizeof(kaapi_task_t*)*QUEUE_DEFAULT_SIZE);
@@ -1432,7 +1452,9 @@ int kaapi_sched_idle( kaapi_thread_t* thread, int (*f_fini)(void*), void* arg )
 
           case KAAPI_REQUEST_S_NOK:
           {
+#if defined(KAAPI_USE_PERFCOUNTER)
             ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_STEAL_NOK];
+#endif
             LOGDEBUG(printf("%i:: Steal fail on %s queue:%p (T:%i, H:%i)\n", (int)ctxt->kid,
               (queue == victim->queue ? "default" : "suspended"),
               (void*)queue, queue->T, queue->H);)

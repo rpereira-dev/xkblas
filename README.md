@@ -1,4 +1,4 @@
-# XKBlas v0.1
+# XKBlas v0.2
 
 XKBlas is a drop in replacement of blas library for multi-GPUs servers similar
 to CUBLASXt but with higher performances especially when matrix dimensions 
@@ -65,7 +65,8 @@ have to update the following definition:
   BLAS_LIB_SO=${BLAS_LIBDIR}/libopenblas.so
 ```
 
-The `BLAS_LIB_SO` contains the BLAS library on which XKBlas (drop-in library, see below) transfers calls to BLAS kernel.
+The `BLAS_LIB_SO` contains the BLAS library on which XKBlas (drop-in library, see below) transfers calls to CPU BLAS kernel.
+Note that this library is loaded dynamically when a thread call such CPU subroutine.
 
 
 Then enter

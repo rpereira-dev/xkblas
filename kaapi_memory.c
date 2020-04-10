@@ -461,8 +461,10 @@ kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
 
 retval:
   kaapi_atomic_unlock(&device->mem_lock);
+#if defined(KAAPI_USE_PERFCOUNTER)
   if (!kaapi_pointer_isnull(ptr))
     kaapi_perthread_stat[device->device->ctxt->tid].counter[KAAPI_CNT_ALLOC] += size;
+#endif
   if (flag)
   {
     int err = 9;
@@ -502,7 +504,9 @@ void kaapi_memory_free(kaapi_pointer_t ptr, size_t size )
 
   kaapi_memory_device_t* device = kaapi_memory_device_get(ptr.asid);
   kaapi_assert_debug(device !=0);
+#if defined(KAAPI_USE_PERFCOUNTER)
   kaapi_perthread_stat[device->device->ctxt->tid].counter[KAAPI_CNT_FREE] += size;
+#endif
   kaapi_atomic_lock(&device->mem_lock);
 
 #if MEM_ALLOC_FREELIST
@@ -693,8 +697,10 @@ static int kaapi_memory_cache_touch(
     entry->mdi = mdi;
     kdr->cacheentry = entry;
 
+#if defined(KAAPI_USE_PERFCOUNTER)
     ++kaapi_perthread_stat[tid].counter[KAAPI_CNT_CACHE_MISS];
     kaapi_perthread_stat[tid].counter[KAAPI_CNT_CACHE_MISS_BYTES] += kaapi_memory_view_size( &kdr->view );
+#endif
   }
   else 
   { /* to not change the accounting of size_used,
@@ -702,9 +708,11 @@ static int kaapi_memory_cache_touch(
     */
     kaapi_memory_cache_remove_from_list( oldlist, entry );
 
+#if defined(KAAPI_USE_PERFCOUNTER)
     ++kaapi_perthread_stat[tid].counter[KAAPI_CNT_CACHE_HIT];
     kaapi_perthread_stat[tid].counter[KAAPI_CNT_CACHE_HIT_BYTES] +=
       kaapi_memory_view_size( &kdr->view );
+#endif
   }
   if ((oldlist == &cache->rw) && !kaapi_memory_replica_is_valid_on(mdi,lidhost))
   {
@@ -1546,7 +1554,10 @@ static inline kaapi_data_replica_t* _kaapi_new_replica(
   }
   kdr->view          = *view;
   if (asid != kaapi_local_asid)
+  {
+    /* Cuda may have alignment constraint for better communication and or kernel execution... */
     kaapi_memory_view_reallocated(&kdr->view);
+  }
 
 #if KAAPI_DEBUG
   extern __thread kaapi_thread_t* _xkblas_self_thread;

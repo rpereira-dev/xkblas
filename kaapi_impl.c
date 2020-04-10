@@ -77,6 +77,7 @@ static kaapi_counter_info_t kaapi_name_counter[] = {
   {1, "#task exec", 0, 0},
   {1, "flops exec", 0, 1},
   {1, "flops pending", 0, 1},
+  {1, "GPU Flow Time", "s", 1},
   {1, "GPU Work", "s", 1},
   {1, "#Gemm on TC", 0, 0},
   {1, "#Gemm not on TC", 0, 0},
@@ -97,6 +98,11 @@ static kaapi_counter_info_t kaapi_name_counter[] = {
   {0, "#MISS", 0, 0},
   {0, "Hit bytes", "Bytes", 0},
   {0, "Miss bytes", "Bytes", 0},
+  {0, "Async Pin", "s", 1},
+  {0, "Async Unpin", "s", 1},
+  {0, "Async Wait pin", "s", 1},
+  {0, "Cuda Pin", "s", 1},
+  {0, "Cuda Unpin", "s", 1},
   {0, "", "", 0}
 };
 
@@ -139,9 +145,12 @@ kaapi_rtparam_t kaapi_default_param = {
 kaapi_address_space_id_t kaapi_local_asid = 0;
 
 
+#if defined(KAAPI_USE_PERFCOUNTER)
 /*
 */
 kaapi_stat_internal_t kaapi_perthread_stat[KAAPI_MAX_THREAD_COUNT];
+kaapi_stat_internal_t kaapi_perthread_asyncpin[KAAPI_MAX_THREAD_CUDA_COUNT];
+#endif
 
 /*
 */
@@ -167,9 +176,9 @@ void kaapi_print_counter(void)
        kaapi_stat_get_counter(i, &sum);
        if (kaapi_name_counter[i].mask)
          if (kaapi_name_counter[i].unit)
-           fprintf(file, "\t%16s: %13lu (%s)\n", kaapi_name_counter[i].name, (unsigned long)sum, kaapi_name_counter[i].unit);
+           fprintf(file, "\t%24s: %13lu (%s)\n", kaapi_name_counter[i].name, (unsigned long)sum, kaapi_name_counter[i].unit);
          else 
-           fprintf(file, "\t%16s: %13lu\n", kaapi_name_counter[i].name, (unsigned long)sum);
+           fprintf(file, "\t%24s: %13lu\n", kaapi_name_counter[i].name, (unsigned long)sum);
      }
      else // if (kaapi_name_counter[i].type ==1)
      {
@@ -177,9 +186,9 @@ void kaapi_print_counter(void)
        kaapi_stat_get_dcounter(i, &sum);
        if (kaapi_name_counter[i].mask)
          if (kaapi_name_counter[i].unit)
-           fprintf(file, "\t%16s: %13f (%s)\n", kaapi_name_counter[i].name, sum, kaapi_name_counter[i].unit);
+           fprintf(file, "\t%24s: %13f (%s)\n", kaapi_name_counter[i].name, sum, kaapi_name_counter[i].unit);
          else
-           fprintf(file, "\t%16s: %13f\n", kaapi_name_counter[i].name, sum);
+           fprintf(file, "\t%24s: %13f\n", kaapi_name_counter[i].name, sum);
      }
   }
 }
@@ -299,7 +308,10 @@ int kaapi_init(void)
 
   /* set up runtime parameters */
   kaapi_assert( 0 == kaapi_format_init() );
+#if defined(KAAPI_USE_PERFCOUNTER)
   memset(kaapi_perthread_stat, 0, sizeof(kaapi_perthread_stat));
+  memset(kaapi_perthread_asyncpin, 0, sizeof(kaapi_perthread_asyncpin));
+#endif
   kaapi_assert( 0 == kaapi_dsm_init() );
 
 #if KAAPI_USE_OFFLOAD

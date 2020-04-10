@@ -411,6 +411,21 @@ uint64_t xkblas_register_memory_async( void* ptr, size_t sz )
   return 0;
 }
 
+
+/*
+*/
+uint64_t xkblas_unregister_memory_async( void* ptr, size_t sz )
+{
+
+#if KAAPI_USE_CUDA
+  kaapi_driver_t* driver = kaapi_offload_driver_bytype( KAAPI_PROC_TYPE_CUDA );
+  if (driver ==0) return 0;
+  return driver->f_host_unregister( ptr, sz, 0, 0, 0, 0);
+#endif
+  return 0;
+}
+
+
 /* Test if the request is completed
 */
 int xkblas_register_memory_test( uint64_t handle )
@@ -444,7 +459,7 @@ int xkblas_register_memory_waitall( )
 #if KAAPI_USE_CUDA
   kaapi_driver_t* driver = kaapi_offload_driver_bytype( KAAPI_PROC_TYPE_CUDA );
   if (driver ==0) return 1; /* always completed */
-  return driver->f_host_register_testwait( 0, 2 );
+  return driver->f_host_register_testwait( (uint64_t)-1, 2 );
 #endif
   return 0;
 }
@@ -461,12 +476,8 @@ int xkblas_register_memory( void* ptr, size_t sz )
  */
 int xkblas_unregister_memory( void* ptr, size_t sz )
 {
-#if KAAPI_USE_CUDA
-  kaapi_driver_t* driver = kaapi_offload_driver_bytype( KAAPI_PROC_TYPE_CUDA );
-  if (driver ==0) return 0;
-  return driver->f_host_unregister( ptr, sz );
-#endif
-  return 0;
+  uint64_t handle = xkblas_unregister_memory_async(ptr, sz); 
+  xkblas_register_memory_waitall();
 }
 
 /*
@@ -1022,7 +1033,7 @@ int xkblas_init(void)
   extern const char* get_kaapi_version(void);
   extern const char* get_kaapi_info(void);
   printf("[XKBlas init] %s\n", get_kaapi_version() );
-  printf("[XKBlas info]\n%s\n\%s[XKBlas info]\n", get_kaapi_info(), get_xkblas_info() );
+  printf("[XKBlas info]\n%s\n%s[XKBlas info]\n", get_kaapi_info(), get_xkblas_info() );
 
   if (getenv("KAAPI_VERBOSE")||getenv("XKBLAS_VERBOSE"))
   {
@@ -1070,6 +1081,7 @@ int xkblas_finalize(void)
   /* */
   kaapi_atomic_lock(&_xkblas_list_lock);
 
+#if defined(KAAPI_USE_PERFCOUNTER)
   kaapi_offload_perfcounter_t cumul;
   char* task_names[KAAPI_FORMAT_MAX];
   memset(&cumul, 0, sizeof(cumul));
@@ -1127,6 +1139,7 @@ int xkblas_finalize(void)
       );
     }
   }
+#endif
 
   while (_xkblas_list_context !=0)
   {
@@ -1167,6 +1180,7 @@ int xkblas_finalize(void)
 
   kaapi_finalize();
 
+#if defined(KAAPI_USE_PERFCOUNTER)
   /* move final display of counter after terminaison of kaapi and full memory reclamation */
   if (disphead)
   {
@@ -1200,6 +1214,7 @@ int xkblas_finalize(void)
     printf("\t Global counters:\n");
     kaapi_print_counter();
     printf("[XKBlas stats]\n");
+#endif
   }
 }
 

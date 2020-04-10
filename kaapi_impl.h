@@ -47,6 +47,8 @@
 #define KAAPI_USE_HOST_PLUGIN 1
 #define KAAPI_USE_CUDA_PLUGIN 1
 
+#define KAAPI_USE_PERFCOUNTER 1    /* compile with some performance counters */
+
 /* 2^KAAPI_SIZE_DSM_MAP is the size of the hash map
 */
 #define KAAPI_SIZE_DSM_MAP 20
@@ -125,6 +127,7 @@ struct kaapi_queue;
 /* Basic stats, per thread basis, see kaapi_counter_name in kaapi.h
 */
 #define KAAPI_MAX_THREAD_COUNT 256
+#define KAAPI_MAX_THREAD_CUDA_COUNT 16
 typedef struct stat_internal  {
   union {
     uint64_t counter[KAAPI_CNT_MAX];
@@ -132,7 +135,10 @@ typedef struct stat_internal  {
   };
 } __attribute__((aligned(KAAPI_CACHE_LINE))) kaapi_stat_internal_t;
 
+#if defined(KAAPI_USE_PERFCOUNTER)
 kaapi_stat_internal_t kaapi_perthread_stat[KAAPI_MAX_THREAD_COUNT];
+kaapi_stat_internal_t kaapi_perthread_asyncpin[KAAPI_MAX_THREAD_CUDA_COUNT];
+#endif
 
 /* steal request header */
 struct kaapi_header_request_t;

@@ -27,26 +27,10 @@
 #include <string.h>
 #include <math.h>
 
-#include <lapacke.h>
-#include <cblas.h>
-
-
-#define KAAPI_NO_DEFAULT_BLAS_ENUM
-#define KAAPI_NO_INCLUDE_BLAS_H
 #include "common.h"
 #include "xkblas.h"
 #include "testing_zauxiliary.h"
 #include "task_z_internal.h"
-
-#if 0
-// xkblas_malloc is an malloc + host register for fast communication
-// with GPU and better overlapping capability.
-// Either the pure XKBLAS API and Wrapper API may use this capability.
-// If you want to make it available only with XKBLAS API, replace the
-// #if 0 by #if defined(TESTING_API_XKBLAS_WRAPPER)
-#define xkblas_malloc(s) malloc(s)
-#define xkblas_free(p,s) free(p)
-#endif
 
 #include "flops.h"
 /* See Lawn 41 page 120 */

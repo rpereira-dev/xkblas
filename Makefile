@@ -308,7 +308,7 @@ XKBLAS_FILES=\
   ${XKBLAS_TASK}
 XKBLAS_SRC=$(filter %.c, ${XKBLAS_FILES})
 XKBLAS_CPPFLAGS=-I. -Iblas -DXKBLAS_BLASLIB='"${BLAS_LIB_SO}"' ${BLAS_CPPFLAGS} ${CPPFLAGS} 
-XKBLAS_LDFLAGS=${UKAAPI_LDFLAGS} -Wl,-rpath=${KAAPI_HOME}/install -lkaapi
+XKBLAS_LDFLAGS=${UKAAPI_LDFLAGS} -lkaapi
 #XKBLAS_LDFLAGS=${UKAAPI_LDFLAGS}
 #-L${KAAPI_HOME} -lkaapi 
 
@@ -506,7 +506,7 @@ libkaapi_plugin_cuda.so.1: kaapi_plugin_cuda.o libkaapi.so
 
 libxkblas.so: libkaapi.so .generated ${XKBLAS_ALL_GENFILES} ${XKBLAS_SRC:.c=.o} 
 	echo ${XKBLAS_SRC:.c=.o}
-	$(CC) -shared -o libxkblas.so ${XKBLAS_SRC:.c=.o} ${XKBLAS_LDFLAGS} ${XKBLAS_CPPFLAGS} -Wl,-rpath=${KAAPI_HOME} -L${KAAPI_HOME} -lkaapi -lm
+	$(CC) -shared -o libxkblas.so ${XKBLAS_SRC:.c=.o} ${XKBLAS_LDFLAGS} ${XKBLAS_CPPFLAGS} -L${KAAPI_HOME} -lkaapi -lm
 
 libxkblas.a: libkaapi.a .generated ${XKBLAS_ALL_GENFILES} ${XKBLAS_SRC:.c=_a.o} 
 	$(AR) crv libxkblas.a ${XKBLAS_SRC:.c=_a.o} ${UKAAPI_SRC:%.c=%_a.o} ${UKAAPI_SRC_PLUGIN:.c=_a.o} 
@@ -520,7 +520,7 @@ blas/libxkblas_wrapper_d.c: blas/libxkblas_wrapper.h
 blas/libxkblas_wrapper_s.c: blas/libxkblas_wrapper.h
 
 libxkblas_blaswrapper.so: libxkblas.so ${XKBLAS_WRAPPER_SRC:.c=.o} ${XKBLAS_WRAPPER_PRECISION:.c=.o}
-	$(CC) -shared -o libxkblas_blaswrapper.so ${XKBLAS_WRAPPER_SRC:.c=.o} ${XKBLAS_WRAPPER_PRECISION:.c=.o} ${XKBLAS_LDFLAGS} ${XKBLAS_CPPFLAGS} -L${KAAPI_HOME} -Wl,-rpath=${PWD} -lxkblas -lkaapi -ldl
+	$(CC) -shared -o libxkblas_blaswrapper.so ${XKBLAS_WRAPPER_SRC:.c=.o} ${XKBLAS_WRAPPER_PRECISION:.c=.o} ${XKBLAS_LDFLAGS} ${XKBLAS_CPPFLAGS} -L${KAAPI_HOME} -lxkblas -lkaapi -ldl
 
 
 testing_z: $(patsubst %.c,%.o, $(filter %.c, ${XKBLAS_TESTING_PRECISION_z})) .generated_testing

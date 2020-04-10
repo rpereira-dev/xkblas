@@ -87,7 +87,6 @@ extern xkblas_mode_math_t xkblas_get_modemath(void);
 
 /* perfcounter per thread of tasks performed by thread
    Note that all fields are not available for all context.
-   E
 */
 typedef struct  {
   uint64_t          spawn;

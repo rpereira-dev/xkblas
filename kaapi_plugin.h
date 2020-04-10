@@ -123,9 +123,11 @@ KAAPI_PLUGIN_ENTRYPOINT(host_register_testwait)(
 
 /*
  */
-KAAPI_CLASS_ENTRYPOINT int
+KAAPI_CLASS_ENTRYPOINT uint64_t
 KAAPI_PLUGIN_ENTRYPOINT(host_unregister)(
-    void* ptr, size_t size
+    void* ptr, size_t size,
+    kaapi_io_cbk_fnc_t cbk,
+    void* arg0, void* arg1, void* arg2
 );
 
 /*

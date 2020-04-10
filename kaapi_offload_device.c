@@ -96,12 +96,14 @@ static void callback_epilogue(
   );
 
   /* menage à faire */
+#if defined(KAAPI_USE_PERFCOUNTER)
   ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_TASK_EXEC];
   if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
   {
     kaapi_task_withperfcnt_t* stask = (kaapi_task_withperfcnt_t*)task;
     double delta = kaapi_get_elapsedtime()-stask->s_time;
-    kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_DURATION] += delta;
+    kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_FLOW] += delta;
+    kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_WORK] += status.delay*1e-3 /* delay is in millis */;
     const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
     kaapi_offloadtask_perfcounter_t* perf = &device->perfcnt.task[fmt->fmtid];
     double flops = 0, data = 0;
@@ -112,6 +114,7 @@ static void callback_epilogue(
     kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_FLOPS_TASK_EXEC] += flops;
     kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_FLOPS_TASK_PENDING] -= flops;
   }
+#endif
   ++device->cnt_exec;
   ++device->exec_count;
   if (frame)
@@ -178,6 +181,7 @@ int kaapi_offload_device_execute_task(
   KAAPI_OFFLOAD_TRACE_IN
   kaapi_context_t* ctxt = device->ctxt;
   kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
+#if defined(KAAPI_USE_PERFCOUNTER)
   ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_TASK_ASYNC_EXEC];
   if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
   {
@@ -191,6 +195,7 @@ int kaapi_offload_device_execute_task(
     stask->s_time = kaapi_get_elapsedtime();
     kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_FLOPS_TASK_PENDING] += flops;
   }
+#endif
   ctxt->pc = task;
   ((kaapi_task_bodyfnc_gpu_t)fmt->entrypoint[device->driver->f_get_type()])(
       task, kaapi_context2thread(ctxt), handle
