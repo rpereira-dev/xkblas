@@ -81,6 +81,9 @@ static void callback_epilogue(
   kaapi_context_t* ctxt      = device->ctxt;
   kaapi_task_t* task         = (kaapi_task_t*)arg1;
   kaapi_frame_t* frame       = (kaapi_frame_t*)arg2;
+
+  --device->cnt_ready;
+  ++device->cnt_exec;
 //printf("callback_epilogue:: task: %p, device: %p\n", task, device);
 
   /* activate successors : reverse the natural order of ready successor
@@ -98,24 +101,22 @@ static void callback_epilogue(
   /* menage à faire */
 #if defined(KAAPI_USE_PERFCOUNTER)
   ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_TASK_EXEC];
+  kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_WORK]     += status.gpu_delay;
+  kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_WORK_CPU] += status.cpu_delay;
   if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
   {
     kaapi_task_withperfcnt_t* stask = (kaapi_task_withperfcnt_t*)task;
-    double delta = kaapi_get_elapsedtime()-stask->s_time;
-    kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_FLOW] += delta;
-    kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_WORK] += status.delay*1e-3 /* delay is in millis */;
     const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
     kaapi_offloadtask_perfcounter_t* perf = &device->perfcnt.task[fmt->fmtid];
     double flops = 0, data = 0;
     kaapi_format_get_cost(fmt, kaapi_task_getargs(task), task, &flops, &data );
-    perf->time += status.delay*1e-3;
+    perf->time  += status.gpu_delay;
     perf->flops += flops;
     perf->ai += flops/data;
     kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_FLOPS_TASK_EXEC] += flops;
     kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_FLOPS_TASK_PENDING] -= flops;
   }
 #endif
-  ++device->cnt_exec;
   ++device->exec_count;
   if (frame)
     KAAPI_ATOMIC_INCR(&frame->exec_count);
@@ -145,7 +146,8 @@ static void callback_set_valid(
     int wc = KAAPI_ATOMIC_DECR(&task->wc);
     if (wc ==0)
     {
-      ++ios->stream->device->cnt_ready;
+      --device->cnt_pending;
+      ++device->cnt_ready;
       /* launch task : be carrefull ios->stream may differs from &device->stream
          due to forward of callback 
       */
@@ -189,10 +191,6 @@ int kaapi_offload_device_execute_task(
     kaapi_task_withperfcnt_t* stask = (kaapi_task_withperfcnt_t*)task;
     double flops = 0, data = 0;
     kaapi_format_get_cost(fmt, kaapi_task_getargs(task), task, &flops, &data );
-    /*TODO todo: move s_time to a field in the stream: there is no reason to store
-       runtime data for task not under running
-    */
-    stask->s_time = kaapi_get_elapsedtime();
     kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_FLOPS_TASK_PENDING] += flops;
   }
 #endif
@@ -458,7 +456,9 @@ printf("[%p]:: Task: %p %s, #params=%i, modes=%s, #wc=%i\n",
 #if KAAPI_USE_PREFETCH
   /* prefetch data before launching kernel */
   if (prefetch_taskcnt>0)
+  {
     kaapi_do_prefetch_data( device, prefetch_taskcnt, prefetch_tasklist );
+  }
 #endif
 
 #if KAAPI_USE_STREAM_D2D
@@ -467,12 +467,13 @@ printf("[%p]:: Task: %p %s, #params=%i, modes=%s, #wc=%i\n",
   kaapi_offload_stream_process_instruction( &device->stream, KAAPI_IO_STREAM_H2D );
 
 
-  /* if nothing remote or all remote finished, then insert
-     task for execution in the device stream
+  /* if no remote data required to be transfer or all transfers are finished, 
+     then insert task for execution in the device stream.
   */
   if (KAAPI_ATOMIC_DECR(&task->wc)==0)
   {
     /* could be blocking call if windows is fill */
+    --device->cnt_pending;
     ++device->cnt_ready;
     kaapi_assert_debug( device->ld->ldid == kaapi_task_get_ld(task) );
     kaapi_stream_insert_io_task_inst(
@@ -602,7 +603,7 @@ redo:
       int err;
       /* wait no more local task */
       while ((device->request.op == KAAPI_DEVICEOP_NOP) 
-          && (device->cnt_exec < device->spawn_count + device->ld->queue->push_count))
+          && (device->exec_count < device->spawn_count + device->ld->queue->push_count))
       {
         frame = device->ctxt->unlink;
         task = kaapi_queue_pop(device->ctxt, device->ctxt->queue, 0);
@@ -743,7 +744,7 @@ printf("Recv memsync device:%i counter: %lu\n", kaapi_memory_asid_get_lid(device
           if (task !=0) goto prepare_execute;
 
           /* wait more task */
-          if (device->cnt_exec < device->spawn_count + device->ld->queue->push_count)
+          if (device->exec_count < device->spawn_count + device->ld->queue->push_count)
             break;
 
           /* non empty stream */
@@ -765,7 +766,7 @@ out_device_memsync:
           err = kaapi_offload_poll_device( device );
           if (err != 0) goto out_ic;
           kaapi_memory_invalidate_cache( device->memdev.asid );
-device->exec_count = device->spawn_count = device->ld->queue->push_count = device->ld->queue->pop_count = 0;
+          device->exec_count = device->spawn_count = device->ld->queue->push_count = device->ld->queue->pop_count = 0;
 out_ic:
           kaapi_offload_requestreply( device, err );
           kaapi_assert(err== 0);
@@ -796,8 +797,28 @@ prepare_execute:
 
       do {
         kaapi_offload_poll_device( device );
-      } while ( /*kaapi_offload_stream_size(&device->stream, KAAPI_IO_STREAM_KERN)*/
-                kaapi_offload_stream_sizepending(&device->stream, KAAPI_IO_STREAM_KERN) >= kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel);
+
+#if 0
+/*
+*/
+static double t0 = 0;
+  double t1 = kaapi_get_elapsedtime();
+if (t1-t0 > 0.1)
+{
+  printf("Size kern queue: %i, size pending queue: %i\n", kaapi_offload_stream_size(&device->stream, KAAPI_IO_STREAM_KERN), kaapi_offload_stream_sizepending(&device->stream, KAAPI_IO_STREAM_KERN) );
+  t0 = t1;
+}
+#endif
+
+      } while ( 
+#if 0
+              /*kaapi_offload_stream_size(&device->stream, KAAPI_IO_STREAM_KERN)*/
+                kaapi_offload_stream_sizepending(&device->stream, KAAPI_IO_STREAM_KERN) >= kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel
+#else
+       //device->cnt_pending >= kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel
+       device->cnt_ready >= kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel
+#endif
+      );
     }
     kaapi_offload_poll_device( device );
 

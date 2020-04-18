@@ -77,8 +77,9 @@ static kaapi_counter_info_t kaapi_name_counter[] = {
   {1, "#task exec", 0, 0},
   {1, "flops exec", 0, 1},
   {1, "flops pending", 0, 1},
-  {1, "GPU Flow Time", "s", 1},
   {1, "GPU Work", "s", 1},
+  {0, "CPU Work", "s", 1},
+  {0, "CPU Work overhead", "s", 1},
   {1, "#Gemm on TC", 0, 0},
   {1, "#Gemm not on TC", 0, 0},
   {1, "Gemm flops on TC", 0, 1},
@@ -136,7 +137,7 @@ kaapi_rtparam_t kaapi_default_param = {
   .cuda_stream_capacity  = 64,
   .cuda_conc_d2h         = 1,   /* output: D2H */
   .cuda_conc_stream_kernel = 2,
-  .cuda_conc_kernel      = 1,
+  .cuda_conc_kernel      = 2,
   .cuda_conc_h2d         = 1,   /* output: H2D */
   .cuda_conc_d2d         = 1,   /* output: D2D */
   .cuda_cache_limit      = 1.00

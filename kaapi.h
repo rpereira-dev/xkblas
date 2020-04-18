@@ -270,12 +270,10 @@ struct kaapi_task {
   kaapi_atomic16_t             wc;
 #if KAAPI_DEBUG
   kaapi_frame_t*               frame __attribute__ ((deprecated));
-  double                       s_time __attribute__ ((deprecated));
 #else
   kaapi_frame_t*               frame;   // TODO TODO TODO: hack to pass frame on stolen task....
-  double                       s_time;  // startup time
 #endif
-  uint64_t                     pad;
+//  uint64_t                     pad;
 };
 
 typedef kaapi_task_t kaapi_task_withperfcnt_t;
@@ -854,8 +852,9 @@ enum kaapi_counter_name {
   KAAPI_CNT_TASK_EXEC,
   KAAPI_FLOPS_TASK_EXEC,
   KAAPI_FLOPS_TASK_PENDING,
-  KAAPI_CNT_TASK_FLOW,
   KAAPI_CNT_TASK_WORK,
+  KAAPI_CNT_TASK_WORK_CPU, /* CPU view sum t2-t1, kaapi_io_kernel*/
+  KAAPI_CNT_TASK_WORK_OVERHEAD_CPU, /* CPU view overhead, sum t1-t0+t3-t2 */
   KAAPI_CNT_GEMM_ONTC,
   KAAPI_CNT_GEMM_NOTONTC,
   KAAPI_FLOPS_GEMM_ONTC,

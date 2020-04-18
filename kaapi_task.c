@@ -1260,11 +1260,6 @@ exec_start:
       ctxt->pc = task;
       for (int p=0; p<=KAAPI_TASK_MAX_PRIORITY; ++p)
         frame.save_T[p] = ctxt->queue->T[p];
-      if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
-      {
-        kaapi_task_withperfcnt_t* stask = (kaapi_task_withperfcnt_t*)task;
-        stask->s_time = kaapi_get_elapsedtime();
-      }
       fmt->entrypoint[KAAPI_PROC_TYPE_CPU](
           task, kaapi_context2thread(ctxt)
       );

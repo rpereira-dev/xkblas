@@ -1131,6 +1131,7 @@ static int cuda_stream_decode_ioinstruction(
 #endif
 
 #if CONFIG_USE_EVENT && defined(KAAPI_USE_PERFCOUNTER)
+      instr->t1 = kaapi_get_elapsedtime();
       res = cuEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
       kaapi_assert(res == CUDA_SUCCESS);
       //printf("Start event recorded for IO %s at pos: %i\n", name_io[instr->type], ios->pos_wp );
@@ -1332,9 +1333,15 @@ static int cuda_stream_decode_ioinstruction(
           op->task,
           (void*)*stream
       );
-#if CONFIG_USE_EVENT && defined(KAAPI_USE_PERFCOUNTER)
+#if defined(KAAPI_USE_PERFCOUNTER)
+      instr->t1 = kaapi_get_elapsedtime();
+#if 0
+printf("Kernel start at: %f\n", instr->t1 );
+#endif
+#if CONFIG_USE_EVENT
       res = cuEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
       kaapi_assert(res == CUDA_SUCCESS);
+#endif
 #endif
       kaapi_offload_device_execute_task(
         &device->inherited,
@@ -1392,9 +1399,9 @@ static int cuda_stream_advance_pending(
   while (ios->ok_p < ios->pos_wp)
   {
     int idx = ios->ok_p % ios->count;
-    kaapi_io_instruction_t op = ios->pending[idx];
+    kaapi_io_instruction_t* op = &ios->pending[idx];
     res = CUDA_SUCCESS;
-    switch (op.type)
+    switch (op->type)
     {
       case KAAPI_IO_KERN:
       case KAAPI_IO_COPY_H2H:
@@ -1405,12 +1412,19 @@ static int cuda_stream_advance_pending(
         kaapi_assert((res == CUDA_ERROR_NOT_READY)  || (res == CUDA_SUCCESS));
         if (res == CUDA_ERROR_NOT_READY)
           return EINPROGRESS;
-#if KAAPI_DEBUG && defined(KAAPI_USE_PERFCOUNTER)
+#if defined(KAAPI_USE_PERFCOUNTER)
+        op->t2 = kaapi_get_elapsedtime();
+#if 0
+ if (op->type == KAAPI_IO_KERN)
+   printf("Kernel stop at: %f, delay: %f\n", op->t2,  op->t2-op->t1 );
+#endif
+#  if KAAPI_DEBUG 
         res = cuEventQuery( cios->start_events[idx] );
         kaapi_assert(res == CUDA_SUCCESS);
+#  endif
 #endif
 #if LOG_DBG
-        printf("%s:: instruction pos:%i, instr '%s' ok\n", __func__, ios->ok_p,  name_io[op.type]);
+        printf("%s:: instruction pos:%i, instr '%s' ok\n", __func__, ios->ok_p,  name_io[op->type]);
 #endif
 
       case KAAPI_IO_END:
@@ -1439,9 +1453,9 @@ redo:
   {
     curr = ios->pos_wp - 1 - i; 
     int idx = curr % ios->count;
-    kaapi_io_instruction_t op = ios->pending[idx];
+    kaapi_io_instruction_t* op = &ios->pending[idx];
     res = CUDA_SUCCESS;
-    switch (op.type)
+    switch (op->type)
     {
       case KAAPI_IO_KERN:
       case KAAPI_IO_COPY_H2H:
@@ -1472,6 +1486,9 @@ redo:
 #endif
             }
           }
+#endif
+#if defined(KAAPI_USE_PERFCOUNTER)
+          op->inst.k_io.t2 = kaapi_get_elapsedtime();
 #endif
           ios->ok_p = curr+1;
           return 0;
@@ -1562,8 +1579,8 @@ static int cuda_stream_process_pending(
   for (uint64_t pos = ios->pos_rp; pos<ios->ok_p; ++pos)
   {
     int idx = pos % ios->count;
-    kaapi_io_instruction_t op = ios->pending[idx];
-    switch (op.type)
+    kaapi_io_instruction_t* op = &ios->pending[idx];
+    switch (op->type)
     {
       case KAAPI_IO_KERN:
       case KAAPI_IO_COPY_H2H:
@@ -1573,7 +1590,6 @@ static int cuda_stream_process_pending(
       case KAAPI_IO_END:
       case KAAPI_IO_BARRIER:
       {
-        ios->pending[ios->pos_rp % ios->count].type = KAAPI_IO_NOP;
 #if defined(KAAPI_USE_PERFCOUNTER)
         CUresult res;
 #if KAAPI_DEBUG
@@ -1582,20 +1598,36 @@ static int cuda_stream_process_pending(
         if (res_dbg != CUDA_SUCCESS)
           printf("   invalid start_event state at: %lu \n", idx );
 #endif
-        res = cuEventElapsedTime ( &status.delay, cios->start_events[idx], cios->end_events[idx] );
+        res = cuEventElapsedTime ( &status.gpu_delay, cios->start_events[idx], cios->end_events[idx] );
         if (res != CUDA_SUCCESS) {
           printf("   invalid Cuda event state at: %lu non fifo order ?\n", idx );
-          status.delay = 0;
+          status.gpu_delay = 0;
           kaapi_assert(0);
         }
+        status.gpu_delay *= 1e-3;
+        status.cpu_delay = op->t2-op->t1; 
 #endif
-        if (op.inst.cbk.fnc)
+        if (op->inst.cbk.fnc)
         {
 #if LOG_DBG
-          printf("Cbk on : %i  ->%s\n", pos, name_io[op.type] );
+          printf("Cbk on : %i  ->%s\n", pos, name_io[op->type] );
 #endif
-          op.inst.cbk.fnc(status, ios, op.inst.cbk.arg[0], op.inst.cbk.arg[1], op.inst.cbk.arg[2]);
+          op->inst.cbk.fnc(status, ios, op->inst.cbk.arg[0], op->inst.cbk.arg[1], op->inst.cbk.arg[2]);
         }
+#if defined(KAAPI_USE_PERFCOUNTER)
+        if (op->inst.cbk.fnc) op->t3 = kaapi_get_elapsedtime();
+        else op->t3 = op->t2;
+        if (op->type == KAAPI_IO_KERN)
+        {
+#if 0
+printf("Kernel: GPU time: %4.2f, CPU time: %4.2f\n", status.gpu_delay, status.cpu_delay);
+#endif
+          kaapi_context_t* ctxt = device->ctxt;
+          kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_WORK_OVERHEAD_CPU]
+              += (op->t1-op->t0)+(op->t3-op->t2);
+        }
+#endif
+        op->type = KAAPI_IO_NOP;
       }
 
 
