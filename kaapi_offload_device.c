@@ -108,7 +108,7 @@ static void callback_epilogue(
     kaapi_offloadtask_perfcounter_t* perf = &device->perfcnt.task[fmt->fmtid];
     double flops = 0, data = 0;
     kaapi_format_get_cost(fmt, kaapi_task_getargs(task), task, &flops, &data );
-    perf->time += delta;
+    perf->time += status.delay*1e-3;
     perf->flops += flops;
     perf->ai += flops/data;
     kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_FLOPS_TASK_EXEC] += flops;
