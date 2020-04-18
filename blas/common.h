@@ -111,6 +111,7 @@ typedef struct {
 struct xkblas_context {
   /* hash map: matrix -> xkblas_matrix_descr_t */
   kaapi_thread_t*         kthread;
+  kaapi_team_t*           kteam;
   kaapi_hashmap_t         xkblas_ptr2handle;
   kaapi_hashentries_t*    xkblas_mapentries[1ULL<<KAAPI_SIZE_DSM_MAP];
 

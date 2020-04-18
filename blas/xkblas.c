@@ -56,8 +56,6 @@
 #define KAAPI_SIZE_DSM_MAP 20
 
 
-static kaapi_team_t* _xkblas_team = 0;
-
 static kaapi_atomic_t      _xkblas_thread_idx = {0};
 __thread xkblas_context_t* _xkblas_self_context = 0;
 /* deprecated variable */
@@ -105,7 +103,8 @@ xkblas_context_t* xkblas_context_alloc(void)
 
     /* create default kaapi context & thread */
     int idx = KAAPI_ATOMIC_INCR(&_xkblas_thread_idx);
-    kaapi_team_attach(_xkblas_team, kthread, idx);
+    ctxt->kteam = kaapi_team_alloc();
+    kaapi_team_attach(ctxt->kteam, kthread, 0 ); /* idx. But with 1 team per thread: all threads have idx 0 */
     kaapi_begin_dfg( kthread, KAAPI_FRAME_FLAG_DFG_OK );
 
     /* link all context */
@@ -1057,7 +1056,6 @@ int xkblas_init(void)
   }
 
   /* */
-  _xkblas_team = kaapi_team_alloc();
   kaapi_thread_t* thread = xkblas_self_thread();
   kaapi_begin_dfg( thread, KAAPI_FRAME_FLAG_DFG_OK );
 }
@@ -1074,7 +1072,6 @@ int xkblas_finalize(void)
   /* TG: with several thread calling xkblas it is not possible to form the correct team
      only call end_dfg for local synchronisation
   */
-  //kaapi_team_barrier_wait(_xkblas_team, _xkblas_self_context->kthread, KAAPI_ATOMIC_READ(&_xkblas_thread_idx), KAAPI_BARRIER_FLAG_DEFAULT);
   kaapi_end_dfg( _xkblas_self_context->kthread );
   kaapi_memory_synchronize();
 
@@ -1144,8 +1141,9 @@ int xkblas_finalize(void)
   while (_xkblas_list_context !=0)
   {
     xkblas_context_t* xkblas_ctxt = _xkblas_list_context;
-    kaapi_team_deattach(_xkblas_team, xkblas_ctxt->kthread);
+    kaapi_team_deattach(xkblas_ctxt->kteam, xkblas_ctxt->kthread);
     kaapi_thread_unbind(xkblas_ctxt->kthread);
+    kaapi_team_dealloc(xkblas_ctxt->kteam);
 
     err = kaapi_hashmap_clear(&xkblas_ctxt->xkblas_ptr2handle);
     kaapi_assert(err ==0);
@@ -1172,7 +1170,6 @@ int xkblas_finalize(void)
   }
 #endif
 
-  kaapi_team_dealloc(_xkblas_team);
 
   if (handle_cpublas != 0) 
     dlclose(handle_cpublas);
