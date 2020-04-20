@@ -309,6 +309,10 @@ int kaapi_init(void)
 
   /* set up runtime parameters */
   kaapi_assert( 0 == kaapi_format_init() );
+
+  /* task module */
+  kaapi_taskmodule_init();
+
 #if defined(KAAPI_USE_PERFCOUNTER)
   memset(kaapi_perthread_stat, 0, sizeof(kaapi_perthread_stat));
   memset(kaapi_perthread_asyncpin, 0, sizeof(kaapi_perthread_asyncpin));
@@ -333,6 +337,8 @@ int kaapi_init(void)
 int kaapi_finalize(void)
 {
   int err;
+
+  kaapi_taskmodule_finalize();
 
   kaapi_format_finalize();
 

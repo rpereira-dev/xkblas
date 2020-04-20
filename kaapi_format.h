@@ -267,7 +267,7 @@ extern kaapi_task_body_t kaapi_format_get_task_body_by_arch
   unsigned int arch
 );
 
-/** Initialise default formats
+/** Initialise format module
 */
 extern int kaapi_format_init(void);
 

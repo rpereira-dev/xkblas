@@ -668,9 +668,9 @@ int kaapi_frame_push(
 
 
 /* ================================ Thread API implementation ======================== */
-//static kaapi_stack_allocator_t global_stack_allocator = {0};
-
-static kaapi_atomic_t _kaapi_thread_tid = {0};
+/* Init with max to force respect of calling task_init
+*/
+static kaapi_atomic_t _kaapi_thread_tid = {KAAPI_MAX_THREAD_COUNT};
 
 /*
 */
@@ -1717,3 +1717,17 @@ int kaapi_taskformat_finalize(void)
 {
   return 0;
 }
+
+/*
+*/
+int kaapi_taskmodule_init(void)
+{
+  KAAPI_ATOMIC_WRITE(&_kaapi_thread_tid, 0);
+}
+
+/*
+*/
+int kaapi_taskmodule_finalize(void)
+{
+}
+

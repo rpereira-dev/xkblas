@@ -402,10 +402,10 @@ struct kaapi_queue {
   kaapi_queue_t*   next; /* link of suspended queue */
   int32_t volatile H[KAAPI_TASK_MAX_PRIORITY+1] __attribute__((aligned(KAAPI_CACHE_LINE)));
 #if KAAPI_DEBUG_LOW
-  pthread_t  owner;
-  kaapi_atomic_t  cnt_push;
-  kaapi_atomic_t  cnt_pop;
-  kaapi_atomic_t  cnt_steal;
+  pthread_t        owner;
+  kaapi_atomic_t   cnt_push;
+  kaapi_atomic_t   cnt_pop;
+  kaapi_atomic_t   cnt_steal;
 #endif
 };
 
@@ -821,6 +821,15 @@ static inline void kaapi_place_group_operation_fini( struct kaapi_place_group_op
     kaapi_default_param.pgo_fini( kpgo );
 }
 #endif
+
+/*
+*/
+extern int kaapi_taskmodule_init(void);
+
+/*
+*/
+extern int kaapi_taskmodule_finalize(void);
+
 
 #if defined(KAAPI_DEBUG)
 /* Signal handler to dump the state of the internal kprocessors
