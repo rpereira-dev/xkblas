@@ -55,7 +55,7 @@
 /* 2^KAAPI_SIZE_DSM_MAP is the size of the hash map */
 #define KAAPI_SIZE_DSM_MAP 20
 
-
+static kaapi_team_t*       _xkblas_global_team = 0;
 static kaapi_atomic_t      _xkblas_thread_idx = {0};
 __thread xkblas_context_t* _xkblas_self_context = 0;
 /* deprecated variable */
@@ -90,6 +90,7 @@ xkblas_context_t* xkblas_context_alloc(void)
       Todo that-> use user_size extra context in thread_bind.
     */
     kaapi_thread_t* kthread = kaapi_thread_bind(KAAPI_PROC_TYPE_HOST,0);
+    kaapi_assert( kthread != 0);
     kaapi_context_t* kctxt = kaapi_thread2context(kthread);
     _xkblas_self_thread = kthread;
     xkblas_context_t* ctxt = (xkblas_context_t*)malloc(sizeof(xkblas_context_t));
@@ -1029,6 +1030,8 @@ int xkblas_init(void)
   KAAPI_ATOMIC_WRITE(&_xkblas_thread_idx,0);
   kaapi_init();
 
+  //_xkblas_global_team = kaapi_team_alloc();
+
   extern const char* get_kaapi_version(void);
   extern const char* get_kaapi_info(void);
   printf("[XKBlas init] %s\n", get_kaapi_version() );
@@ -1143,7 +1146,8 @@ int xkblas_finalize(void)
     xkblas_context_t* xkblas_ctxt = _xkblas_list_context;
     kaapi_team_deattach(xkblas_ctxt->kteam, xkblas_ctxt->kthread);
     kaapi_thread_unbind(xkblas_ctxt->kthread);
-    kaapi_team_dealloc(xkblas_ctxt->kteam);
+    kaapi_team_dealloc( xkblas_ctxt->kteam );
+    xkblas_ctxt->kteam = 0;
 
     err = kaapi_hashmap_clear(&xkblas_ctxt->xkblas_ptr2handle);
     kaapi_assert(err ==0);
@@ -1159,6 +1163,8 @@ int xkblas_finalize(void)
 
   /* can only doit for the main thread ! */
   _xkblas_self_context = 0;
+  //kaapi_team_dealloc(_xkblas_global_team);
+  //_xkblas_global_team = 0;
 
 #if 00
   xkblas_free_curr_blochandle();
@@ -1609,9 +1615,9 @@ size_t xkblas_auto_tilesize(
         NB = ceil(tNB);
         if (NB >=1024) break;
       }
-printf("TileSize:%i\n", NB);
       //TG: TEST BEFORE making it permanent
       if (NB <1024) NB = 1024;
+      NB = (NB + 127) & ~127UL;
       return NB;
 #else
       size_t ngpu = xkblas_get_ngpus();
@@ -1622,8 +1628,9 @@ printf("TileSize:%i\n", NB);
         NB = ceil(tNB);
         if (NB >=1024) break;
       }
-printf("TileSize:%i\n", NB);
-      if (NB <1024) NB = 1024;
+      NB = (NB + 127) & ~127UL;
+      if (NB <2048) NB = 2048;
+printf("Tilesize: %i\n",NB);
       return NB;
 #endif
     };
@@ -1643,6 +1650,24 @@ int xkblas_auto_map(
   xkblas_matrix_descr_t* Ah
 )
 {
+
+#if 0
+int size = kaapi_offload_get_num_devices();
+#define SIZE_THIS_BUFFER 256
+char buffer[SIZE_THIS_BUFFER];
+char* wpos = buffer;
+wpos += snprintf(wpos, SIZE_THIS_BUFFER-(wpos-buffer),"LOAD:%15.6f,", kaapi_get_elapsedtime());
+for (int i=0; i<size; ++i)
+{
+  kaapi_device_t* device = kaapi_offload_device(i);
+  if (device->driver != kaapi_offload_driver_bytype(KAAPI_PROC_TYPE_CUDA)) 
+    continue;
+  kaapi_context_t* ctxt = device->ctxt;
+  wpos += snprintf(wpos,SIZE_THIS_BUFFER-(wpos-buffer),"%7.2e,", kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_FLOPS_TASK_PENDING]);
+}
+wpos += snprintf(wpos,SIZE_THIS_BUFFER-(wpos-buffer),"%x",pthread_self());
+printf("%s\n",buffer);
+#endif
   switch (kernel)
   {
     case KERN_TRMM:
