@@ -450,12 +450,14 @@ extern kaapi_address_space_id_t kaapi_local_asid;
 
 /** Type of pointer for all address spaces.
     The pointer encode both the pointer (field ptr) and the location of the address space
-    in asid.
-    Pointer arithmetic is allowed on this type on the ptr field.
+    in asid. Pointer arithmetic is allowed on this type on the ptr field.
+    If pointer is on device with disjoint adress space, meta is a host data to help storing
+    meta data.
 */
 typedef struct kaapi_pointer_t {
   kaapi_address_space_id_t asid;
   uintptr_t                ptr;
+  uintptr_t                meta;
 } kaapi_pointer_t;
 
 /** Type of allowed memory view for the memory interface:
@@ -495,13 +497,13 @@ static inline void* kaapi_pointer2void(kaapi_pointer_t p)
 
 /*
 */
-static inline kaapi_pointer_t kaapi_make_pointer( void* ptr, kaapi_address_space_id_t asid)
-{ kaapi_pointer_t p; p.asid = asid; p.ptr = (uintptr_t)ptr; return p; }
+static inline kaapi_pointer_t kaapi_make_pointer( void* ptr, uintptr_t meta, kaapi_address_space_id_t asid)
+{ kaapi_pointer_t p; p.asid = asid; p.ptr = (uintptr_t)ptr; p.meta = meta; return p; }
 
 /*
 */
 static inline kaapi_pointer_t kaapi_make_nullpointer(kaapi_address_space_id_t asid)
-{ kaapi_pointer_t p; p.asid = asid; p.ptr = 0; return p; }
+{ kaapi_pointer_t p; p.asid = asid; p.ptr = 0; p.meta = 0; return p; }
 
 /** return the size of the view
 */

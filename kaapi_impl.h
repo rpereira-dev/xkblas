@@ -53,6 +53,10 @@
 */
 #define KAAPI_SIZE_DSM_MAP 20
 
+/* Define to 1 if xkaapi/xkblas uses its own heap allocator
+*/
+#define KAAPI_USE_OWN_HEAP_ALLOCATOR 0
+
 /* do not use prefetch for successor task */
 #define KAAPI_USE_PREFETCH 0
 #define KAAPI_MAX_PREFETCH_WINDOW 2

@@ -76,16 +76,17 @@ const char* get_kaapi_info(void)
   if (isinit ==0)
     snprintf( buffer, 8192, 
             "  Git last commit: %s\n"
-            "  BlasLib : %s\n"
-            "  Compiled: %s\n"
-            "  GPUSET  : %u\n"
-            "  NGPUS   : %i\n"
-            "  NSTREAMS: %i\n"
-            "  NKERNELS: %i\n" 
-            "  PREFETCH: %i\n" 
+            "  BlasLib  : %s\n"
+            "  Compiled : %s\n"
+            "  GPUSET   : %u\n"
+            "  NGPUS    : %i\n"
+            "  NSTREAMS : %i\n"
+            "  NKERNELS : %i\n" 
+            "  PREFETCH : %i\n" 
             "  STREAMD2D: %s\n" 
-            "  D2D OPT1: %s\n" 
-            "  IO/THR  : %i\n", 
+            "  D2D OPT1 : %s\n" 
+            "  ALLOCATOR: %s\n" 
+            "  IO/THR   : %i\n", 
          STR_EXP(GIT_HASH),
          STR_EXP(XKBLAS_BLASLIB),
          STR_EXP(XKBLAS_CFLAGS),
@@ -107,6 +108,11 @@ const char* get_kaapi_info(void)
          "yes",
 #else
          "no",
+#endif 
+#if KAAPI_USE_OWN_HEAP_ALLOCATOR
+         "heap", /* heap allocator */
+#else
+         "tile", /*unit of allocation ~ tile size x sizeof(element) */
 #endif 
          KAAPI_HAVE_IO_THREADS
     );

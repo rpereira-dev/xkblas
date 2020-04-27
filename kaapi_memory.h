@@ -167,6 +167,11 @@ struct kaapi_metadata_info {
 struct kaapi_alloc_data;
 typedef struct kaapi_alloc_data kaapi_alloc_data_t;
 
+#if KAAPI_USE_OWN_HEAP_ALLOCATOR
+struct kaapi_alloc_chunk;
+typedef struct kaapi_alloc_chunk kaapi_alloc_chunk_t;
+#endif
+
 #define KAAPI_MEMORY_DEVICE_FLAG_NONE         0
 #define KAAPI_MEMORY_DEVICE_FLAG_MOSTLY_FULL  0x1
 #define KAAPI_MEMORY_DEVICE_FLAG_FULL         0x2
@@ -177,6 +182,10 @@ struct kaapi_memory_device {
     kaapi_lock_t mem_lock;
     kaapi_alloc_data_t* freelist_bloc;
     kaapi_alloc_data_t* freelist_metabloc;
+#if KAAPI_USE_OWN_HEAP_ALLOCATOR
+    kaapi_alloc_chunk_t* free_chunk_list;
+    kaapi_alloc_chunk_t* main_chunk;
+#endif
 
     /* Virtualization of alloc/free on the offload memory device */
     uintptr_t (*f_alloc)(struct kaapi_memory_device*,  size_t, int* );

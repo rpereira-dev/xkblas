@@ -352,6 +352,270 @@ static void bit2str( char* buffer, int bitmap )
 }
 
 /* -------------------------------------------------------------------------- */
+
+#if KAAPI_USE_OWN_HEAP_ALLOCATOR
+/* Note that:
+  Size are always aligned to 8 and are bigger than sizeof(kaapi_alloc_chunk)
+  - free bloc have prev/next valid.
+  - allocated bloc return pointer at offset(prev)
+  Note. Inspired from dlmalloc chunk organisation. Separate state from the chunk
+  because chunk on the host is not embeded into physical memory on the device !
+*/
+struct kaapi_alloc_chunk {
+  size_t       size;          /* size of  the current chunk */
+  int          state;         /* state of the chunk */
+  uintptr_t    device_ptr;    /* */
+  kaapi_alloc_chunk_t* prev;  /* previous contiguous bloc */
+  kaapi_alloc_chunk_t* next;  /* next contiguous bloc */
+  kaapi_alloc_chunk_t* freelink; /* !=0 if chunk is into free list */
+};
+#define MAIN_STATE   0x2
+#define FREE_STATE   0x1
+
+static size_t print_list_free_chunk( kaapi_memory_device_t* device, char* buffer, int size )
+{
+  kaapi_alloc_chunk_t* curr = device->free_chunk_list; 
+  size_t sizefree = 0;
+  while ((size >0) &&  (curr !=0))
+  {
+    sizefree += curr->size;
+    int sz = snprintf(buffer, size, "[%p, sz:%li] ", curr->device_ptr, curr->size );
+    buffer += sz;
+    size -= sz;
+    curr = curr->freelink; 
+  }
+  return sizefree;
+}
+
+/*
+*/
+kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
+{
+  uint16_t lid = kaapi_memory_asid_get_lid(asid);
+  kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
+  kaapi_memory_device_t* device = kaapi_the_dsm.nodes[lid]->device;
+
+  kaapi_assert(device !=0);
+
+  /*
+  */
+  size = (size + 7UL) & ~7UL;
+  if (size < sizeof(kaapi_alloc_chunk_t)) size = sizeof(kaapi_alloc_chunk_t);
+
+  kaapi_atomic_lock(&device->mem_lock);
+  if (device->free_chunk_list ==0)
+  {
+    kaapi_assert( device->main_chunk == 0);
+    /* first : get limit cache_size and reserve it */
+    int flag = KAAPI_MEMORY_DEVICE_FLAG_NONE;
+    size_t size_chunk0 = 0;
+    kaapi_offload_get_mem_info(device->device, 0, &size_chunk0 );
+    size_chunk0 &= ~ 7UL; // round down to align to 8
+    kaapi_alloc_chunk_t* chunk0 = malloc(sizeof(kaapi_alloc_chunk_t));
+    chunk0->device_ptr = device->f_alloc(device,size_chunk0, &flag);
+    kaapi_assert (chunk0->device_ptr !=0);
+#if KAAPI_DEBUG
+    device->size_dev_alloc += size_chunk0;
+#endif
+
+    chunk0->size      = size_chunk0;
+    chunk0->state     = FREE_STATE|MAIN_STATE;
+    chunk0->prev      = 0;
+    chunk0->next      = 0;
+    chunk0->freelink  = 0;
+
+    device->free_chunk_list = chunk0;
+    device->main_chunk = malloc(sizeof(kaapi_alloc_chunk_t));
+    *device->main_chunk = *chunk0;
+  }
+
+  /* first fit */
+  kaapi_alloc_chunk_t* curr = device->free_chunk_list;
+  kaapi_alloc_chunk_t* prevfree = 0;
+  while (curr)
+  {
+    size_t curr_size = curr->size;
+    if (curr_size >= size)
+    {
+      if (curr_size - size > sizeof(kaapi_alloc_chunk_t))
+      {
+        /* split chunk: insert remaining part at the end of chunk */
+        kaapi_alloc_chunk_t* remainder = malloc(sizeof(kaapi_alloc_chunk_t));
+        remainder->device_ptr = size + curr->device_ptr;
+        remainder->size       = (curr_size - size);
+        remainder->state      = FREE_STATE;
+
+        /* link remainder segment after curr */
+        remainder->prev       = curr;
+        remainder->next       = curr->next;
+        if (curr->next) curr->next->prev = remainder;
+        curr->next            = remainder;
+        curr->size            = size;
+
+        /* link freelist */
+        remainder->freelink = curr->freelink;
+        curr->freelink = remainder;
+      }
+      break;
+    }
+    prevfree = curr;
+    curr = curr->freelink;
+  }
+
+  /* success ? remove curr from the linked list of free chunk */
+  if (curr != 0)
+  {
+    if (prevfree) prevfree->freelink = curr->freelink;
+    else device->free_chunk_list = curr->freelink;
+    curr->state &= ~FREE_STATE;
+    curr->freelink = 0;
+
+    kaapi_atomic_unlock(&device->mem_lock);
+#if defined(KAAPI_USE_PERFCOUNTER)
+    kaapi_perthread_stat[device->device->ctxt->tid].counter[KAAPI_CNT_ALLOC] += size;
+#endif
+#if KAAPI_DEBUG
+    device->size_alloc += size;
+#endif
+
+#if 0
+char buffer[256]; 
+size_t sz = print_list_free_chunk( device, buffer, 256 );
+printf("Alloc: device ptr@=%p(%li), size=%li, meta=%p :: free_chunk_list:%p, %p, sizefreelist: %li, bilan: %li, bilan free: %li, %s\n",curr->device_ptr, curr->device_ptr, size, curr, device->free_chunk_list, device->free_chunk_list->device_ptr, sz, device->size_alloc- device->size_free, device->size_dev_alloc - (device->size_alloc- device->size_free), buffer );
+#endif
+    
+    kaapi_assert_debug( (curr->state & FREE_STATE) == 0);
+    kaapi_assert_debug( (curr->next ==0) || (curr->next->device_ptr > curr->device_ptr) );
+    return kaapi_make_pointer( (void*)curr->device_ptr, (uintptr_t)curr, asid );
+  }
+
+  kaapi_atomic_unlock(&device->mem_lock);
+  return kaapi_make_pointer(0, 0, asid );
+}
+
+/*
+*/
+void kaapi_memory_free(kaapi_pointer_t ptr, size_t size )
+{
+  if (kaapi_pointer_isnull(ptr)) return;
+
+  kaapi_memory_device_t* device = kaapi_memory_device_get(ptr.asid);
+  kaapi_assert_debug(device !=0);
+  kaapi_alloc_chunk_t* chunk = (kaapi_alloc_chunk_t*)ptr.meta;
+
+  kaapi_atomic_lock(&device->mem_lock);
+#if 0
+char buffer[256]; 
+size_t sz = print_list_free_chunk( device, buffer, 256 );
+static size_t idx = 0;
+++idx;
+printf("%li:: Free : device ptr@=%p(%li), size=%li, meta=%p :: free_chunk_list:%p, sizefreelist: %li, bilan: %li, bilan free: %li, %s\n", idx, ptr.ptr, ptr.ptr, size, chunk, device->free_chunk_list, sz, device->size_alloc- device->size_free, device->size_dev_alloc - (device->size_alloc- device->size_free), buffer );
+#endif
+
+  kaapi_assert_debug( (chunk->state & FREE_STATE) == 0);
+  int todel = 0;
+  chunk->state |= FREE_STATE;
+#if KAAPI_DEBUG
+  device->size_free += chunk->size;
+#endif
+
+  kaapi_alloc_chunk_t* next_chunk = chunk->next;
+  if (next_chunk->state & FREE_STATE)
+  { /* merge chunk into next_chunk; free chunk */
+    next_chunk->prev = chunk->prev;
+    if (chunk->prev)
+      chunk->prev->next = next_chunk;
+    next_chunk->size += chunk->size;
+    kaapi_assert_debug( next_chunk->device_ptr > chunk->device_ptr );
+    next_chunk->device_ptr = chunk->device_ptr;
+    todel = 1;
+  }
+
+  kaapi_alloc_chunk_t* prev_chunk = chunk->prev;
+  if (prev_chunk != 0) /* prev exist ! */
+  {
+    if (prev_chunk->state & FREE_STATE)
+    {
+      /*  if prev_chunk is a free chunk and todel is on, then we have to merge prev and next */
+      if (todel)
+      {
+        kaapi_assert_debug( prev_chunk->device_ptr < chunk->device_ptr );
+        kaapi_assert_debug( prev_chunk->device_ptr < next_chunk->device_ptr );
+        prev_chunk->size += next_chunk->size;
+        prev_chunk->next = next_chunk->next;
+        if (next_chunk->next) next_chunk->next->prev = prev_chunk;
+        prev_chunk->freelink = next_chunk->freelink;
+        free(next_chunk);
+      }
+      else
+      {
+        kaapi_assert_debug( prev_chunk->device_ptr < chunk->device_ptr );
+        /* merge chunk into prev_chunk; free chunk */
+        prev_chunk->next = chunk->next;
+        if (chunk->next) chunk->next->prev = prev_chunk;
+        prev_chunk->size += chunk->size;
+        todel = 1;
+      }
+    }
+    else if (!todel)
+    {
+      /* free_chunk_list is ordered by increasing adress: search form prev the previous bloc */
+      while ( (prev_chunk !=0) && !(prev_chunk->state & FREE_STATE))
+      {
+        prev_chunk = prev_chunk->prev; 
+      } 
+      if (prev_chunk == 0) 
+      {
+        chunk->freelink = device->free_chunk_list;
+        device->free_chunk_list = chunk;
+      }
+      else
+      {
+        chunk->freelink = prev_chunk->freelink;
+        prev_chunk->freelink = chunk;
+      }
+    }
+  }
+  else if (!todel) {
+    chunk->freelink = device->free_chunk_list;
+    device->free_chunk_list = chunk;
+  }
+
+#if defined(KAAPI_USE_PERFCOUNTER)
+  kaapi_perthread_stat[device->device->ctxt->tid].counter[KAAPI_CNT_FREE] += size;
+#endif
+  kaapi_atomic_unlock(&device->mem_lock);
+  if (todel)
+    free(chunk);
+}
+
+/* todo: free metabloc
+*/
+int kaapi_memory_freelist_destroy(kaapi_memory_device_t* device )
+{
+/*
+  kaapi_atomic_lock(&device->mem_lock);
+  while (device->freelist_bloc !=0)
+  {
+    kaapi_alloc_data_t* kad = device->freelist_bloc;
+    device->f_free(device, kad->ptr.ptr, kad->size);
+    device->freelist_bloc = kad->next;
+  }
+  kaapi_atomic_unlock(&device->mem_lock);
+*/
+  return 0;
+}
+
+int kaapi_memory_set_info( int kind, size_t value )
+{
+  if (getenv("KAAPI_VERBOSE"))
+    printf("[xkaapi] preferred block size to %zu\n", value );
+  return 0;
+}
+
+#else // KAAPI_USE_OWN_HEAP_ALLOCATOR
+
+/* */
 struct kaapi_alloc_data {
   kaapi_pointer_t     ptr;
   size_t              size;
@@ -422,7 +686,7 @@ kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
     kaapi_alloc_data_t* kad = device->freelist_bloc;
     if (kad ==0)
     {
-      ptr = kaapi_make_pointer((void*)device->f_alloc(device,TILE_SIZE, &flag), asid);
+      ptr = kaapi_make_pointer((void*)device->f_alloc(device,TILE_SIZE,&flag), 0, asid);
 #  if KAAPI_DEBUG
       if (!kaapi_pointer_isnull(ptr))
         device->size_dev_alloc += TILE_SIZE;
@@ -452,7 +716,7 @@ kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
   else
 #endif
   {
-    ptr = kaapi_make_pointer((void*)device->f_alloc(device,size, &flag), asid);
+    ptr = kaapi_make_pointer((void*)device->f_alloc(device,size, &flag), 0, asid);
 #if KAAPI_DEBUG
     if (!kaapi_pointer_isnull(ptr))
       device->size_dev_alloc += size;
@@ -563,6 +827,9 @@ int kaapi_memory_freelist_destroy(kaapi_memory_device_t* device )
   kaapi_atomic_unlock(&device->mem_lock);
   return 0;
 }
+
+#endif // KAAPI_USE_OWN_HEAP_ALLOCATOR
+
 
 
 /** Allocates an empty software cache for the device.
@@ -1593,7 +1860,7 @@ static kaapi_metadata_info_t* _kaapi_new_mdi(
   kdr = _kaapi_new_replica( mdi, kdr, kaapi_local_asid, view );
   mdi->replicas[lid0] =  kdr;
   
-  kdr->ptr = kaapi_make_pointer(ptr, kaapi_local_asid);
+  kdr->ptr = kaapi_make_pointer(ptr, 0, kaapi_local_asid);
   KAAPI_ATOMIC_WRITE(&kdr->pinned, 1);  /* one reference count to the application data */
   KAAPI_ATOMIC_WRITE(&mdi->alloc,  1ULL<<lid0);
   KAAPI_ATOMIC_WRITE(&mdi->valid,  1ULL<<lid0);
@@ -2765,6 +3032,10 @@ int kaapi_dsm_register_device(
   kaapi_atomic_initlock(&device->mem_lock);
   device->freelist_bloc = 0;
   device->freelist_metabloc  = 0;
+#if KAAPI_USE_OWN_HEAP_ALLOCATOR
+  device->free_chunk_list = 0;
+  device->main_chunk = 0;
+#endif
 
   uint16_t lid = kaapi_memory_asid_get_lid(device->asid);
   if (lid >= KAAPI_MEMORY_MAX_NODES)
@@ -2813,6 +3084,17 @@ int kaapi_dsm_unregister_device(
   kaapi_memory_freelist_destroy(node->device);
   device->freelist_bloc = 0;
   device->freelist_metabloc  = 0;
+
+#if KAAPI_USE_OWN_HEAP_ALLOCATOR
+  if (device->main_chunk)
+  {
+    device->f_free(device, device->main_chunk->device_ptr, device->main_chunk->size );
+    free(device->main_chunk);
+    device->main_chunk = 0;
+  }
+#endif
+
+  /* free: device->free_chunk_list */
   kaapi_atomic_destroylock(&device->mem_lock);
 
   err = kaapi_memory_cache_destroy( node->cache);

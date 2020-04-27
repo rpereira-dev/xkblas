@@ -213,6 +213,7 @@ static int* kaapi_device_ids = 0;
 static bool plugin_initialized = false;
 static pthread_mutex_t kaapi_cuda_lock = PTHREAD_MUTEX_INITIALIZER;
 
+static size_t cuda_get_free_mem(kaapi_memory_device_t* dev);
 
 /* Thread for registering array
 */
@@ -523,7 +524,7 @@ static uintptr_t cuda_alloc(kaapi_memory_device_t* dev, size_t size, int* flag)
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev->device;
 
   /* here we limit the size of allocated memory for the cache system */
-  if (((device->size_alloc - device->size_free) + size) >= device->mem_limit)
+  if (((device->size_alloc - device->size_free) + size) > device->mem_limit)
   {
     if (flag) *flag = KAAPI_MEMORY_DEVICE_FLAG_FULL;
     return 0;
@@ -541,6 +542,7 @@ static uintptr_t cuda_alloc(kaapi_memory_device_t* dev, size_t size, int* flag)
   res = cuMemAlloc( &ptr, size );
   if (res == CUDA_ERROR_OUT_OF_MEMORY )
   {
+    printf(" CUDA_ERROR_OUT_OF_MEMORY:: free %li, request: %li\n", cuda_get_free_mem(dev), size);
     if (flag) *flag = KAAPI_MEMORY_DEVICE_FLAG_FULL;
     return 0;
   }
@@ -2126,9 +2128,6 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
   cuCtxSynchronize();
 
   /* memory device */
-  /* limit the memory allocation: reserve about 180MB for runing something */
-  device->mem_limit = (size_t)((double)kaapi_default_param.cuda_cache_limit
-          * (double)(device->prop.mem_total-180UL*1024UL*1024UL));
   device->size_alloc = 0;
   device->size_free = 0;
   device->free_mem = 0;
@@ -2161,6 +2160,9 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
 
     device->free_mem = (size_t)free;
   }
+  /* limit the memory allocation: reserve about 180MB for runing something */
+  device->mem_limit = (size_t)((double)kaapi_default_param.cuda_cache_limit
+          * (double)(device->free_mem-180UL*1024UL*1024UL));
   dev->memdev.f_get_source = cuda_get_source;
 
 #if KAAPI_CUDA_CACHE

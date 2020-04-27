@@ -292,8 +292,8 @@ static char* name_io[] = {
     {
       struct kaapi_io_copy* op = &instr->inst.c_io;
       err = host_copy(&device->memdev,
-        kaapi_make_pointer((void*)op->dest,asid), op->view_dest,
-        kaapi_make_pointer((void*)op->src,asid), op->view_src,
+        kaapi_make_pointer((void*)op->dest, 0, asid), op->view_dest,
+        kaapi_make_pointer((void*)op->src, 0, asid), op->view_src,
         0,
         0, 0, 0, 0
       );

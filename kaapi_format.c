@@ -361,8 +361,8 @@ kaapi_task_bodyfnc_t kaapi_format_get_task_bodyfnc_by_arch
   static void formatobject##_cstorcopy( void* dest, const void* src) { *(type*)dest = *(type*)src; } \
   static void formatobject##_copy( void* dest, const void* src) { *(type*)dest = *(type*)src; } \
   static void formatobject##_assign( void* dest, const kaapi_memory_view_t* dview, const void* src, const kaapi_memory_view_t* sview) { \
-    kaapi_memory_copy( kaapi_make_pointer(dest, kaapi_local_asid), dview, \
-                       kaapi_make_pointer((void*)src, kaapi_local_asid), sview); \
+    kaapi_memory_copy( kaapi_make_pointer(dest, 0, kaapi_local_asid), dview, \
+                       kaapi_make_pointer((void*)src, 0, kaapi_local_asid), sview); \
   }
 
 #define KAAPI_REGISTER_BASICTYPEFORMAT( formatobject, type, fmt ) \

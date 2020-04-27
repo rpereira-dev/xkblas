@@ -261,7 +261,7 @@ int kaapi_setup_param(void)
   {
     float cuda_cache_limit = atof(getenv("KAAPI_CUDA_CACHE_LIMIT"))/100.0;
     if (cuda_cache_limit > 1) cuda_cache_limit = 1.00;
-    if (cuda_cache_limit < 0.10) cuda_cache_limit = 0.10;
+    if (cuda_cache_limit < 0.01) cuda_cache_limit = 0.01;
     kaapi_default_param.cuda_cache_limit = cuda_cache_limit;
   }
 
