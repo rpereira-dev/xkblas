@@ -1557,6 +1557,7 @@ static inline kaapi_data_replica_t* _kaapi_new_replica(
   {
     /* Cuda may have alignment constraint for better communication and or kernel execution... */
     kaapi_memory_view_reallocated(&kdr->view);
+    //kdr->view.ld = (kdr->view.ld+127) & (~127UL);
   }
 
 #if KAAPI_DEBUG
