@@ -893,6 +893,7 @@ enum kaapi_counter_name {
 extern int kaapi_stat_get_counter( int num, uint64_t* counter );
 extern int kaapi_stat_get_dcounter( int num, double* counter );
 
+
 /* return the counter value counter = get_counter(num) - counter
 */
 extern int kaapi_stat_getdiff_counter( int num, uint64_t* counter );
@@ -901,6 +902,7 @@ extern int kaapi_stat_reset_counters(void);
 /*
 */
 extern void kaapi_print_counter(void);
+extern int kaapi_counter_set_condition( int num, int (*cond)(void) );
 
 
 /** Bind a Kaapi thread to the current running thread

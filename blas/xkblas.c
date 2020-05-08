@@ -1081,7 +1081,7 @@ int xkblas_finalize(void)
   /* */
   kaapi_atomic_lock(&_xkblas_list_lock);
 
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   kaapi_offload_perfcounter_t cumul;
   char* task_names[KAAPI_FORMAT_MAX];
   memset(&cumul, 0, sizeof(cumul));
@@ -1183,7 +1183,7 @@ int xkblas_finalize(void)
 
   kaapi_finalize();
 
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   /* move final display of counter after terminaison of kaapi and full memory reclamation */
   if (disphead)
   {
@@ -1590,7 +1590,7 @@ size_t xkblas_auto_tilesize(
     {
       /* get default tile size and initialize internal descriptor if not yet */
       size_t NB = xkblas_get_param();
-      if (NB!=0) return NB;
+      if (NB !=0) return NB;
 
     #define FACTOR 4
 #if 0
@@ -1629,8 +1629,9 @@ size_t xkblas_auto_tilesize(
         if (NB >=1024) break;
       }
       NB = (NB + 127) & ~127UL;
-      if (NB <2048) NB = 2048;
-printf("Tilesize: %i\n",NB);
+      if (NB <1024) NB = 1024;
+      //if (NB <896) NB = 896;
+//printf("Tilesize: %i\n",NB);
       return NB;
 #endif
     };
@@ -1650,6 +1651,26 @@ int xkblas_auto_map(
   xkblas_matrix_descr_t* Ah
 )
 {
+#if KAAPI_USE_PERFCOUNTER && KAAPI_ADVANCED_VERSION
+static pthread_mutex_t lock_update = PTHREAD_MUTEX_INITIALIZER;
+    double sum = 0.0;
+    int cnt = 0;
+    for (int i=0; i<KAAPI_MAX_THREAD_COUNT; ++i)
+    {
+      sum += kaapi_perthread_stat[i].dcounter[KAAPI_FLOPS_TASK_PENDING];
+      if (kaapi_perthread_stat[i].dcounter[KAAPI_FLOPS_TASK_PENDING] >0)
+        ++cnt;
+    }
+pthread_mutex_lock(&lock_update);
+    if (sum >0)
+    {
+      ++kaapi_perthread_stat[0].counter[KAAPI_LOAD_COLLISION_COUNT];
+      kaapi_perthread_stat[0].dcounter[KAAPI_LOAD_COLLISION_GPU] += (double)cnt;
+    }
+    else
+      ++kaapi_perthread_stat[0].counter[KAAPI_LOAD_NOCOLLISION_COUNT];
+pthread_mutex_unlock(&lock_update);
+#endif
 
 #if 0
 int size = kaapi_offload_get_num_devices();

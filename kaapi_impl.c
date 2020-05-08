@@ -67,56 +67,70 @@ typedef struct kaapi_counter_info {
   uint8_t     mask;
   const char* name;
   const char* unit;
-  uint8_t     type; /* 0: field counter, 1: field dcounter */
+  uint8_t     type;     /* 0: field counter, 1: field dcounter */
+  int        (*cond)(); /* 0, non condition, else evaluate it and display if != 0 */
 } kaapi_counter_info_t;
 
 /* */
 static kaapi_counter_info_t kaapi_name_counter[] = {
-  {0, "#task spawn", 0, 0},
-  {0, "#task launch", 0, 0},
-  {1, "#task exec", 0, 0},
-  {1, "flops exec", 0, 1},
-  {1, "flops pending", 0, 1},
-  {1, "GPU Work", "s", 1},
-  {0, "CPU Work", "s", 1},
-  {0, "CPU Work overhead", "s", 1},
+  {0, "#task spawn", 0, 0, 0},
+  {0, "#task launch", 0, 0, 0},
+  {1, "#task exec", 0, 0, 0},
+  {1, "flops exec", 0, 1, 0},
 #if KAAPI_ADVANCED_VERSION
-  {1, "#GPU no conflict calls","",0},
-  {1, "#GPU conflict calls","",0},
-  {1, "#GPU avrg/conflict",0,1},
+  {1, "flops pending", 0, 1, 0},
 #else
-  {0, "experimental (0)",0,0},
-  {0, "experimental (1)",0,0},
-  {0, "experimental (2)",0,1},
+  {0, "flops pending", 0, 1, 0},
 #endif
-  {1, "#Gemm on TC", 0, 0},
-  {1, "#Gemm not on TC", 0, 0},
-  {1, "Gemm flops on TC", 0, 1},
-  {1, "Gemm flops not on TC", 0, 1},
-  {0, "#ctxt suspended", 0, 0},
-  {0, "#steal ok", 0, 0},
-  {0, "#steal nok", 0, 0},
-  {1, "GPU alloc", "Bytes", 0},
-  {1, "GPU free", "Bytes", 0},
-  {1, "#H2D", 0, 0},
-  {1, "#D2H", 0, 0},
-  {1, "#D2D", 0, 0},
-  {1, "H2D size", "Bytes", 0},
-  {1, "D2H size", "Bytes", 0},
-  {1, "D2D size", "Bytes", 0},
-  {0, "#HIT", 0, 0},
-  {0, "#MISS", 0, 0},
-  {0, "Hit bytes", "Bytes", 0},
-  {0, "Miss bytes", "Bytes", 0},
-  {0, "Async Pin", "s", 1},
-  {0, "Async Unpin", "s", 1},
-  {0, "Async Wait pin", "s", 1},
-  {0, "Cuda Pin", "s", 1},
-  {0, "Cuda Unpin", "s", 1},
-  {0, "Overhead pin", "s", 1},
-  {0, "", "", 0}
+  {1, "GPU Work", "s", 1, 0},
+  {0, "CPU Work", "s", 1, 0},
+  {0, "CPU Work overhead", "s", 1, 0},
+#if KAAPI_ADVANCED_VERSION
+  {1, "#GPU no conflict calls","",0, 0},
+  {1, "#GPU conflict calls","",0, 0},
+  {1, "#GPU avrg/conflict",0,1, 0},
+#else
+  {0, "experimental (0)",0,0, 0},
+  {0, "experimental (1)",0,0, 0},
+  {0, "experimental (2)",0,1, 0},
+#endif
+  {1, "#Gemm on TC", 0, 0, 0},
+  {1, "#Gemm not on TC", 0, 0, 0},
+  {1, "Gemm flops on TC", 0, 1, 0},
+  {1, "Gemm flops not on TC", 0, 1, 0},
+  {0, "#ctxt suspended", 0, 0, 0},
+  {0, "#steal ok", 0, 0, 0},
+  {0, "#steal nok", 0, 0, 0},
+  {1, "GPU alloc", "Bytes", 0, 0},
+  {1, "GPU free", "Bytes", 0, 0},
+  {1, "#H2D", 0, 0, 0},
+  {1, "#D2H", 0, 0, 0},
+  {1, "#D2D", 0, 0, 0},
+  {1, "H2D size", "Bytes", 0, 0},
+  {1, "D2H size", "Bytes", 0, 0},
+  {1, "D2D size", "Bytes", 0, 0},
+  {0, "#HIT", 0, 0, 0},
+  {0, "#MISS", 0, 0, 0},
+  {0, "Hit bytes", "Bytes", 0, 0},
+  {0, "Miss bytes", "Bytes", 0, 0},
+  {0, "Async Pin", "s", 1, 0},
+  {0, "Async Unpin", "s", 1, 0},
+  {0, "Async Wait pin", "s", 1, 0},
+  {0, "Cuda Pin", "s", 1, 0},
+  {0, "Cuda Unpin", "s", 1, 0},
+  {0, "Overhead pin", "s", 1, 0},
+  {0, "", "", 0, 0}
 };
 
+
+/*
+*/
+int kaapi_counter_set_condition( int idx, int (*cond)() )
+{
+  if ((idx<0)||(idx >= KAAPI_CNT_MAX)) return EINVAL;
+  kaapi_name_counter[idx].cond = cond; 
+  return 0;
+}
 
 void* __kaapi_start_blocaddr(void* addr)
 {
@@ -183,26 +197,27 @@ void kaapi_print_counter(void)
 
   for (int i=0; i< (int)KAAPI_CNT_MAX; ++i)
   {
-     if (kaapi_name_counter[i].type ==0)
-     {
-       uint64_t sum = 0;
-       kaapi_stat_get_counter(i, &sum);
-       if (kaapi_name_counter[i].mask)
-         if (kaapi_name_counter[i].unit)
-           fprintf(file, "\t%24s: %16lu (%s)\n", kaapi_name_counter[i].name, (unsigned long)sum, kaapi_name_counter[i].unit);
-         else 
-           fprintf(file, "\t%24s: %16lu\n", kaapi_name_counter[i].name, (unsigned long)sum);
-     }
-     else // if (kaapi_name_counter[i].type ==1)
-     {
-       double sum = 0;
-       kaapi_stat_get_dcounter(i, &sum);
-       if (kaapi_name_counter[i].mask)
-         if (kaapi_name_counter[i].unit)
-           fprintf(file, "\t%24s: %16f (%s)\n", kaapi_name_counter[i].name, sum, kaapi_name_counter[i].unit);
-         else
-           fprintf(file, "\t%24s: %16f\n", kaapi_name_counter[i].name, sum);
-     }
+    if (kaapi_name_counter[i].cond && (kaapi_name_counter[i].cond() ==0)) continue;
+    if (kaapi_name_counter[i].type ==0)
+    {
+      uint64_t sum = 0;
+      kaapi_stat_get_counter(i, &sum);
+      if (kaapi_name_counter[i].mask)
+        if (kaapi_name_counter[i].unit)
+          fprintf(file, "\t%24s: %16lu (%s)\n", kaapi_name_counter[i].name, (unsigned long)sum, kaapi_name_counter[i].unit);
+        else 
+          fprintf(file, "\t%24s: %16lu\n", kaapi_name_counter[i].name, (unsigned long)sum);
+    }
+    else // if (kaapi_name_counter[i].type ==1)
+    {
+      double sum = 0;
+      kaapi_stat_get_dcounter(i, &sum);
+      if (kaapi_name_counter[i].mask)
+        if (kaapi_name_counter[i].unit)
+          fprintf(file, "\t%24s: %16.4e (%s)\n", kaapi_name_counter[i].name, sum, kaapi_name_counter[i].unit);
+        else
+          fprintf(file, "\t%24s: %16.4e\n", kaapi_name_counter[i].name, sum);
+    }
   }
 }
 

@@ -85,7 +85,14 @@ const char* get_kaapi_info(void)
             "  PREFETCH : %i\n" 
             "  STREAMD2D: %s\n" 
             "  D2D OPT1 : %s\n" 
+#if KAAPI_USE_OWN_HEAP_ALLOCATOR
             "  ALLOCATOR: %s\n" 
+#endif
+#if KAAPI_USE_PERFCOUNTER
+            "  PERFCTR  : yes\n" 
+#else
+            "  PERFCTR  : no\n" 
+#endif
             "  IO/THR   : %i\n", 
          STR_EXP(GIT_HASH),
          STR_EXP(XKBLAS_BLASLIB),
@@ -111,8 +118,6 @@ const char* get_kaapi_info(void)
 #endif 
 #if KAAPI_USE_OWN_HEAP_ALLOCATOR
          "heap", /* heap allocator */
-#else
-         "tile", /*unit of allocation ~ tile size x sizeof(element) */
 #endif 
          KAAPI_HAVE_IO_THREADS
     );
