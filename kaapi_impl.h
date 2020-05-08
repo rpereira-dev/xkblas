@@ -38,6 +38,9 @@
 #ifndef _KAAPI_IMPL_H
 #define _KAAPI_IMPL_H 1
 
+#define KAAPI_ADVANCED_VERSION 0   /* to compile with mix code where next features are already present but not yet fully validated */
+
+
 #define KAAPI_HAVE_IO_THREADS 0    /* do not use IO threads [Experimental feature!!!!] */
 
 #ifndef KAAPI_USE_DYNLOADER
@@ -53,7 +56,7 @@
 */
 #define KAAPI_SIZE_DSM_MAP 20
 
-/* Define to 1 if xkaapi/xkblas uses its own heap allocator
+/* Define to 1 if xkaapi/xkblas uses its own heap allocator (experimental) else 0
 */
 #define KAAPI_USE_OWN_HEAP_ALLOCATOR 0
 
@@ -139,9 +142,9 @@ typedef struct stat_internal  {
   };
 } __attribute__((aligned(KAAPI_CACHE_LINE))) kaapi_stat_internal_t;
 
-#if defined(KAAPI_USE_PERFCOUNTER)
-kaapi_stat_internal_t kaapi_perthread_stat[KAAPI_MAX_THREAD_COUNT];
-kaapi_stat_internal_t kaapi_perthread_asyncpin[KAAPI_MAX_THREAD_CUDA_COUNT];
+#if KAAPI_USE_PERFCOUNTER
+extern kaapi_stat_internal_t kaapi_perthread_stat[KAAPI_MAX_THREAD_COUNT];
+extern kaapi_stat_internal_t kaapi_perthread_asyncpin[KAAPI_MAX_THREAD_CUDA_COUNT];
 #endif
 
 /* steal request header */

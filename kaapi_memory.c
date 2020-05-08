@@ -471,7 +471,7 @@ kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
     curr->freelink = 0;
 
     kaapi_atomic_unlock(&device->mem_lock);
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
     kaapi_perthread_stat[device->device->ctxt->tid].counter[KAAPI_CNT_ALLOC] += size;
 #endif
 #if KAAPI_DEBUG
@@ -518,7 +518,9 @@ printf("%li:: Free : device ptr@=%p(%li), size=%li, meta=%p :: free_chunk_list:%
 #if KAAPI_DEBUG
   device->size_free += chunk->size;
 #endif
-
+#if KAAPI_USE_PERFCOUNTER
+  size_t size_free = chunk->size;
+#endif
   kaapi_alloc_chunk_t* next_chunk = chunk->next;
   if (next_chunk->state & FREE_STATE)
   { /* merge chunk into next_chunk; free chunk */
@@ -581,8 +583,8 @@ printf("%li:: Free : device ptr@=%p(%li), size=%li, meta=%p :: free_chunk_list:%
     device->free_chunk_list = chunk;
   }
 
-#if defined(KAAPI_USE_PERFCOUNTER)
-  kaapi_perthread_stat[device->device->ctxt->tid].counter[KAAPI_CNT_FREE] += size;
+#if KAAPI_USE_PERFCOUNTER
+  kaapi_perthread_stat[device->device->ctxt->tid].counter[KAAPI_CNT_FREE] += size_free;
 #endif
   kaapi_atomic_unlock(&device->mem_lock);
   if (todel)
@@ -725,7 +727,7 @@ kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
 
 retval:
   kaapi_atomic_unlock(&device->mem_lock);
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   if (!kaapi_pointer_isnull(ptr))
     kaapi_perthread_stat[device->device->ctxt->tid].counter[KAAPI_CNT_ALLOC] += size;
 #endif
@@ -768,7 +770,7 @@ void kaapi_memory_free(kaapi_pointer_t ptr, size_t size )
 
   kaapi_memory_device_t* device = kaapi_memory_device_get(ptr.asid);
   kaapi_assert_debug(device !=0);
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   kaapi_perthread_stat[device->device->ctxt->tid].counter[KAAPI_CNT_FREE] += size;
 #endif
   kaapi_atomic_lock(&device->mem_lock);
@@ -964,7 +966,7 @@ static int kaapi_memory_cache_touch(
     entry->mdi = mdi;
     kdr->cacheentry = entry;
 
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
     ++kaapi_perthread_stat[tid].counter[KAAPI_CNT_CACHE_MISS];
     kaapi_perthread_stat[tid].counter[KAAPI_CNT_CACHE_MISS_BYTES] += kaapi_memory_view_size( &kdr->view );
 #endif
@@ -975,7 +977,7 @@ static int kaapi_memory_cache_touch(
     */
     kaapi_memory_cache_remove_from_list( oldlist, entry );
 
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
     ++kaapi_perthread_stat[tid].counter[KAAPI_CNT_CACHE_HIT];
     kaapi_perthread_stat[tid].counter[KAAPI_CNT_CACHE_HIT_BYTES] +=
       kaapi_memory_view_size( &kdr->view );
@@ -3063,6 +3065,10 @@ int kaapi_dsm_register_device(
 
 /* Unregister a device to the dsm
 */
+#if KAAPI_DEBUG
+static size_t device_size_alloc = 0;
+static size_t device_size_free = 0;
+#endif
 int kaapi_dsm_unregister_device(
     kaapi_dsm_t* dsm,
     kaapi_memory_device_t* device
@@ -3108,6 +3114,12 @@ int kaapi_dsm_unregister_device(
   free(node);
   kaapi_the_dsm.nodes[lid] = 0;
 
+#if KAAPI_DEBUG
+  printf("%i::Memory Device unregister, memory alloc:%li, free:%li\n", lid, device->size_alloc, device->size_free);
+  device_size_alloc += device->size_alloc;
+  device_size_free += device->size_free;
+#endif
+
   return 0;
 }
 
@@ -3115,6 +3127,10 @@ int kaapi_dsm_unregister_device(
 int kaapi_dsm_init( void )
 {
   int err = 0;
+#if KAAPI_DEBUG
+  device_size_alloc = 0;
+  device_size_free = 0;
+#endif
   memset( &kaapi_the_dsm.nodes, 0, sizeof(kaapi_dsm_node_t*)*KAAPI_MEMORY_MAX_NODES);
 #if KAAPI_DEBUG_MEMORY_ALLOC
   kaapi_hashmap_init(&free_ptr_ht, free_mapentries, KAAPI_SIZE_DBG_MAP_ALLOC, 0);
@@ -3145,9 +3161,6 @@ int kaapi_dsm_init( void )
 int kaapi_dsm_commit( void )
 {
   int err = 0;
-  kaapi_the_dsm.mask_level;  // topology level: size of mask_nodes[]
-  uint64_t          *mask_nodes;
-
   return err;
 }
 
@@ -3157,6 +3170,12 @@ int kaapi_dsm_commit( void )
 int kaapi_dsm_finalize( void )
 {
   int err;
+
+#if KAAPI_DEBUG
+  /* print device->size_alloc for each device */
+  printf("KAAPI DSM Finalize: memory alloc: %li, free: %li\n", device_size_alloc, device_size_free );
+#endif
+
   kaapi_memory_freehashmap( &kaapi_the_dsm.nodes[0]->ht, kaapi_local_asid );
 
   err = kaapi_memory_cache_destroy( kaapi_the_dsm.nodes[0]->cache);
@@ -3172,6 +3191,7 @@ int kaapi_dsm_finalize( void )
 
   /* Reset all device */
   KAAPI_ATOMIC_WRITE(&kaapi_dsm_asid_lid,0);
+
 
   return 0;
 }

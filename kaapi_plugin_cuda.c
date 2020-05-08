@@ -195,7 +195,7 @@ typedef struct kaapi_cuda_io_stream_t {
   cublasHandle_t    handle;
 #if CONFIG_USE_EVENT
   CUevent* end_events;               /* size: capacity */
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   CUevent* start_events;             /* size: capacity */
 #endif
 #endif
@@ -643,7 +643,7 @@ static int cuda_copy(
 #endif
     io_type = KAAPI_IO_COPY_H2D;
     tstream = KAAPI_IO_STREAM_H2D;
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
     ++kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYH2D];
     kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYH2D_BYTES] +=
       kaapi_memory_view_size( view_dest );
@@ -657,7 +657,7 @@ static int cuda_copy(
 #endif
     io_type = KAAPI_IO_COPY_D2H;
     tstream = KAAPI_IO_STREAM_D2H;
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
     ++kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYD2H];
     kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYD2H_BYTES] +=
       kaapi_memory_view_size( view_dest );
@@ -676,7 +676,7 @@ static int cuda_copy(
 #else
     tstream = KAAPI_IO_STREAM_H2D;
 #endif
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
     ++kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYD2D];
     kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYD2D_BYTES] +=
       kaapi_memory_view_size( view_dest );
@@ -787,7 +787,7 @@ static void kaapi_cuda_init_cuda_stream(
        Using such insertions, it is able to compute (online) the bandwidth of communication.
        + enable timing
      */
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
     res = cuEventCreate(&cios->end_events[k], CU_EVENT_DEFAULT);
     CudaCheckError(res);
     res = cuEventCreate(&cios->start_events[k], CU_EVENT_DEFAULT);
@@ -864,7 +864,7 @@ static kaapi_io_stream_t* cuda_stream_alloc(
     free(cios);
     return 0;
   }
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   cios->start_events = (CUevent*)malloc( capacity * sizeof(CUevent) );
   if (cios->start_events ==0)
   {
@@ -898,7 +898,7 @@ static void cuda_stream_free(
 
 #if CONFIG_USE_EVENT
   free(cios->end_events);
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   free(cios->start_events);
 #endif
 #endif
@@ -936,7 +936,7 @@ typedef struct host_register_request {
   pthread_cond_t             cond;
   void*                      ptr;
   size_t                     size;
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   double                     t0;    /* time to the post op */
 #endif
   kaapi_io_cbk_fnc_t cbk;
@@ -1007,7 +1007,7 @@ void* kaapi_cuda_register_thread(void* dummy )
 
 
       kaapi_assert(0 == pthread_mutex_unlock(&rrl->reg_lock));
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
       double t0p = kaapi_get_elapsedtime();
 #endif
 
@@ -1030,7 +1030,7 @@ void* kaapi_cuda_register_thread(void* dummy )
           printf("***[%s]: cudaHostUnregister error: %i\n", __func__, err);
         }
       }
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
       double t1 = kaapi_get_elapsedtime();
 #endif
 
@@ -1039,7 +1039,7 @@ void* kaapi_cuda_register_thread(void* dummy )
         kaapi_io_status_t ios = {0, err };
         cbk(ios, 0, arg0, arg1, arg2);
       }
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
       double t1p = kaapi_get_elapsedtime();
 
       //TODO: toverhead += (t0p-rrl->req[index].t0) + (t1p-t1);
@@ -1132,7 +1132,7 @@ static int cuda_stream_decode_ioinstruction(
         kaapi_slowdown_cpu();
 #endif
 
-#if CONFIG_USE_EVENT && defined(KAAPI_USE_PERFCOUNTER)
+#if CONFIG_USE_EVENT && KAAPI_USE_PERFCOUNTER
       instr->t1 = kaapi_get_elapsedtime();
       res = cuEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
       kaapi_assert(res == CUDA_SUCCESS);
@@ -1335,7 +1335,7 @@ static int cuda_stream_decode_ioinstruction(
           op->task,
           (void*)*stream
       );
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
       instr->t1 = kaapi_get_elapsedtime();
 #if 0
 printf("Kernel start at: %f\n", instr->t1 );
@@ -1414,7 +1414,7 @@ static int cuda_stream_advance_pending(
         kaapi_assert((res == CUDA_ERROR_NOT_READY)  || (res == CUDA_SUCCESS));
         if (res == CUDA_ERROR_NOT_READY)
           return EINPROGRESS;
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
         op->t2 = kaapi_get_elapsedtime();
 #if 0
  if (op->type == KAAPI_IO_KERN)
@@ -1482,14 +1482,14 @@ redo:
               if (res != CUDA_SUCCESS)
                 printf("   invalid state at: %lu non fifo order ?\n", i );
               kaapi_assert(res == CUDA_SUCCESS);
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
               res = cuEventQuery( cios->start_events[idx] );
               kaapi_assert(res == CUDA_SUCCESS);
 #endif
             }
           }
 #endif
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
           op->inst.k_io.t2 = kaapi_get_elapsedtime();
 #endif
           ios->ok_p = curr+1;
@@ -1592,7 +1592,7 @@ static int cuda_stream_process_pending(
       case KAAPI_IO_END:
       case KAAPI_IO_BARRIER:
       {
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
         CUresult res;
 #if KAAPI_DEBUG
         CUresult res_dbg;
@@ -1616,7 +1616,7 @@ static int cuda_stream_process_pending(
 #endif
           op->inst.cbk.fnc(status, ios, op->inst.cbk.arg[0], op->inst.cbk.arg[1], op->inst.cbk.arg[2]);
         }
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
         if (op->inst.cbk.fnc) op->t3 = kaapi_get_elapsedtime();
         else op->t3 = op->t2;
         if (op->type == KAAPI_IO_KERN)
@@ -1924,7 +1924,7 @@ static uint64_t post_request(
   rrl->req[idx].arg1 = arg1;
   rrl->req[idx].arg2 = arg2;
   rrl->req[idx].ptr  = ptr;
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   rrl->req[idx].t0   = kaapi_get_elapsedtime();
 #endif
   kaapi_assert(0 == pthread_cond_signal( &rrl->reg_cond ));

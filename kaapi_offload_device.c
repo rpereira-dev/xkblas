@@ -99,7 +99,7 @@ static void callback_epilogue(
   );
 
   /* menage à faire */
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_TASK_EXEC];
   kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_WORK]     += status.gpu_delay;
   kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_WORK_CPU] += status.cpu_delay;
@@ -183,7 +183,7 @@ int kaapi_offload_device_execute_task(
   KAAPI_OFFLOAD_TRACE_IN
   kaapi_context_t* ctxt = device->ctxt;
   kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_TASK_ASYNC_EXEC];
   if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
   {

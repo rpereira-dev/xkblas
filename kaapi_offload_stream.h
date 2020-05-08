@@ -162,7 +162,7 @@ typedef struct kaapi_io_instruction {
     struct kaapi_io_kernel  k_io;
     struct kaapi_io_barrier b_io;
   } inst;
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   double                    t0; /* insert time in the stream */
   double                    t1; /* start time of execution */
   double                    t2; /* time where detected completed */
@@ -444,7 +444,7 @@ static inline void kaapi_stream_insert_io_task_inst(
 {
   KAAPI_OFFLOAD_TRACE_IN
 
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   double t0 = kaapi_get_elapsedtime();
 #endif
   kaapi_io_stream_t* ios;
@@ -464,7 +464,7 @@ static inline void kaapi_stream_insert_io_task_inst(
   inst->inst.l_io.arg[2]= arg2;
   inst->inst.k_io.task  = task;
   inst->inst.k_io.frame = frame;
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   inst->t0 = t0;
   inst->t1 =0;
   inst->t2 =0;

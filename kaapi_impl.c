@@ -80,6 +80,15 @@ static kaapi_counter_info_t kaapi_name_counter[] = {
   {1, "GPU Work", "s", 1},
   {0, "CPU Work", "s", 1},
   {0, "CPU Work overhead", "s", 1},
+#if KAAPI_ADVANCED_VERSION
+  {1, "#GPU no conflict calls","",0},
+  {1, "#GPU conflict calls","",0},
+  {1, "#GPU avrg/conflict",0,1},
+#else
+  {0, "experimental (0)",0,0},
+  {0, "experimental (1)",0,0},
+  {0, "experimental (2)",0,1},
+#endif
   {1, "#Gemm on TC", 0, 0},
   {1, "#Gemm not on TC", 0, 0},
   {1, "Gemm flops on TC", 0, 1},
@@ -104,6 +113,7 @@ static kaapi_counter_info_t kaapi_name_counter[] = {
   {0, "Async Wait pin", "s", 1},
   {0, "Cuda Pin", "s", 1},
   {0, "Cuda Unpin", "s", 1},
+  {0, "Overhead pin", "s", 1},
   {0, "", "", 0}
 };
 
@@ -127,7 +137,8 @@ int __kaapi_has_enough_dataspace( kaapi_thread_t* thread, size_t size)
 }
 
 
-/*
+/* Default value reset in kaapi_init.
+   Warning to keep them coherent.
 */
 kaapi_rtparam_t kaapi_default_param = {
   .stackblocsize         = KAAPI_STACKBLOCSIZE,
@@ -140,13 +151,13 @@ kaapi_rtparam_t kaapi_default_param = {
   .cuda_conc_kernel      = 2,
   .cuda_conc_h2d         = 1,   /* output: H2D */
   .cuda_conc_d2d         = 1,   /* output: D2D */
-  .cuda_cache_limit      = 1.00
+  .cuda_cache_limit      = 0.98
 };
 
 kaapi_address_space_id_t kaapi_local_asid = 0;
 
 
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
 /*
 */
 kaapi_stat_internal_t kaapi_perthread_stat[KAAPI_MAX_THREAD_COUNT];
@@ -169,6 +180,7 @@ static void kaapi_usage(void)
 void kaapi_print_counter(void)
 {
   FILE* file = stdout;
+
   for (int i=0; i< (int)KAAPI_CNT_MAX; ++i)
   {
      if (kaapi_name_counter[i].type ==0)
@@ -177,9 +189,9 @@ void kaapi_print_counter(void)
        kaapi_stat_get_counter(i, &sum);
        if (kaapi_name_counter[i].mask)
          if (kaapi_name_counter[i].unit)
-           fprintf(file, "\t%24s: %13lu (%s)\n", kaapi_name_counter[i].name, (unsigned long)sum, kaapi_name_counter[i].unit);
+           fprintf(file, "\t%24s: %16lu (%s)\n", kaapi_name_counter[i].name, (unsigned long)sum, kaapi_name_counter[i].unit);
          else 
-           fprintf(file, "\t%24s: %13lu\n", kaapi_name_counter[i].name, (unsigned long)sum);
+           fprintf(file, "\t%24s: %16lu\n", kaapi_name_counter[i].name, (unsigned long)sum);
      }
      else // if (kaapi_name_counter[i].type ==1)
      {
@@ -187,9 +199,9 @@ void kaapi_print_counter(void)
        kaapi_stat_get_dcounter(i, &sum);
        if (kaapi_name_counter[i].mask)
          if (kaapi_name_counter[i].unit)
-           fprintf(file, "\t%24s: %13f (%s)\n", kaapi_name_counter[i].name, sum, kaapi_name_counter[i].unit);
+           fprintf(file, "\t%24s: %16f (%s)\n", kaapi_name_counter[i].name, sum, kaapi_name_counter[i].unit);
          else
-           fprintf(file, "\t%24s: %13f\n", kaapi_name_counter[i].name, sum);
+           fprintf(file, "\t%24s: %16f\n", kaapi_name_counter[i].name, sum);
      }
   }
 }
@@ -299,6 +311,20 @@ uint64_t kaapi_get_elapsedns(void)
 */
 int kaapi_init(void)
 {
+  /* default value. Please keep coherence with finalize and static init until
+     better solution is implemented
+  */ 
+  kaapi_default_param.stackblocsize = KAAPI_STACKBLOCSIZE;
+  kaapi_default_param.ngpus                 = (uint8_t)-1;
+  kaapi_default_param.gpu_set               = ~0;
+  kaapi_default_param.cuda_stream_capacity  = 64;
+  kaapi_default_param.cuda_conc_d2h         = 1;
+  kaapi_default_param.cuda_conc_stream_kernel= 4;
+  kaapi_default_param.cuda_conc_kernel      = 1;
+  kaapi_default_param.cuda_conc_h2d         = 1;
+  kaapi_default_param.cuda_conc_d2d         = 1;
+  kaapi_default_param.cuda_cache_limit      = 0.98;
+
   /* set up runtime parameters */
   kaapi_assert( 0 == kaapi_setup_param() );
 
@@ -313,7 +339,7 @@ int kaapi_init(void)
   /* task module */
   kaapi_taskmodule_init();
 
-#if defined(KAAPI_USE_PERFCOUNTER)
+#if KAAPI_USE_PERFCOUNTER
   memset(kaapi_perthread_stat, 0, sizeof(kaapi_perthread_stat));
   memset(kaapi_perthread_asyncpin, 0, sizeof(kaapi_perthread_asyncpin));
 #endif
@@ -342,13 +368,14 @@ int kaapi_finalize(void)
 
   kaapi_format_finalize();
 
-  err = kaapi_dsm_finalize();
-  if (err !=0) printf("***[%s] error %i in kaapi_dsm_finalize\n", __func__, err);
 
 #if KAAPI_USE_OFFLOAD
   err = kaapi_offload_finalize();
   if (err !=0) printf("***[%s] error %i in kaapi_offload_finalize\n", __func__, err);
 #endif
+
+  err = kaapi_dsm_finalize();
+  if (err !=0) printf("***[%s] error %i in kaapi_dsm_finalize\n", __func__, err);
 
   kaapi_localitydomain_finalize();
 
@@ -356,16 +383,15 @@ int kaapi_finalize(void)
   kaapi_dbg_finalize();
 #endif
 
-  kaapi_default_param.stackblocsize = KAAPI_STACKBLOCSIZE;
-  kaapi_default_param.ngpus                 = (uint8_t)-1;
-  kaapi_default_param.gpu_set               = ~0;
-  kaapi_default_param.cuda_stream_capacity  = 64;
-  kaapi_default_param.cuda_conc_d2h         = 1;
-  kaapi_default_param.cuda_conc_stream_kernel= 2;
-  kaapi_default_param.cuda_conc_kernel      = 1;
-  kaapi_default_param.cuda_conc_h2d         = 1;
-  kaapi_default_param.cuda_conc_d2d         = 1;
-  kaapi_default_param.cuda_cache_limit      = 1.00;
+#if KAAPI_DEBUG && KAAPI_ADVANCED_VERSION && 0
+  /* before print_counter */   
+  for (int i=0; i<KAAPI_MAX_THREAD_COUNT; ++i)
+  {
+    if (kaapi_perthread_stat[i].counter[KAAPI_LOAD_COLLISION_COUNT] >0)
+      kaapi_perthread_stat[i].dcounter[KAAPI_LOAD_COLLISION_GPU] /= (double)kaapi_perthread_stat[i].counter[KAAPI_LOAD_COLLISION_COUNT];
+//printf("%i:: COLLISION COUNT: %li, COLLISION GPUs: %f\n", i, kaapi_perthread_stat[i].counter[KAAPI_LOAD_COLLISION_COUNT], kaapi_perthread_stat[i].dcounter[KAAPI_LOAD_COLLISION_GPU] );
+  }
+#endif
 
   return 0;
 }
