@@ -332,7 +332,7 @@ retval:
 static size_t NB = 0;
 void xkblas_set_param(size_t nb, size_t p)
 {
-  printf("In %s: nb:%li, p: %li\n", __func__, nb, p);
+  //printf("In %s: nb:%li, p: %li\n", __func__, nb, p);
   NB=nb;
   if (p > sizeof(double)) /* max precision */
     p = 16;
@@ -934,6 +934,12 @@ static void xkblas_create_distribute(
 
 
 
+/*
+*/
+static int xkblas_ismode_math_tc(void)
+{
+  return xkblas_default_math == XKBLAS_TENSOR_OP_MATH;
+}
 
 /*
 */
@@ -1022,6 +1028,10 @@ int xkblas_init(void)
     else
       printf("[XKBlas] unkown math mode '%s', use default\n", m);
   }
+  kaapi_counter_set_condition( KAAPI_CNT_GEMM_ONTC, xkblas_ismode_math_tc );
+  kaapi_counter_set_condition( KAAPI_CNT_GEMM_NOTONTC, xkblas_ismode_math_tc );
+  kaapi_counter_set_condition( KAAPI_FLOPS_GEMM_ONTC, xkblas_ismode_math_tc );
+  kaapi_counter_set_condition( KAAPI_FLOPS_GEMM_NOTONTC, xkblas_ismode_math_tc );
 
   xkblas_register_task_format();
   kaapi_register_format_writeback();
@@ -1035,7 +1045,7 @@ int xkblas_init(void)
   extern const char* get_kaapi_version(void);
   extern const char* get_kaapi_info(void);
   printf("[XKBlas init] %s\n", get_kaapi_version() );
-  printf("[XKBlas info]\n%s\n%s[XKBlas info]\n", get_kaapi_info(), get_xkblas_info() );
+  printf("[XKBlas info]\n%s%s[XKBlas info]\n", get_kaapi_info(), get_xkblas_info() );
 
   if (getenv("KAAPI_VERBOSE")||getenv("XKBLAS_VERBOSE"))
   {
@@ -1185,7 +1195,7 @@ int xkblas_finalize(void)
 
 #if KAAPI_USE_PERFCOUNTER
   /* move final display of counter after terminaison of kaapi and full memory reclamation */
-  if (disphead)
+  if (disphead && getenv("KAAPI_VERBOSE"))
   {
     printf("\t total\n");
     uint64_t spawn_count = 0;
@@ -1214,7 +1224,7 @@ int xkblas_finalize(void)
         time_count,
         flops_count
     );
-    printf("\t Global counters:\n");
+    printf("\t Global counters on GPU(s):\n");
     kaapi_print_counter();
     printf("[XKBlas stats]\n");
 #endif
@@ -1793,8 +1803,8 @@ const char* get_xkblas_info(void)
   static int isinit = 0;
   if (isinit ==0)
     snprintf( buffer, 8192, 
-            "  Tile Size : %i\n"
-            "  Mode Math : %s\n",
+            "  TILE_SIZE: %i\n"
+            "  MODE_MATH: %s\n",
          xkblas_get_param(),
          (xkblas_default_math == XKBLAS_TENSOR_OP_MATH ? "TensorCore" : "Default")
     );
