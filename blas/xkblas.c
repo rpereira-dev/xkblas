@@ -1629,7 +1629,7 @@ size_t xkblas_auto_tilesize(
       if (NB <1024) NB = 1024;
       NB = (NB + 127) & ~127UL;
       return NB;
-#else
+#elif 0 /* 2020-05-10: last function */
       size_t ngpu = xkblas_get_ngpus();
       if (M<N) N =M;
       for (int fact = FACTOR; fact>0; --fact)
@@ -1643,6 +1643,16 @@ size_t xkblas_auto_tilesize(
       //if (NB <896) NB = 896;
 //printf("Tilesize: %i\n",NB);
       return NB;
+#elif 1
+      long ALIGN=64;
+      double Rfit = floor((N* 0.0003637428 +3)/4)*4;
+      double BSfit = floor((N/Rfit+ALIGN-1)/ALIGN)*ALIGN;
+      if (BSfit > 2560) 
+      {
+  	Rfit = Rfit +4;
+        BSfit = floor((N/Rfit+ALIGN-1)/ALIGN)*ALIGN;
+      }
+      return BSfit;
 #endif
     };
 
