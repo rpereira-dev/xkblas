@@ -1110,25 +1110,28 @@ int xkblas_finalize(void)
       {
         if (disphead ==0)
         {
-          printf("[XKBlas stats]\n");
+          if (getenv("KAAPI_VERBOSE"))
+            printf("[XKBlas stats]\n");
           disphead = 1;
         }
         if (dispdevice ==0)
         {
-          printf("\t*device: %i\n", d);
+          if (getenv("KAAPI_VERBOSE"))
+            printf("\t*device: %i\n", d);
           dispdevice =1;
         }
         kaapi_format_t* fmt = kaapi_format_resolve_byfmid(i);
         kaapi_format_get_name(fmt, 0, tmp, sizeof(tmp));
         task_names[i] = strdup(tmp);
-        printf("\t[%12s]: count=%12li, time=%8e, flops=%10e, ai=%10e bar{ai}=%10e\n",
-          tmp,
-          device->perfcnt.task[i].spawn,
-          device->perfcnt.task[i].time,
-          device->perfcnt.task[i].flops,
-          device->perfcnt.task[i].ai,
-          device->perfcnt.task[i].ai/device->perfcnt.task[i].spawn
-        );
+        if (getenv("KAAPI_VERBOSE"))
+          printf("\t[%12s]: count=%12li, time=%8e, flops=%10e, ai=%10e bar{ai}=%10e\n",
+            tmp,
+            device->perfcnt.task[i].spawn,
+            device->perfcnt.task[i].time,
+            device->perfcnt.task[i].flops,
+            device->perfcnt.task[i].ai,
+            device->perfcnt.task[i].ai/device->perfcnt.task[i].spawn
+          );
         spawn_count+= device->perfcnt.task[i].spawn;
         time_count+= device->perfcnt.task[i].time;
         flops_count+= device->perfcnt.task[i].flops;
@@ -1141,12 +1144,13 @@ int xkblas_finalize(void)
     }
     if (dispdevice)
     {
-      printf("\t[%12s]: count=%12li, time=%8e, flops=%10e\n",
-        "sum -->",
-        spawn_count,
-        time_count,
-        flops_count
-      );
+      if (getenv("KAAPI_VERBOSE"))
+        printf("\t[%12s]: count=%12li, time=%8e, flops=%10e\n",
+          "sum -->",
+          spawn_count,
+          time_count,
+          flops_count
+        );
     }
   }
 #endif
