@@ -88,6 +88,7 @@ const char* get_kaapi_info(void)
 #if KAAPI_USE_OWN_HEAP_ALLOCATOR
             "  ALLOCATOR: %s\n" 
 #endif
+            "  CACHE_LIM: %i\n" 
 #if KAAPI_USE_PERFCOUNTER
             "  PERFCTR  : yes\n" 
 #else
@@ -119,6 +120,7 @@ const char* get_kaapi_info(void)
 #if KAAPI_USE_OWN_HEAP_ALLOCATOR
          "heap", /* heap allocator */
 #endif 
+         (int)(kaapi_default_param.cuda_cache_limit*100),
          KAAPI_HAVE_IO_THREADS
     );
   return buffer; 
