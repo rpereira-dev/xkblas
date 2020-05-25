@@ -345,6 +345,7 @@ static void _kaapi_get_gpu_topo(void)
     }
   }
 
+#if KAAPI_DEBUG
   if (getenv("KAAPI_VERBOSE"))
   {
     char buffer[device_count+1];
@@ -379,6 +380,7 @@ static void _kaapi_get_gpu_topo(void)
       printf("\n");
     } 
   } 
+#endif
 }
 #endif
 
@@ -2434,6 +2436,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_finalize)(kaapi_device_t* dev)
   res = cuCtxDestroy(device->ctx);
   CudaCheckError(res);
 
+#if KAAPI_DEBUG
   if (getenv("KAAPI_VERBOSE"))
   {
     printf("%i, MEM, %li, %li\n", device->cu_device, device->size_alloc, device->size_free);
@@ -2441,6 +2444,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_finalize)(kaapi_device_t* dev)
     printf("%i, D2H, %li, %li\n", device->cu_device, COUNTER_CNT_D2H, COUNTER_SIZE_D2H);
     printf("%i, D2D, %li, %li\n", device->cu_device, COUNTER_CNT_D2D, COUNTER_SIZE_D2D);
   }
+#endif
 
   kaapi_cuda_plugin_unlock();
 #if _PLUGIN_DEBUG
