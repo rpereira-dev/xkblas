@@ -26,7 +26,7 @@ algorithms, including XGEMMT:
 For classical precision Z, C, D, S.
 
 # Source code
-You can clone the projet or get the tarball [here](http://perso.ens-lyon.fr/thierry.gautier/xkblas/xkblas-v0.1-72-gf34e3e44cf875ebe.tgz).
+You can clone the projet or get the tarball [here](https://gitlab.inria.fr/xkblas/versions/-/blob/master/xkblas-v0.2-rc2-26-gee6c0576b02635c6.tgz).
 
 # Installation
 XKBlas needs: a CPU blas library (*e.g.* MKL or OpenBLAS); an a CUDA toolkit 
@@ -110,8 +110,8 @@ XKaapi manages the computation on GPUs. There is 2 main environment variables yo
 * `XKBLAS_GPUSET`, an integer representing the bit set of GPUs to use. The i-th bit is equal to 1 in the number iff the GPU `i` would be used.
 for instance XKBLAS_GPUSET=5 (=0b101) selects GPU id 0 and GPU id 2.
 * `XKBLAS_CACHE_LIMIT`, an integer (default 95) >0 and less or equal to 100 representing the percent of GPU memory that XKBlas may use for caching tiles.
-* `XKBLAS_NCUDA_STREAMS`, an integer (default 2) that gives the number of CUDA streams for launching kernel to GPU
-* `XKBLAS_NKERNELS_PER_STREAM`, an integer (default 1) that gives the maximum of CUDA kernels pending into each CUDA stream for launching kernel.
+* `XKBLAS_NSTREAMS`, an integer (default 4) that gives the number of CUDA streams for launching kernel to GPU
+* `XKBLAS_NKERNELS`, an integer (default 2) that gives the maximum of CUDA kernels pending into each CUDA stream for launching kernel.
 
 
 For instance, if you want to run with XKBlas as a drop in replacement BLAS library:
@@ -120,14 +120,15 @@ For instance, if you want to run with XKBlas as a drop in replacement BLAS libra
 ```
 
 # Any support ?
-Please contact us or fill an [issue here](https://gitlab.inria.fr/xkblas/v0.1/issues/new).
+Please contact us or fill an [issue here](https://gitlab.inria.fr/xkblas/versions/-/issues/new).
 
 
 
 # References
-* [1] João V. F. Lima, Thierry Gautier, Vincent Danjean, Bruno Raffin, Nicolas Maillard. Design and analysis of scheduling strategies for multi-CPU and multi-GPU architectures. Parallel Computing 44: 37-52 (2015)
-* [2] Thierry Gautier, Joao Vicente Ferreira Lima, Nicolas Maillard, Bruno Raffin. XKaapi: A Runtime System for Data-Flow Task Programming on Heterogeneous Architectures. In Proc. of the 27-th IEEE International Parallel and Distributed Processing Symposium (IPDPS), Boston, USA, jun 2013.
-* [3] João V. F. Lima, Thierry Gautier, Nicolas Maillard, Vincent Danjean. Exploiting Concurrent GPU Operations for Efficient Work Stealing on Multi-GPUs. 24rd International Symposium on Computer Architecture and High Performance Computing (SBAC-PAD), Columbia University, New York, USA, oct 2012.
-* [4] http://icl.cs.utk.edu/plasma/software/
-* [5] https://solverstack.gitlabpages.inria.fr/chameleon/doxygen/index.html
+* [1] Thierry Gautier, João V. F. Lima: XKBlas: a High Performance Implementation of BLAS-3 Kernels on Multi-GPU Server. PDP 2020, Västerås, Sweden, March 11-13, 2020. IEEE 2020, 
+* [2] João V. F. Lima, Thierry Gautier, Vincent Danjean, Bruno Raffin, Nicolas Maillard. Design and analysis of scheduling strategies for multi-CPU and multi-GPU architectures. Parallel Computing 44: 37-52 (2015)
+* [3] Thierry Gautier, Joao Vicente Ferreira Lima, Nicolas Maillard, Bruno Raffin. XKaapi: A Runtime System for Data-Flow Task Programming on Heterogeneous Architectures. In Proc. of the 27-th IEEE International Parallel and Distributed Processing Symposium (IPDPS), Boston, USA, jun 2013.
+* [4] João V. F. Lima, Thierry Gautier, Nicolas Maillard, Vincent Danjean. Exploiting Concurrent GPU Operations for Efficient Work Stealing on Multi-GPUs. 24rd International Symposium on Computer Architecture and High Performance Computing (SBAC-PAD), Columbia University, New York, USA, oct 2012.
+* [5] http://icl.cs.utk.edu/plasma/software/
+* [6] https://solverstack.gitlabpages.inria.fr/chameleon/doxygen/index.html
 
