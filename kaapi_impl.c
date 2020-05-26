@@ -335,7 +335,7 @@ int kaapi_init(void)
   kaapi_default_param.cuda_stream_capacity  = 64;
   kaapi_default_param.cuda_conc_d2h         = 1;
   kaapi_default_param.cuda_conc_stream_kernel= 4;
-  kaapi_default_param.cuda_conc_kernel      = 1;
+  kaapi_default_param.cuda_conc_kernel      = 2;
   kaapi_default_param.cuda_conc_h2d         = 1;
   kaapi_default_param.cuda_conc_d2d         = 1;
   kaapi_default_param.cuda_cache_limit      = 0.98;
