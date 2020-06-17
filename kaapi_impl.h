@@ -58,7 +58,7 @@
 
 /* Define to 1 if xkaapi/xkblas uses its own heap allocator (experimental) else 0
 */
-#define KAAPI_USE_OWN_HEAP_ALLOCATOR 0
+#define KAAPI_USE_OWN_HEAP_ALLOCATOR 1
 
 /* do not use prefetch for successor task */
 #define KAAPI_USE_PREFETCH 0
