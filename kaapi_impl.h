@@ -59,6 +59,11 @@
 /* Define to 1 if xkaapi/xkblas uses its own heap allocator (experimental) else 0
 */
 #define KAAPI_USE_OWN_HEAP_ALLOCATOR 1
+#if KAAPI_USE_OWN_HEAP_ALLOCATOR
+#  define KAAPI_HEAP_FIRST_FIT 1    /* number from 1 to .. max strategy */
+#  define KAAPI_HEAP_BEST_FIT  2
+#  define KAAPI_HEAP_STRATEGY KAAPI_HEAP_BEST_FIT
+#endif
 
 /* do not use prefetch for successor task */
 #define KAAPI_USE_PREFETCH 0

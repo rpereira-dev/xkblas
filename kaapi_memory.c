@@ -429,6 +429,7 @@ kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
     *device->main_chunk = *chunk0;
   }
 
+#if KAAPI_HEAP_STRATEGY==KAAPI_HEAP_FIRST_FIT
   /* first fit */
   kaapi_alloc_chunk_t* curr = device->free_chunk_list;
   kaapi_alloc_chunk_t* prevfree = 0;
@@ -461,6 +462,64 @@ kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
     prevfree = curr;
     curr = curr->freelink;
   }
+#elif KAAPI_HEAP_STRATEGY==KAAPI_HEAP_BEST_FIT
+  /* best fit */
+  kaapi_alloc_chunk_t* curr = device->free_chunk_list;
+  kaapi_alloc_chunk_t* prevfree = 0;
+  size_t min_size = 0;
+  kaapi_alloc_chunk_t* min_size_curr= 0;
+  kaapi_alloc_chunk_t* min_size_prevfree= 0;
+  while (curr)
+  {
+    size_t curr_size = curr->size;
+    if (curr_size >= size)
+    {
+      /* TODO: because chunk is on GPU side, this test, I think, could be removed */
+      if (curr_size - size > sizeof(kaapi_alloc_chunk_t))
+      {
+        if ((min_size_curr ==0) || (min_size > curr_size))
+        {
+          min_size = curr_size;
+          min_size_curr = curr;
+          min_size_prevfree = prevfree;
+        }
+      }
+    }
+    prevfree = curr;
+    curr = curr->freelink;
+  }
+
+  /* and the winner is min_size_curr ! */
+  curr = min_size_curr;
+  prevfree = min_size_prevfree;
+  /* split curr if request size *1.2 < min_size */
+#if 1// YET_AND_OTHER_OPTION
+  if ((curr !=0) && (min_size - size >= 0.5*size))
+#else
+  if (curr !=0) // as in first fit strategy
+#endif
+  {
+    size_t curr_size = curr->size;
+    /* split chunk: insert remaining part at the end of chunk */
+    kaapi_alloc_chunk_t* remainder = malloc(sizeof(kaapi_alloc_chunk_t));
+    remainder->device_ptr = size + curr->device_ptr;
+    remainder->size       = (curr_size - size);
+    remainder->state      = FREE_STATE;
+  
+    /* link remainder segment after curr */
+    remainder->prev       = curr;
+    remainder->next       = curr->next;
+    if (curr->next) curr->next->prev = remainder;
+    curr->next            = remainder;
+    curr->size            = size;
+  
+    /* link freelist */
+    remainder->freelink = curr->freelink;
+    curr->freelink = remainder;
+  }
+#else
+# error "Not default strategy !"
+#endif
 
   /* success ? remove curr from the linked list of free chunk */
   if (curr != 0)
