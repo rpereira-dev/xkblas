@@ -1648,6 +1648,17 @@ size_t xkblas_auto_tilesize(
 //printf("Tilesize: %i\n",NB);
       return NB;
 #elif 1
+      size_t ngpu = xkblas_get_ngpus();
+      if (M<N) N =M;
+      size_t tNB = ((double)N) / (double)FACTOR;
+      size_t k =  tNB / 2000;
+      NB = N / (k * FACTOR);
+      NB = (NB + 255) & ~255UL;
+      if (NB <1024) NB = 1024;
+      //if (NB <896) NB = 896;
+printf("Mat size: %i tilesize: %i\n",(int)M, NB);
+      return NB;
+#elif 0
       long ALIGN=64;
       double Rfit = floor((N* 0.0003637428 +3)/4)*4;
       double BSfit = floor((N/Rfit+ALIGN-1)/ALIGN)*ALIGN;
