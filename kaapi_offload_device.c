@@ -581,10 +581,17 @@ int kaapi_sched_idle_offload(
 
   do
   {
-    if (f_fini && f_fini(arg)) goto r_exit;
+    while ((device->request.op == KAAPI_DEVICEOP_NOP)
+        && (device->exec_count == device->spawn_count + device->ld->queue->push_count))
+    {
+      if (f_fini && f_fini(arg)) goto r_exit;
+      kaapi_fifo_wait_if_empty_queue(device->ld->queue);
+    }
 
-    /* */
-redo:
+    /* highly active loop to test if task has been enqueued and if asynchronous event has been completed
+       - at each loop iteration the thread test:
+         - new task to wait =iff= (device->exec_count < device->spawn_count + device->ld->queue->push_count)
+    */
     frame = 0;
     /* pop on local queue */
     task = kaapi_queue_pop(device->ctxt, device->ctxt->queue, 0);
@@ -798,25 +805,13 @@ prepare_execute:
       do {
         kaapi_offload_poll_device( device );
 
-#if 0
-/*
-*/
-static double t0 = 0;
-  double t1 = kaapi_get_elapsedtime();
-if (t1-t0 > 0.1)
-{
-  printf("Size kern queue: %i, size pending queue: %i\n", kaapi_offload_stream_size(&device->stream, KAAPI_IO_STREAM_KERN), kaapi_offload_stream_sizepending(&device->stream, KAAPI_IO_STREAM_KERN) );
-  t0 = t1;
-}
-#endif
-
-      } while ( 
+      } while (
 #if 0
               /*kaapi_offload_stream_size(&device->stream, KAAPI_IO_STREAM_KERN)*/
                 kaapi_offload_stream_sizepending(&device->stream, KAAPI_IO_STREAM_KERN) >= kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel
 #else
-       //device->cnt_pending >= kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel
-       device->cnt_ready >= kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel
+               //device->cnt_pending >= kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel
+               device->cnt_ready >= kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel
 #endif
       );
     }
@@ -838,7 +833,7 @@ int _kaapi_device_finalize(  void* arg )
   return device->finalize != false; 
 }
 
-/*
+/* Main entry thread created per device
 */
 void* kaapi_offload_device_thread( void* arg )
 {
@@ -1035,6 +1030,12 @@ void kaapi_offload_device_finalize(kaapi_device_t* const device)
     kaapi_offload_set_current_device( save_device );
   }
   KAAPI_OFFLOAD_TRACE_OUT
+}
+
+
+void kaapi_offload_device_wakeup(kaapi_device_t* const device)
+{
+  kaapi_fifo_signal_waiter(device->ld->queue);
 }
 
 

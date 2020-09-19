@@ -275,6 +275,11 @@ extern int kaapi_offload_device_start(kaapi_device_t* const device);
 extern void kaapi_offload_device_stop(kaapi_device_t* const device);
 
 /** \ingroup Offload
+ Force device attached thread to wakeup
+*/
+extern void kaapi_offload_device_wakeup(kaapi_device_t* const device);
+
+/** \ingroup Offload
   Free allocated memory on the device
  */
 extern void kaapi_offload_device_free_memory(kaapi_device_t* const device);

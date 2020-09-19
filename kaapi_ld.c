@@ -392,3 +392,32 @@ kaapi_task_t* kaapi_fifo_queue_pop(
   return task;
 }
 
+
+/* block caller while the queue is empty */
+int kaapi_fifo_wait_if_empty_queue(
+    kaapi_fifo_queue_t* rd
+)
+{
+  pthread_mutex_lock(&rd->lock);
+  while (rd->H >= rd->T)
+  {
+    rd->waiter_pop = 1;
+    pthread_cond_wait(&rd->cond_pop, &rd->lock);
+  }
+  rd->waiter_pop = 0;
+  pthread_mutex_lock(&rd->lock);
+  return 0;
+}
+
+int kaapi_fifo_signal_waiter(
+    kaapi_fifo_queue_t* rd
+)
+{
+  pthread_mutex_lock(&rd->lock);
+  if (rd->waiter_push)
+    pthread_cond_broadcast(&rd->cond_push);
+  if (rd->waiter_pop)
+    pthread_cond_broadcast(&rd->cond_pop);
+  pthread_mutex_unlock(&rd->lock);
+}
+

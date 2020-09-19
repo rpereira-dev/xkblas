@@ -524,7 +524,13 @@ extern kaapi_task_t* kaapi_fifo_queue_pop(
     kaapi_frame_t** frame
 );
 
+extern int kaapi_fifo_wait_if_empty_queue(
+    kaapi_fifo_queue_t* rd
+);
 
+extern int kaapi_fifo_signal_waiter(
+    kaapi_fifo_queue_t* rd
+);
 
 /*
 */

@@ -2394,6 +2394,8 @@ KAAPI_PLUGIN_ENTRYPOINT(device_stop)(kaapi_device_t* dev)
 
   /* stop thread device */
   device->inherited.finalize = true;
+  /* may be wakeup thread */
+  kaapi_offload_device_wakeup(&device->inherited);
   void* dummy;
   pthread_join( device->inherited.tid, &dummy );
 #if KAAPI_HAVE_IO_THREADS
