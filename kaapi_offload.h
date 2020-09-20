@@ -109,6 +109,8 @@ struct kaapi_device {
 
     pthread_mutex_t          lock;          /* used to synchronize device thread */
     pthread_cond_t           cond;          /* and cpu threads if any */
+    pthread_cond_t           cond_sleep;    /* and cpu threads if any */
+    int                      issleeping;    /* */
     struct {
       kaapi_device_op_t      op;            /* op request for the device */
       uintptr_t              arg;
@@ -278,6 +280,11 @@ extern void kaapi_offload_device_stop(kaapi_device_t* const device);
  Force device attached thread to wakeup
 */
 extern void kaapi_offload_device_wakeup(kaapi_device_t* const device);
+
+/** \ingroup Offload
+ Force device attached thread to sleep
+*/
+extern void kaapi_offload_device_sleep(kaapi_device_t* const device);
 
 /** \ingroup Offload
   Free allocated memory on the device

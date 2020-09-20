@@ -48,6 +48,15 @@
 #define LOGDEBUG(x)
 //#define LOGDEBUG(x) x
 
+/* same as wakeup without lock/unlock */
+static void kaapi_offload_device_wakeup_(kaapi_device_t* const device)
+{
+  if (device->issleeping == 1)
+  {
+    device->issleeping = 0;
+    kaapi_assert(0 == pthread_cond_signal(&device->cond_sleep));
+  }
+}
 
 
 /*
@@ -499,17 +508,21 @@ int kaapi_sched_sync_offload( kaapi_thread_t* thread )
   return 0;
 }
 
-/* post and wait until request processed */
+/* post until request processed */
 static int kaapi_offload_request2device( kaapi_device_t* device, kaapi_device_op_t op)
 {
   int res = 0;
   pthread_mutex_lock(&device->lock);
   while (device->request.op != KAAPI_DEVICEOP_NOP)
+  {
+    kaapi_offload_device_wakeup_(device);
     pthread_cond_wait(&device->cond, &device->lock);
+  }  
 
   /* send op */
   device->request.arg = 0;
   device->request.op = op;
+  pthread_mutex_unlock(&device->lock);
   return res;
 }
 
@@ -519,8 +532,12 @@ static int kaapi_offload_requestwait( kaapi_device_t* device)
 {
   int res;
   /* wait reply */
+  pthread_mutex_lock(&device->lock);
   while (device->request.op != KAAPI_DEVICEOP_REPLY)
+  {
+    kaapi_offload_device_wakeup_(device);
     pthread_cond_wait(&device->cond, &device->lock);
+  }
   res = device->request.err;
   device->request.op      = KAAPI_DEVICEOP_NOP;
   device->request.arg     = 0;
@@ -534,6 +551,7 @@ static int kaapi_offload_requestreply( kaapi_device_t* device, int res )
   pthread_mutex_lock(&device->lock);
   device->request.op = KAAPI_DEVICEOP_REPLY;
   device->request.err = res;
+  pthread_cond_signal(&device->cond_sleep);
   pthread_cond_signal(&device->cond);
   pthread_mutex_unlock(&device->lock);
 
@@ -581,12 +599,19 @@ int kaapi_sched_idle_offload(
 
   do
   {
+#if 1
     while ((device->request.op == KAAPI_DEVICEOP_NOP)
-        && (device->exec_count == device->spawn_count + device->ld->queue->push_count))
+        && kaapi_queue_empty(device->ctxt->queue)
+        && (device->exec_count == device->spawn_count + device->ld->queue->push_count)
+        && kaapi_offload_stream_isempty(&device->stream, KAAPI_IO_STREAM_ALL)
+    )
     {
       if (f_fini && f_fini(arg)) goto r_exit;
-      kaapi_fifo_wait_if_empty_queue(device->ld->queue);
+      kaapi_offload_device_sleep(device);
     }
+#else
+      if (f_fini && f_fini(arg)) goto r_exit;
+#endif
 
     /* highly active loop to test if task has been enqueued and if asynchronous event has been completed
        - at each loop iteration the thread test:
@@ -636,6 +661,7 @@ int kaapi_sched_idle_offload(
 
         case KAAPI_DEVICEOP_WRITEBACK:
         {
+printf("[XKAAPI: KAAPI_DEVICEOP_WRITEBACK_WAIT  request\n");
           LOGDEBUG(printf("DEVICEOP_WRITEBACK\n"));
 do_writeback:
           /* writeback policy: if counter ==0, asynchronous call without any mean to view completion */
@@ -658,7 +684,6 @@ printf("WriteBack device:%i counter: %lu, send msg: %lu\n", kaapi_memory_asid_ge
             }
 #endif
             /* make progress of requests */
-
 #if KAAPI_USE_STREAM_D2D
             /* test completion of input back data */
             err = kaapi_offload_stream_process_instruction( &device->stream, KAAPI_IO_STREAM_D2D );
@@ -666,7 +691,6 @@ printf("WriteBack device:%i counter: %lu, send msg: %lu\n", kaapi_memory_asid_ge
             err = kaapi_offload_test_stream( &device->stream, KAAPI_IO_STREAM_D2D);
             if (err) goto out_device_writeback;
 #endif
-
             /* test completion of input back data */
             err = kaapi_offload_stream_process_instruction( &device->stream, KAAPI_IO_STREAM_D2H );
             if ((err != 0) && (err != EINPROGRESS)) goto out_device_writeback;
@@ -674,6 +698,7 @@ printf("WriteBack device:%i counter: %lu, send msg: %lu\n", kaapi_memory_asid_ge
             if (err) goto out_device_writeback;
 
             /* reply if decr contribution to this device */
+printf("[XKAAPI: sub & KAAPI_DEVICEOP_WRITEBACK_WAIT request, device: %p\n", device);
             if (KAAPI_ATOMIC_SUB64(device->request.counter, (1ULL<<32ULL)) ==0)
               kaapi_offload_requestreply( device, 0 );
             
@@ -711,7 +736,8 @@ out_device_writeback:
 
         case KAAPI_DEVICEOP_MEMSYNC:
         {
-          LOGDEBUG(printf("DEVICEOP_MEMSYNC\n"));
+          LOGDEBUG(printf("DEVICEOP_MEMSYNC, device: %p\n",device));
+          printf("DEVICEOP_MEMSYNC, device: %p\n", device);
 #if 0
 printf("Recv memsync device:%i counter: %lu\n", kaapi_memory_asid_get_lid(device->memdev.asid), KAAPI_ATOMIC_READ(device->request.counter));
 #endif
@@ -849,6 +875,9 @@ void* kaapi_offload_device_thread( void* arg )
 
   /* infinite loop with the device context */
   kaapi_offload_device_push( device );
+
+  /* */
+  kaapi_fifo_register_waiter( device->ld->queue, kaapi_offload_device_wakeup, device );
   int err = kaapi_sched_idle_offload(thread, _kaapi_device_finalize, device);
   kaapi_assert((err==0)||(err==EINTR));
   KAAPI_DEBUG_INST(printf("Device thread for device:%i exit\n",device->device_id ));
@@ -1033,9 +1062,21 @@ void kaapi_offload_device_finalize(kaapi_device_t* const device)
 }
 
 
+void kaapi_offload_device_sleep(kaapi_device_t* const device)
+{
+  kaapi_assert(0 == pthread_mutex_lock(&device->lock));
+  device->issleeping = 1;
+  while (device->issleeping == 1)
+    kaapi_assert(0 == pthread_cond_wait(&device->cond_sleep, &device->lock));
+  kaapi_assert(0 == pthread_mutex_unlock(&device->lock));
+}
+
+
 void kaapi_offload_device_wakeup(kaapi_device_t* const device)
 {
-  kaapi_fifo_signal_waiter(device->ld->queue);
+  kaapi_assert(0 == pthread_mutex_lock(&device->lock));
+  kaapi_offload_device_wakeup_(device);
+  kaapi_assert(0 == pthread_mutex_unlock(&device->lock));
 }
 
 
@@ -1172,6 +1213,7 @@ int kaapi_offload_synchronize(void)
       /* preincrement per device the counter in order to ensure that callback will not prematurely 
          signal the client 
       */
+printf("[XKAAPI: add & KAAPI_DEVICEOP_MEMSYNC request\n");
       KAAPI_ATOMIC_ADD64(&sync_counter, (1ULL<<32ULL));
       device->request.counter = &sync_counter;
 #if 0

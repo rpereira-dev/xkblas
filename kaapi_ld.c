@@ -97,13 +97,15 @@ int kaapi_localitydomain_init( kaapi_localitydomain_t* ld, kaapi_device_t* devic
   rd->push_count = 0;
   rd->pop_count = 0;
   rd->waiter_push = 0;
-  rd->waiter_pop  = 0;
+  //rd->waiter_pop  = 0;
   err = pthread_mutex_init(&rd->lock, 0);
   if (err) return err;
   err = pthread_cond_init(&rd->cond_push, 0);
   if (err)
     goto label_err1;
-  err = pthread_cond_init(&rd->cond_pop, 0);
+  rd->cbk_fnc = 0;
+  rd->cbk_arg = 0;
+  //err = pthread_cond_init(&rd->cond_pop, 0);
 
   if (err)
   {
@@ -124,7 +126,7 @@ int kaapi_localitydomain_destroy( kaapi_localitydomain_t* ld )
   kaapi_fifo_queue_t* rd = ld->queue;
   pthread_mutex_destroy(&rd->lock);
   pthread_cond_destroy(&rd->cond_push);
-  pthread_cond_destroy(&rd->cond_pop);
+  //pthread_cond_destroy(&rd->cond_pop);
   free(ld->queue->data);
   free(ld->queue->frame);
   free(ld->queue);
@@ -354,8 +356,8 @@ int32_t kaapi_fifo_queue_push(
   rd->frame[idx] = frame;
   ++rd->push_count;
 
-  if (rd->waiter_pop)
-    pthread_cond_signal(&rd->cond_pop);
+  if (rd->cbk_fnc)
+    rd->cbk_fnc(rd->cbk_arg);
 
   pthread_mutex_unlock(&rd->lock);
 
@@ -394,30 +396,15 @@ kaapi_task_t* kaapi_fifo_queue_pop(
 
 
 /* block caller while the queue is empty */
-int kaapi_fifo_wait_if_empty_queue(
-    kaapi_fifo_queue_t* rd
+int kaapi_fifo_register_waiter(
+    kaapi_fifo_queue_t* rd,
+    void (*callback)(void*),
+    void* arg
 )
 {
-  pthread_mutex_lock(&rd->lock);
-  while (rd->H >= rd->T)
-  {
-    rd->waiter_pop = 1;
-    pthread_cond_wait(&rd->cond_pop, &rd->lock);
-  }
-  rd->waiter_pop = 0;
-  pthread_mutex_lock(&rd->lock);
+  //rd->waiter_pop = 1;
+  rd->cbk_fnc = callback;
+  rd->cbk_arg = arg;
   return 0;
-}
-
-int kaapi_fifo_signal_waiter(
-    kaapi_fifo_queue_t* rd
-)
-{
-  pthread_mutex_lock(&rd->lock);
-  if (rd->waiter_push)
-    pthread_cond_broadcast(&rd->cond_push);
-  if (rd->waiter_pop)
-    pthread_cond_broadcast(&rd->cond_pop);
-  pthread_mutex_unlock(&rd->lock);
 }
 

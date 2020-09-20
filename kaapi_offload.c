@@ -270,6 +270,8 @@ kaapi_offload_config_devices(kaapi_driver_t* driver)
     device->is_initialized = false;
     kaapi_assert( 0 == pthread_mutex_init(&device->lock, 0));
     kaapi_assert( 0 == pthread_cond_init(&device->cond, 0));
+    kaapi_assert( 0 == pthread_cond_init(&device->cond_sleep, 0));
+    device->issleeping = 0;
     device->request.op = KAAPI_DEVICEOP_NOP;
     device->request.arg = 0;
     device->request.counter = 0;
