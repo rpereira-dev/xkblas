@@ -43,6 +43,8 @@
 
 #define KAAPI_HAVE_IO_THREADS 0    /* do not use IO threads [Experimental feature!!!!] */
 
+#define KAAPI_SLEEP_DEVICETHREAD 0 /* activate a sleeping state for device thread [Yet experimental feature] */
+
 #ifndef KAAPI_USE_DYNLOADER
 #define KAAPI_USE_DYNLOADER   0    /* do not use dynamically loaded plugin */
 #endif

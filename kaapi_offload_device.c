@@ -48,6 +48,7 @@
 #define LOGDEBUG(x)
 //#define LOGDEBUG(x) x
 
+#if KAAPI_SLEEP_DEVICETHREAD
 /* same as wakeup without lock/unlock */
 static void kaapi_offload_device_wakeup_(kaapi_device_t* const device)
 {
@@ -57,6 +58,7 @@ static void kaapi_offload_device_wakeup_(kaapi_device_t* const device)
     kaapi_assert(0 == pthread_cond_signal(&device->cond_sleep));
   }
 }
+#endif
 
 
 /*
@@ -515,7 +517,9 @@ static int kaapi_offload_request2device( kaapi_device_t* device, kaapi_device_op
   pthread_mutex_lock(&device->lock);
   while (device->request.op != KAAPI_DEVICEOP_NOP)
   {
+#if KAAPI_SLEEP_DEVICETHREAD
     kaapi_offload_device_wakeup_(device);
+#endif
     pthread_cond_wait(&device->cond, &device->lock);
   }  
 
@@ -535,7 +539,9 @@ static int kaapi_offload_requestwait( kaapi_device_t* device)
   pthread_mutex_lock(&device->lock);
   while (device->request.op != KAAPI_DEVICEOP_REPLY)
   {
+#if KAAPI_SLEEP_DEVICETHREAD
     kaapi_offload_device_wakeup_(device);
+#endif
     pthread_cond_wait(&device->cond, &device->lock);
   }
   res = device->request.err;
@@ -599,7 +605,7 @@ int kaapi_sched_idle_offload(
 
   do
   {
-#if 1
+#if KAAPI_SLEEP_DEVICETHREAD
     while ((device->request.op == KAAPI_DEVICEOP_NOP)
         && kaapi_queue_empty(device->ctxt->queue)
         && (device->exec_count == device->spawn_count + device->ld->queue->push_count)
@@ -877,7 +883,11 @@ void* kaapi_offload_device_thread( void* arg )
   kaapi_offload_device_push( device );
 
   /* */
+#if KAAPI_SLEEP_DEVICETHREAD
   kaapi_fifo_register_waiter( device->ld->queue, kaapi_offload_device_wakeup, device );
+#else
+  kaapi_fifo_register_waiter( device->ld->queue, 0, 0);
+#endif
   int err = kaapi_sched_idle_offload(thread, _kaapi_device_finalize, device);
   kaapi_assert((err==0)||(err==EINTR));
   KAAPI_DEBUG_INST(printf("Device thread for device:%i exit\n",device->device_id ));
@@ -1074,9 +1084,11 @@ void kaapi_offload_device_sleep(kaapi_device_t* const device)
 
 void kaapi_offload_device_wakeup(kaapi_device_t* const device)
 {
+#if KAAPI_SLEEP_DEVICETHREAD
   kaapi_assert(0 == pthread_mutex_lock(&device->lock));
   kaapi_offload_device_wakeup_(device);
   kaapi_assert(0 == pthread_mutex_unlock(&device->lock));
+#endif
 }
 
 

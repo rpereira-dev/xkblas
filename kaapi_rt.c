@@ -85,6 +85,11 @@ const char* get_kaapi_info(void)
             "  PREFETCH : %i\n" 
             "  STREAMD2D: %s\n" 
             "  D2D OPT1 : %s\n" 
+#if KAAPI_SLEEP_DEVICETHREAD
+            "  SLEEPTHR : yes\n" 
+#else
+            "  SLEEPTHR : no\n" 
+#endif
 #if KAAPI_USE_OWN_HEAP_ALLOCATOR
             "  ALLOCATOR: %s\n" 
 #endif
