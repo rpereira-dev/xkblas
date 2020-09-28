@@ -704,7 +704,7 @@ printf("WriteBack device:%i counter: %lu, send msg: %lu\n", kaapi_memory_asid_ge
             if (err) goto out_device_writeback;
 
             /* reply if decr contribution to this device */
-printf("[XKAAPI: sub & KAAPI_DEVICEOP_WRITEBACK_WAIT request, device: %p\n", device);
+//printf("[XKAAPI: sub & KAAPI_DEVICEOP_WRITEBACK_WAIT request, device: %p\n", device);
             if (KAAPI_ATOMIC_SUB64(device->request.counter, (1ULL<<32ULL)) ==0)
               kaapi_offload_requestreply( device, 0 );
             
@@ -743,7 +743,6 @@ out_device_writeback:
         case KAAPI_DEVICEOP_MEMSYNC:
         {
           LOGDEBUG(printf("DEVICEOP_MEMSYNC, device: %p\n",device));
-          printf("DEVICEOP_MEMSYNC, device: %p\n", device);
 #if 0
 printf("Recv memsync device:%i counter: %lu\n", kaapi_memory_asid_get_lid(device->memdev.asid), KAAPI_ATOMIC_READ(device->request.counter));
 #endif
@@ -1225,7 +1224,7 @@ int kaapi_offload_synchronize(void)
       /* preincrement per device the counter in order to ensure that callback will not prematurely 
          signal the client 
       */
-printf("[XKAAPI: add & KAAPI_DEVICEOP_MEMSYNC request\n");
+//printf("[XKAAPI: add & KAAPI_DEVICEOP_MEMSYNC request\n");
       KAAPI_ATOMIC_ADD64(&sync_counter, (1ULL<<32ULL));
       device->request.counter = &sync_counter;
 #if 0
