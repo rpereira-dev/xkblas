@@ -133,21 +133,6 @@ struct xkblas_context {
 #define BLAS_NAME(name)   _XKBLAS_XCAT(,name,_,)
 #define SYMBLAS_NAME(name) _XKBLAS_STR_EXPAND(_XKBLAS_XCAT(,name,_,))
 
-/* List of kernel implemented in the runtime */
-typedef enum {
-  KERN_VOID,
-  KERN_GEMM,
-  KERN_GEMMT,
-  KERN_TRMM,
-  KERN_TRSM,
-  KERN_SYMM,
-  KERN_SYRK,
-  KERN_SYR2K,
-  KERN_HEMM,
-  KERN_HERK,
-  KERN_HER2K
-} xkblas_kernel_t;
-
 
 /* Internal matrix data structure
    From application pointer to a matrix, xkblas keep track of the internal matrix descriptor.
@@ -179,9 +164,6 @@ typedef struct xkblas_matrix_descr xkblas_matrix_descr_t;
 
 #define xkblas_num_of_tiles(M,NB) (((M)+(NB)-1)/(NB))
 
-extern int xkblas_matrix_descr_isinit(
-  xkblas_matrix_descr_t* Ah
-);
 
 extern kaapi_handle_t* xkblas_get_handle(
   xkblas_matrix_descr_t* Ah,
@@ -201,14 +183,6 @@ extern int xkblas_auto_map(
   xkblas_kernel_t kernel, xkblas_matrix_descr_t* Ah
 );
 
-
-/* Auto compute tile size
-   M,N,K are the input problem sizes.
-   Some kernel does not required 3 sizes and K is ignored
-*/
-extern size_t xkblas_auto_tilesize(
-  xkblas_kernel_t kernel, size_t M, size_t N, size_t K
-);
 
 
 #if KAAPI_USE_CUDA

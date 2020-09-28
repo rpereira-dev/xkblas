@@ -89,6 +89,21 @@ typedef CBLAS_ORDER CBLAS_LAYOUT;
 #endif
 
 
+/* List of kernel implemented in the runtime */
+typedef enum {
+  KERN_VOID,
+  KERN_GEMM,
+  KERN_GEMMT,
+  KERN_TRMM,
+  KERN_TRSM,
+  KERN_SYMM,
+  KERN_SYRK,
+  KERN_SYR2K,
+  KERN_HEMM,
+  KERN_HERK,
+  KERN_HER2K
+} xkblas_kernel_t;
+
 /*
 */
 static inline int xkblas_blas2cblas_trans( const char* trans )
@@ -174,10 +189,26 @@ typedef struct xkblas_matrix_descr xkblas_matrix_descr_t;
 extern xkblas_matrix_descr_t* xkblas_find( const void* A );
 
 /*
+*/
+extern int xkblas_matrix_descr_isinit(
+  xkblas_matrix_descr_t* Ah
+);
+
+/*
  */
 extern int xkblas_init_matrix_handle( xkblas_matrix_descr_t* Ah,
   void* A, size_t M, size_t N, size_t LD, size_t eltsize, size_t MB, size_t NB
 );
+
+
+/* Auto compute tile size
+   M,N,K are the input problem sizes.
+   Some kernel does not required 3 sizes and K is ignored
+*/
+extern size_t xkblas_auto_tilesize(
+  xkblas_kernel_t kernel, size_t M, size_t N, size_t K
+);
+
 
 /* Allocate a Host registered bloc of sz byte if CUDA is configured on.
    Else return a bloc as if returned by malloc.
@@ -272,8 +303,8 @@ extern int xkblas_map_1Dblock_cyclic(
    with blocking factor (Bp,Bq).
 */
 extern int xkblas_distribute_2Dblock_cyclic_async(
-  int hlevel, int storage, size_t m, size_t n,
-  const void* A, size_t ld, size_t eltsize,
+  int hlevel, int storage, size_t NB,
+  size_t m, size_t n, const void* A, size_t ld, size_t eltsize,
   size_t Bp, size_t Bq, /* blocking size */
   size_t Gp, size_t Gq  /* grid size */
 );
@@ -282,8 +313,8 @@ extern int xkblas_distribute_2Dblock_cyclic_async(
    with blocking factor B.
 */
 extern int xkblas_distribute_1Dblock_cyclic_async(
-  int hlevel, int storage, int colrow, size_t m, size_t n,
-  const void* A, size_t ld, size_t eltsize,
+  int hlevel, int storage, int colrow, 
+  size_t NB, size_t m, size_t n, const void* A, size_t ld, size_t eltsize,
   size_t B, size_t G    /* grid size */
 );
 

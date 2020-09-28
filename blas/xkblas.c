@@ -1499,8 +1499,8 @@ int xkblas_memory_invalidate_async(const void* A)
    If matrix is not found return EINVAL
 */
 int xkblas_distribute_2Dblock_cyclic_async(
-  int hlevel, int storage, size_t m, size_t n,
-  const void* A, size_t lda, size_t eltsize,
+  int hlevel, int storage, size_t NB,
+  size_t m, size_t n, const void* A, size_t lda, size_t eltsize,
   size_t Bp, size_t Bq, /* blocking size */
   size_t Gp, size_t Gq  /* grid size */
 )
@@ -1508,10 +1508,8 @@ int xkblas_distribute_2Dblock_cyclic_async(
   xkblas_matrix_descr_t* Ah = xkblas_find(A);
   if (!xkblas_matrix_descr_isinit(Ah)) 
   {
-    size_t NB = xkblas_get_param();
     xkblas_init_matrix_handle(Ah, (void*)A, m, n, lda, eltsize, NB, NB);
   }
-
 
   kaapi_ld_type_t type;
   switch (hlevel) {
@@ -1554,17 +1552,17 @@ int xkblas_distribute_2Dblock_cyclic_async(
    colrow = 1 -> row mapping
 */
 int xkblas_distribute_1Dblock_cyclic_async(
-  int hlevel, int storage, int colrow, size_t m, size_t n,
-  const void* A, size_t lda, size_t eltsize,
+  int hlevel, int storage, int colrow, size_t NB, 
+  size_t m, size_t n, const void* A, size_t lda, size_t eltsize,
   size_t B, size_t G    /* grid size */
 )
 {
-  size_t MB,NB;
-  MB = NB = xkblas_get_param();
+  size_t MB;
+  MB = NB;
   if (colrow == 0)
   {
     return xkblas_distribute_2Dblock_cyclic_async(
-      hlevel, storage, m, n, A, lda, eltsize,
+      hlevel, storage, NB, m, n, A, lda, eltsize,
       (m+MB-1)/MB, B,
       1, G
     );
@@ -1572,7 +1570,7 @@ int xkblas_distribute_1Dblock_cyclic_async(
   else
   {
     return xkblas_distribute_2Dblock_cyclic_async(
-      hlevel, storage, m, n, A, lda, eltsize,
+      hlevel, storage, NB, m, n, A, lda, eltsize,
       B, (n+NB-1)/NB,
       G, 1
     );
@@ -1624,7 +1622,7 @@ size_t xkblas_auto_tilesize(
       size_t ngpu = xkblas_get_ngpus();
       if (M<N) N =M;
       for (int fact = FACTOR; fact>0; fact-=2)
-      {     
+      k     
         double tNB = ((double)N) / (double)(ngpu * fact);
         NB = ceil(tNB);
         if (NB >=1024) break;
@@ -1649,12 +1647,15 @@ size_t xkblas_auto_tilesize(
       return NB;
 #elif 1
       size_t ngpu = xkblas_get_ngpus();
+      size_t fact = ngpu/2;
+      if (fact ==0) fact = 1;
       if (M<N) N =M;
-      size_t tNB = ((double)N) / (double)FACTOR;
-      size_t k =  tNB / 2000;
-      NB = N / (k * FACTOR);
+      size_t tNB = ((double)N) / (double)fact;
+      size_t k =  tNB / (4096/fact);
+      if (k ==0) NB = N / fact;
+      else NB = N / (k * fact);
       NB = (NB + 255) & ~255UL;
-      if (NB <1024) NB = 1024;
+      if (NB <512) NB = 512;
       //if (NB <896) NB = 896;
 printf("Mat size: %i tilesize: %i\n",(int)M, NB);
       return NB;
@@ -1667,6 +1668,7 @@ printf("Mat size: %i tilesize: %i\n",(int)M, NB);
   	Rfit = Rfit +4;
         BSfit = floor((N/Rfit+ALIGN-1)/ALIGN)*ALIGN;
       }
+printf("Mat size: %i tilesize: %i\n",(int)M, BSfit);
       return BSfit;
 #endif
     };
