@@ -193,6 +193,7 @@ int xkblas_zsyr2k_async( int uplo, int trans, int N, int K,
     size_t Cnt = Ch->nt;
 
     size_t m, n, k;
+    size_t mmin,mmax;
     size_t ldak, ldam, ldan, ldcm, ldcn;
     size_t ldbk, ldbm, ldbn;
     size_t tempnn, tempmm, tempkn, tempkm;
@@ -210,8 +211,29 @@ int xkblas_zsyr2k_async( int uplo, int trans, int N, int K,
 
     xkblas_auto_map( KERN_SYR2K, Ch );
 
+#if 0
+int loadgpu[20];
+for (int i=0; i<20; ++i)
+  loadgpu[i] = 0;
+
+int load[Cmt][Cnt];
+for (int i=0; i<Cmt; ++i)
+  for (int j=0; j<Cnt; ++j)
+    load[i][j] = 0;
+#endif
+
     for (n = 0; n < Cnt; n++) {
         tempnn = n == Cnt-1 ? Cn-n*Cnb : Cnb;
+
+        if (uplo == CblasLower) {
+            mmin = n+1;
+            mmax = Cmt;
+        }
+        else {
+            mmin = 0;
+            mmax = n;
+        }
+
         ldan = LDA;//BLKLDD(A, n);
         ldbn = LDB;//BLKLDD(B, n);
         ldcn = LDC;//BLKLDD(C, n);
@@ -228,60 +250,40 @@ int xkblas_zsyr2k_async( int uplo, int trans, int N, int K,
                     *alpha, A(n, k), ldan, /* ldan * K */
                            B(n, k), ldbn,
                     zbeta, C(n, n), ldcn); /* ldc  * N */
+#if 0
+    loadgpu[xkblas_get_ld(C(n,n))] += 1;
+    load[n][n] +=1;
+#endif
             }
-            /*
-             *  CblasNoTrans / CblasLower
-             */
-            if (uplo == CblasLower) {
-                for (m = n+1; m < Cmt; m++) {
-                    tempmm = m == Cmt-1 ? Cm-m*Cmb : Cmb;
-                    ldam = LDA;//BLKLDD(A, m);
-                    ldbm = LDB;//BLKLDD(B, m);
-                    ldcm = LDC;//BLKLDD(C, m);
-                    for (k = 0; k < Ant; k++) {
-                        tempkn = k == Ant-1 ? An-k*Anb : Anb;
-                        zbeta = k == 0 ? *beta : zone;
-                        INSERT_TASK_zgemm(
-                            trans, CblasTrans,
+            for (m = mmin; m < mmax; m++) {
+                tempmm = m == Cmt-1 ? Cm-m*Cmb : Cmb;
+                ldam = LDA;//BLKLDD(A, m);
+                ldbm = LDB;//BLKLDD(B, m);
+                ldcm = LDC;//BLKLDD(C, m);
+                for (k = 0; k < Ant; k++) {
+                    tempkn = k == Ant-1 ? An-k*Anb : Anb;
+                    zbeta = k == 0 ? *beta : zone;
+                    INSERT_TASK_zgemm(
+                            CblasNoTrans, CblasTrans,
                             tempmm, tempnn, tempkn, 
                             *alpha, A(m, k), ldam,  /* ldam * K */
-                                   B(n, k), ldbn,  /* ldan * K */
-                            zbeta, C(m, n), ldcm); /* ldc  * N */
+                                    B(n, k), ldbn,  /* ldan * K */
+                            zbeta,  C(m, n), ldcm); /* ldc  * N */
+#if 0
+    loadgpu[xkblas_get_ld(C(m,n))] += 1;
+    load[m][n] +=1;
+#endif
 
-                        INSERT_TASK_zgemm(
-                            trans, CblasTrans,
+                    INSERT_TASK_zgemm(
+                            CblasNoTrans, CblasTrans,
                             tempmm, tempnn, tempkn, 
                             *alpha, B(m, k), ldbm,  /* ldam * K */
                                    A(n, k), ldan,  /* ldan * K */
                             zone,  C(m, n), ldcm); /* ldc  * N */
-                    }
-                }
-            }
-            /*
-             *  CblasNoTrans / CblasUpper
-             */
-            else {
-                for (m = n+1; m < Cmt; m++) {
-                    tempmm = m == Cmt-1 ? Cm-m*Cmb : Cmb;
-                    ldam = LDA;//BLKLDD(A, m);
-                    ldbm = LDB;//BLKLDD(B, m);
-                    for (k = 0; k < Ant; k++) {
-                        tempkn = k == Ant-1 ? An-k*Anb : Anb;
-                        zbeta = k == 0 ? *beta : zone;
-                        INSERT_TASK_zgemm(
-                            trans, CblasTrans,
-                            tempnn, tempmm, tempkn, 
-                            *alpha, A(n, k), ldan,  /* ldan * K */
-                                   B(m, k), ldbm,  /* ldam * M */
-                            zbeta, C(n, m), ldcn); /* ldc  * M */
-
-                        INSERT_TASK_zgemm(
-                            trans, CblasTrans,
-                            tempnn, tempmm, tempkn, 
-                            *alpha, B(n, k), ldan,  /* ldan * K */
-                                   A(m, k), ldam,  /* ldam * M */
-                            zone,  C(n, m), ldcn); /* ldc  * M */
-                    }
+#if 0
+    loadgpu[xkblas_get_ld(C(m,n))] += 1;
+    load[m][n] +=1;
+#endif
                 }
             }
         }
@@ -301,63 +303,52 @@ int xkblas_zsyr2k_async( int uplo, int trans, int N, int K,
                            B(k, n), ldbk,
                     zbeta, C(n, n), ldcn); /* ldc * N */
             }
-            /*
-             *  Cham[Conj]Trans / CblasLower
-             */
-            if (uplo == CblasLower) {
-                for (m = n+1; m < Cmt; m++) {
-                    tempmm = m == Cmt-1 ? Cm-m*Cmb : Cmb;
-                    ldcm = LDC;//BLKLDD(C, m);
-                    for (k = 0; k < Amt; k++) {
-                        tempkm = k == Amt-1 ? Am-k*Amb : Amb;
-                        ldak = LDA;//BLKLDD(A, k);
-                        ldbk = LDB;//BLKLDD(B, k);
-                        zbeta = k == 0 ? *beta : zone;
-                        INSERT_TASK_zgemm(
-                            trans, CblasNoTrans,
-                            tempmm, tempnn, tempkm, 
-                            *alpha, A(k, m), ldak,  /* lda * M */
-                                   B(k, n), ldbk,  /* lda * N */
-                            zbeta, C(m, n), ldcm); /* ldc * N */
+            for (m = mmin; m < mmax; m++) {
+                tempmm = m == Cmt-1 ? Cm-m*Cmb : Cmb;
+                ldcm = LDC;//BLKLDD(C, m);
+                for (k = 0; k < Amt; k++) {
+                    tempkm = k == Amt-1 ? Am-k*Amb : Amb;
+                    ldak = LDA;//BLKLDD(A, k);
+                    ldbk = LDB;//BLKLDD(B, k);
+                    zbeta = k == 0 ? *beta : zone;
+                    INSERT_TASK_zgemm(
+                        CblasTrans, CblasNoTrans,
+                        tempmm, tempnn, tempkm, 
+                        *alpha, A(k, m), ldak,  /* lda * M */
+                               B(k, n), ldbk,  /* lda * N */
+                        zbeta, C(m, n), ldcm); /* ldc * N */
 
-                        INSERT_TASK_zgemm(
-                            trans, CblasNoTrans,
-                            tempmm, tempnn, tempkm, 
-                            *alpha, B(k, m), ldbk,  /* lda * M */
-                                   A(k, n), ldak,  /* lda * N */
-                            zone,  C(m, n), ldcm); /* ldc * N */
-                    }
-                }
-            }
-            /*
-             *  Cham[Conj]Trans / CblasUpper
-             */
-            else {
-                for (m = n+1; m < Cmt; m++) {
-                    tempmm = m == Cmt-1 ? Cm-m*Cmb : Cmb;
-                    for (k = 0; k < Amt; k++) {
-                        tempkm = k == Amt-1 ? Am-k*Amb : Amb;
-                        ldak = LDA;//BLKLDD(A, k);
-                        ldbk = LDB;//BLKLDD(B, k);
-                        zbeta = k == 0 ? *beta : zone;
-                        INSERT_TASK_zgemm(
-                            trans, CblasNoTrans,
-                            tempnn, tempmm, tempkm, 
-                            *alpha, A(k, n), ldak,  /* lda * K */
-                                   B(k, m), ldbk,  /* lda * M */
-                            zbeta, C(n, m), ldcn); /* ldc * M */
-
-                        INSERT_TASK_zgemm(
-                            trans, CblasNoTrans,
-                            tempnn, tempmm, tempkm, 
-                            *alpha, B(k, n), ldbk,  /* lda * K */
-                                   A(k, m), ldak,  /* lda * M */
-                            zone,  C(n, m), ldcn); /* ldc * M */
-                    }
+                    INSERT_TASK_zgemm(
+                        CblasTrans, CblasNoTrans,
+                        tempmm, tempnn, tempkm, 
+                        *alpha, B(k, m), ldbk,  /* lda * M */
+                               A(k, n), ldak,  /* lda * N */
+                        zone,  C(m, n), ldcm); /* ldc * N */
                 }
             }
         }
     }
+
+#if 0
+for (int i=0; i<20; ++i)
+  printf("Load[%o] = %i\n",i,loadgpu[i]);
+printf("load:\n");
+for (int i=0; i<Cmt; ++i)
+{
+  for (int j=0; j<Cnt; ++j)
+    printf(" %02i",load[i][j]);
+  printf("\n");
+}
+printf("Mapping:\n");
+for (int i=0; i<Cmt; ++i)
+{
+  for (int j=0; j<Cnt; ++j)
+    if (load[i][j] >0)
+      printf(" %4i",xkblas_get_ld(C(i,j))-1);
+    else printf("     ");
+  printf("\n");
+}
+#endif
 }
 
 /* syr2k */
