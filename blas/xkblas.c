@@ -656,6 +656,59 @@ int xkblas_map_ij_cyclic(
   return 0;
 }
 
+int xkblas_map_test(
+  int hlevel, int storage, size_t m, size_t n,
+  const void* A, size_t lda, size_t eltsize,
+  int force
+)
+{
+  xkblas_matrix_descr_t* Ah = xkblas_find(A);
+  if (!xkblas_matrix_descr_isinit(Ah)) return EINVAL;
+
+  kaapi_ld_type_t type;
+  switch (hlevel) {
+    case 0: type = KAAPI_LD_BOARD; break;
+    case 1: type = KAAPI_LD_GPU; break;
+    case 2: type = KAAPI_LD_CORE; break;
+    default:
+      printf("[%s] unknown type, returns immediatly\n", __func__);
+#if KAAPI_DEBUG
+      abort();
+#endif
+      return EINVAL;
+  };
+
+  unsigned int count = kaapi_localitydomain_count(type);
+  if (count ==0) return EINVAL;
+
+  size_t Amt = Ah->mt;
+  size_t Ant = Ah->nt;
+  char* ptr = (char*)A;
+  void* addr;
+  size_t B = (Ant+2*count-1)/(2*count);
+
+  for (size_t i=0; i<Amt; ++i)
+  {
+    int r = i % count;
+    uint16_t ldid = xkblas_get_ldid(Ah, i, i );
+    if ((ldid ==0) || force)
+      xkblas_set_ldid(Ah, i, i, ldid = 1+kaapi_localitydomain_get_num(type, r));
+
+    size_t c = i+1;
+    for (size_t j=0; j<Ant; ++j)
+    {
+      if (i ==j) continue;
+      int r = c % count;
+      ++c;
+      uint16_t ldid = xkblas_get_ldid(Ah, i, j );
+      if ((ldid ==0) || force)
+        xkblas_set_ldid(Ah, i, j, ldid = 1+kaapi_localitydomain_get_num(type, r));
+    }
+  }
+  return 0;
+}
+
+
 
 /*
 */
@@ -1728,8 +1781,6 @@ printf("%s\n",buffer);
 #endif
   switch (kernel)
   {
-    case KERN_TRMM:
-    case KERN_TRSM:
 #if 0
       xkblas_map_ij_cyclic(
         1, CblasColMajor,
@@ -1745,14 +1796,30 @@ printf("%s\n",buffer);
       );
       break;
 #endif
+#if 0
+      xkblas_map_ij_cyclic(
+        1, CblasColMajor,
+        Ah->M, Ah->N, Ah->addr, Ah->ld, Ah->eltsize,
+        0
+      );
+      break;
+      xkblas_map_1Dblock_cyclic(
+        1, CblasColMajor, 0,
+        Ah->M, Ah->N, Ah->addr, Ah->ld, Ah->eltsize,
+        1, xkblas_get_ngpus(), 0
+      );
+      break;
+#endif
+    case KERN_GEMM:
+    case KERN_SYMM:
+    case KERN_GEMMT:
     case KERN_SYRK:
     case KERN_SYR2K:
+    case KERN_TRSM:
+    case KERN_TRMM:
     case KERN_HEMM:
     case KERN_HERK:
     case KERN_HER2K:
-    case KERN_GEMMT:
-    case KERN_GEMM:
-    case KERN_SYMM:
     { /* 2D Bloc cyclic */
       size_t Blkm = 1;
       size_t Blkn = 1;
