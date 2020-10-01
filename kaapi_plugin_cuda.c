@@ -2257,8 +2257,6 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_commit)(kaapi_device_t
   CUcontext ctx;
   res = cuCtxPopCurrent(&ctx);
   kaapi_assert(res ==CUDA_SUCCESS);
-  if (verboseok && getenv("KAAPI_VERBOSE"))
-    printf("[xkaapi] peer access enable\n");
 #endif
 }
 
