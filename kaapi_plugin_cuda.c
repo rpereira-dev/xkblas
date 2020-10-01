@@ -1658,7 +1658,7 @@ printf("Kernel: GPU time: %4.2f, CPU time: %4.2f\n", status.gpu_delay, status.cp
 static uint16_t cuda_get_source(
   kaapi_memory_device_t* dev,
   uint16_t lid0,
-  uint64_t valid_bit, uint64_t xfer_bit
+  KAAPI_MEMORY_VALUE_TYPE valid_bit, KAAPI_MEMORY_VALUE_TYPE xfer_bit
 )
 {
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev->device;
@@ -1670,9 +1670,9 @@ static uint16_t cuda_get_source(
   for (int rank = 0; rank < cuda_count_perfrank-1; ++rank)
   {
     if (valid_bit !=0)
-      lid_src = __builtin_ffsll( valid_bit & device->affinity[rank] );
+      lid_src = KAAPI_MEMORY_FFS( valid_bit & device->affinity[rank] );
     else /* xfer !=0: pre-cond of the function */
-      lid_src = __builtin_ffsll( xfer_bit & device->affinity[rank]);
+      lid_src = KAAPI_MEMORY_FFS( xfer_bit & device->affinity[rank]);
     if (lid_src !=0)
     {
       --lid_src;

@@ -291,7 +291,7 @@ static void kaapi_do_prefetch_data(
         continue;
 
       /* else : send prefetch request */
-      int err = kaapi_dsm_prefetch_on( &kaapi_the_dsm, device->memdev.asid, mdi, access->gen,
+      int err = kaapi_dsm_prefetch_on( &kaapi_the_dsm, device->memdev.asid, mdi, 
 #if KAAPI_DEBUG
               callback_epilogue_prefetch_data, access->data, 0, 0 
 #else
@@ -343,10 +343,6 @@ static int kaapi_offload_device_prepare_execute_task(
     kaapi_metadata_info_t* mdi;
     unsigned int count_params = kaapi_format_get_count_params(fmt, kaapi_task_getargs(task));
 
-#if 0
-    char all_modes[2*count_params];
-#endif
-
     /* use task->wc as counter for asynchronous callback to detect
        completion of them
        - each callback decr counter
@@ -391,7 +387,7 @@ printf("[%p]:: Task: %p %s param[%i] @:%p view[%lu, %lu, ld:%lu]\n",
       mdi = kaapi_dsm_findaccess_on_node(
           &kaapi_the_dsm, 
           device->memdev.asid,
-          1,
+          1, /* force creation */
           access,
           &view
       );
@@ -403,7 +399,6 @@ printf("[%p]:: Task: %p %s param[%i] @:%p view[%lu, %lu, ld:%lu]\n",
             task,
             mp,
             mdi,
-            access->gen,
             callback_set_valid,
             (void*)device, (void*)task, (void*)frame
         );
@@ -633,8 +628,11 @@ int kaapi_sched_idle_offload(
       kaapi_assert_debug((task ==0)||(frame != 0));
     }
     else
+    {
+      frame = task->frame;
       /* spawn_count counts the number of task locally created, not from the mailbox */
       ++device->spawn_count;
+    }
 
     if (task ==0)
     {
@@ -651,7 +649,10 @@ int kaapi_sched_idle_offload(
           kaapi_assert_debug((task ==0)||(frame != 0));
         }
         else
+        {
+          frame = task->frame;
           ++device->spawn_count;
+        }
         if (task !=0) goto prepare_execute;
         kaapi_offload_poll_device( device );
       }
@@ -820,8 +821,8 @@ prepare_execute:
 
       //kaapi_assert_debug( (frame ==0) || (frame == task->frame) );
       // Currently, each task commited to stack store its allocation frame used to signal it.
-      // This extra field may be deleted if when stolen the frame is store on the thief task as in Kaapi
-      frame = task->frame;
+      // This extra field may be deleted if when the task is stolen the frame pointer is pass to the thief.
+      //frame = task->frame;
       kaapi_offload_device_prepare_execute_task(device, frame, task );
 
       do {

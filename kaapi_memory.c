@@ -165,7 +165,7 @@ static inline void kaapi_memory_replica_set_allocated(
 {
   kaapi_assert_debug(mdi != 0);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-  KAAPI_ATOMIC_OR64(&mdi->alloc, (1UL<<lid));
+  KAAPI_ATOMIC_OR(&mdi->alloc, (1UL<<lid));
 }
 
 static inline void kaapi_memory_replica_unset_allocated(
@@ -175,7 +175,7 @@ static inline void kaapi_memory_replica_unset_allocated(
 {
   kaapi_assert_debug(mdi != 0);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-  KAAPI_ATOMIC_AND64(&mdi->alloc, ~(uint64_t)(1UL<<lid));
+  KAAPI_ATOMIC_AND(&mdi->alloc, ~(uint16_t)(1UL<<lid));
 }
 
 
@@ -186,7 +186,7 @@ static inline bool kaapi_memory_replica_is_valid_on(
 {
   kaapi_assert_debug(mdi != 0);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-  return  ((KAAPI_ATOMIC_READ(&mdi->valid) & (uint64_t)(1UL<<lid)) !=0);
+  return  ((KAAPI_ATOMIC_READ(&mdi->valid) & (uint16_t)(1UL<<lid)) !=0);
 }
 
 static inline bool kaapi_memory_replica_is_valid_excepton(
@@ -196,7 +196,7 @@ static inline bool kaapi_memory_replica_is_valid_excepton(
 {
   kaapi_assert_debug(mdi != 0);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-  return  ((KAAPI_ATOMIC_READ(&mdi->valid) & ~(uint64_t)(1UL<<lid)) !=0);
+  return  ((KAAPI_ATOMIC_READ(&mdi->valid) & ~(uint16_t)(1UL<<lid)) !=0);
 }
 
 static inline bool kaapi_memory_replica_is_valid_somewhere(
@@ -214,7 +214,7 @@ static inline void kaapi_memory_replica_set_valid(
 {
   kaapi_assert_debug(mdi != 0);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-  KAAPI_ATOMIC_OR64(&mdi->valid, (1UL<<lid));
+  KAAPI_ATOMIC_OR(&mdi->valid, (1UL<<lid));
 }
 
 static inline void kaapi_memory_replica_unset_valid(
@@ -224,7 +224,7 @@ static inline void kaapi_memory_replica_unset_valid(
 {
   kaapi_assert_debug(mdi != 0);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-  KAAPI_ATOMIC_AND64(&mdi->valid, ~(uint64_t)(1UL<<lid));
+  KAAPI_ATOMIC_AND(&mdi->valid, ~(uint16_t)(1UL<<lid));
 }
 
 static inline void kaapi_memory_replica_set_all_dirty_except(
@@ -245,7 +245,7 @@ static inline void kaapi_memory_replica_set_xfer(
 {
   kaapi_assert_debug(mdi != 0);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-  KAAPI_ATOMIC_OR64(&mdi->xfer, (1UL<<lid));
+  KAAPI_ATOMIC_OR(&mdi->xfer, (1UL<<lid));
 }
 
 static inline void kaapi_memory_replica_unset_xfer(
@@ -255,7 +255,7 @@ static inline void kaapi_memory_replica_unset_xfer(
 {
   kaapi_assert_debug(mdi != 0);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-  KAAPI_ATOMIC_AND64(&mdi->xfer, ~(uint64_t)(1UL<<lid));
+  KAAPI_ATOMIC_AND(&mdi->xfer, ~(uint16_t)(1UL<<lid));
 }
 
 static inline int kaapi_memory_replica_is_xfer_tosomewhere(
@@ -273,7 +273,7 @@ static inline void kaapi_memory_replica_set_xferb(
 {
   kaapi_assert_debug(mdi != 0);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-  KAAPI_ATOMIC_OR64(&mdi->xferb, (1UL<<lid));
+  KAAPI_ATOMIC_OR(&mdi->xferb, (1UL<<lid));
 }
 
 static inline void kaapi_memory_replica_unset_xferb(
@@ -283,7 +283,7 @@ static inline void kaapi_memory_replica_unset_xferb(
 {
   kaapi_assert_debug(mdi != 0);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-  KAAPI_ATOMIC_AND64(&mdi->xferb, ~(uint64_t)(1UL<<lid));
+  KAAPI_ATOMIC_AND(&mdi->xferb, ~(uint16_t)(1UL<<lid));
 }
 
 static inline bool kaapi_memory_replica_is_notpinned(
@@ -1330,7 +1330,7 @@ static size_t kaapi_memory_cache_evict_fromlist(
     {
       printf("Evict data\n");
       int err = kaapi_dsm_prefetch_on( &kaapi_the_dsm, kaapi_local_asid,
-        curr->mdi, (uint32_t)-1,
+        curr->mdi,
         0, 0, 0, 0
       );
       if (err == EINPROGRESS)
@@ -1428,7 +1428,7 @@ uint64_t kaapi_memory_writeback_all(
       if (kaapi_memory_replica_is_valid( curr->mdi, lid == 1 ? 2 : 1 ))
         printf("*** also valid on other cache\n");
 #endif
-      int err = kaapi_dsm_prefetch_on( dsm, kaapi_local_asid, curr->mdi, (uint32_t)-1, cbk, arg0, arg1, arg2 );
+      int err = kaapi_dsm_prefetch_on( dsm, kaapi_local_asid, curr->mdi, cbk, arg0, arg1, arg2 );
       kaapi_assert((err ==0) || (err ==EINPROGRESS));
       if (err == EINPROGRESS) ++send_msg;
     }
@@ -1514,11 +1514,11 @@ int kaapi_memory_cache_invalidate_data(
      replicas before unmasking them to valid_bit set.
   */
 #if 1
-  uint64_t alloc_bit = KAAPI_ATOMIC_READ(&mdi->alloc);
+  KAAPI_MEMORY_VALUE_TYPE alloc_bit = KAAPI_ATOMIC_READ(&mdi->alloc);
   size_t size = kaapi_memory_view_size(&mdi->replicas[lidhost]->view);
   while (alloc_bit !=0)
   {
-    int lid= __builtin_ffsll( alloc_bit );
+    int lid= KAAPI_MEMORY_FFS( alloc_bit );
     --lid;
     kaapi_data_replica_t* kdr = mdi->replicas[lid];
 
@@ -1559,11 +1559,11 @@ int kaapi_memory_cache_invalidate_data(
   }
 #else
 //  KAAPI_ATOMIC_WRITE(&mdi->alloc,  1ULL<<lid0);
-  uint64_t alloc_bit = KAAPI_ATOMIC_READ(&mdi->alloc);
+  uint16_t alloc_bit = KAAPI_ATOMIC_READ(&mdi->alloc);
   size_t size = kaapi_memory_view_size(&mdi->replicas[lidhost]->view);
   while (alloc_bit !=0)
   {
-    int lid= __builtin_ffsll( alloc_bit );
+    int lid= KAAPI_MEMORY_FFS( alloc_bit );
     --lid;
     kaapi_data_replica_t* kdr = mdi->replicas[lid];
     KAAPI_ATOMIC_WRITE(&kdr->pinned, 0);  /* one reference count to the application data */
@@ -1801,7 +1801,7 @@ void kaapi_dsm_print_mdi(
  int valid = KAAPI_ATOMIC_READ(&mdi->valid);
  while (valid !=0)
  {
-   int lid= __builtin_ffsll( valid);
+   int lid= KAAPI_MEMORY_FFS( valid);
    if (lid== 0 ) break;
    --lid;
    printf("%i/asid=%i, @=%p ", lid, 
@@ -1814,7 +1814,7 @@ void kaapi_dsm_print_mdi(
  int alloc = KAAPI_ATOMIC_READ(&mdi->alloc);
  while (alloc !=0)
  { 
-   int lid= __builtin_ffsll( alloc);
+   int lid= KAAPI_MEMORY_FFS( alloc);
    if (lid== 0 ) break;
    --lid;
    printf("%i/asid=%i @=%p ", lid, 
@@ -2225,9 +2225,9 @@ uint16_t _kaapi_get_source_lid(
 {
   uint16_t lid0, lid_dest;
   uint16_t lid_src;
-  uint64_t valid_bit;
+  KAAPI_MEMORY_VALUE_TYPE valid_bit;
 #if KAAPI_USE_FAVOR_D2D_1
-  uint64_t xfer_bit;
+  KAAPI_MEMORY_VALUE_TYPE xfer_bit;
 #endif
 
   lid0 = kaapi_memory_asid_get_lid(kaapi_local_asid);
@@ -2241,7 +2241,7 @@ uint16_t _kaapi_get_source_lid(
   //#warning "Here protocol is not concurrent with eviction !!!! "
 reload:
   valid_bit= KAAPI_ATOMIC_READ(&mdi->valid);
-  uint64_t mask_valid_bit = valid_bit;
+  KAAPI_MEMORY_VALUE_TYPE mask_valid_bit = valid_bit;
 
 #if KAAPI_USE_FAVOR_D2D_1
   xfer_bit = KAAPI_ATOMIC_READ(&mdi->xfer);
@@ -2262,15 +2262,17 @@ reload:
     return lid0;
   }
 
-
-#if 1
   /* return the best source pointer for the device lid_dest */
   kaapi_memory_device_t* memdev = kaapi_the_dsm.nodes[lid_dest]->device;
   if (memdev)
   {
     while (valid_bit !=0)
     {
+#if KAAPI_USE_FAVOR_D2D_1 // 1 to activate multi-OP
       lid_src = memdev->f_get_source( memdev, lid0, valid_bit, xfer_bit );
+#else
+      lid_src = memdev->f_get_source( memdev, lid0, valid_bit, 0 );
+#endif
       if (lid_src == (uint16_t)-1) break;
       valid_bit &= ~(1<<lid_src);
       if (kaapi_memory_replica_is_valid(mdi, lid_src))
@@ -2291,11 +2293,20 @@ reload:
         return lid_src;
     }
     return lid0;
-  }
 #endif
+  }
+
+  int rnd = rand() % __builtin_popcountll(valid_bit);
+  for (int i=0; i<rnd; ++i)
+  {
+    lid_src = KAAPI_MEMORY_FFS( valid_bit );
+    kaapi_assert_debug( lid_src != 0);
+    --lid_src;
+    valid_bit &= ~(1<<lid_src);
+  }
 
 redo:
-  lid_src = __builtin_ffsll( valid_bit );
+  lid_src = KAAPI_MEMORY_FFS( valid_bit );
   if (lid_src == 0) goto reload;
   --lid_src;
   valid_bit &= ~(1<<lid_src);
@@ -2320,8 +2331,8 @@ typedef struct {
   kaapi_data_replica_t* r;
   int                   lid_dst;
   int                   lid_src;
-  uint64_t              valid;
-  uint64_t              xfer;
+  KAAPI_MEMORY_VALUE_TYPE valid;
+  KAAPI_MEMORY_VALUE_TYPE xfer;
   int                   err;
   kaapi_device_t*       device_topost;
   kaapi_io_stream_t*    ios_topost;
@@ -2915,7 +2926,6 @@ int kaapi_memory_sync_data(kaapi_memgroup_t* grp, void* ptr)
       &kaapi_the_dsm,
       kaapi_local_asid,
       mdi,
-      (uint32_t)-1,
       KAAPI_FETCH_PRIORITY_NORMAL,
       callback_signal_grp_on_receive_cbk, (void*)grp, (void*)mdi, (void*)kaapi_local_asid
   );

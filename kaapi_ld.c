@@ -50,6 +50,10 @@ static kaapi_localitydomain_t** map_ldid2ld = 0;
 static kaapi_ldid_t kaapi_ldid = 1;
 static kaapi_lock_t kaapi_ldlock = KAAPI_LOCK_INITIALIZER;
 
+/*
+static kaapi_localitydomain_t** affinity_ldid2ld
+ */
+
 
 /*
 */
@@ -62,13 +66,6 @@ int kaapi_localitydomain_finalize(void)
     free(kaapi_all_lddomains);
     kaapi_all_lddomains = 0;
   }
-#if 0
-  for (int i=0; i<kaapi_ldid; ++i)
-  {
-    if (map_ldid2ld[i] !=0)
-      kaapi_localitydomain_destroy(map_ldid2ld[i]);
-  }
-#endif
   if (map_ldid2ld !=0)
   {
     free(map_ldid2ld);
@@ -350,9 +347,9 @@ int32_t kaapi_fifo_queue_push(
   rd->waiter_push = 0;
 
   /* push task */
-  int32_t T = rd->T++;
-  int32_t idx = T%size;
-  rd->data[idx] = task;
+  int32_t T      = rd->T++;
+  int32_t idx    = T%size;
+  rd->data[idx]  = task;
   rd->frame[idx] = frame;
   ++rd->push_count;
 

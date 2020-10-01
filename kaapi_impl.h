@@ -208,10 +208,10 @@ typedef struct __attribute__((aligned(KAAPI_CACHE_LINE))) kaapi_threadinfo {
    It is managed as a bounded FIFO priority queue using kaapi_queue_fifo_push and kaapi_queue_fifo_pop.
 */
 typedef struct {
-  kaapi_ld_type_t type;
-  kaapi_ldid_t    ldid;
-  kaapi_device_t* device;
-  unsigned int    idx;         /* in kaapi_all_lddomains[type]->ld */
+  kaapi_ld_type_t      type;
+  kaapi_ldid_t         ldid;
+  kaapi_device_t*      device;
+  unsigned int         idx;         /* in kaapi_all_lddomains[type]->ld */
   kaapi_fifo_queue_t*  queue;  /* same data structure as a queue, but managed to be FIFO */
 } kaapi_localitydomain_t;
 
@@ -516,6 +516,13 @@ extern kaapi_task_t* kaapi_queue_pop(
     kaapi_context_t* owner,
     kaapi_queue_t* rd,
     int32_t* T0
+);
+
+/*
+*/
+extern int32_t kaapi_queue_push(
+    kaapi_context_t* owner,
+    kaapi_task_t* task
 );
 
 /*

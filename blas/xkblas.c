@@ -317,7 +317,7 @@ uint16_t xkblas_get_ld(
     goto retval;
   }
   else {
-    lid = _kaapi_get_source_lid( &kaapi_the_dsm, mdi, xkblas_context_get_generation(), 0, 0 );
+    lid = _kaapi_get_source_lid( &kaapi_the_dsm, mdi, 0, 0 );
     if ((lid ==lid0) && (count >0))
       lid = kaapi_localitydomain_get_num(KAAPI_LD_GPU, rand()%count);
   }
@@ -779,7 +779,7 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
   KAAPI_ATOMIC_INCR(&pending_writeback);
 #endif
   int err = kaapi_dsm_prefetch_on( &kaapi_the_dsm, kaapi_local_asid,
-    taskarg->a.mdi, taskarg->a.gen,
+    taskarg->a.mdi, 
     callback_epilogue_writeback, taskarg->a.mdi, taskarg->frame, taskarg
   );
   kaapi_assert((err==0) || (err== EINPROGRESS));
@@ -802,7 +802,7 @@ static void xkblas_create_taskwriteback(
   kaapi_thread_t* thread = xkblas_self_thread();
   kaapi_context_t* ctxt = kaapi_thread2context(thread);
   size_t tasksize = sizeof(kaapi_Arg_writeback) + sizeof(kaapi_task_t);
-  task = kaapi_task_alloc( thread, ctxt->unlink, kaapi_task_fmtid_writeback, tasksize );
+  task = kaapi_task_alloc( thread, kaapi_task_fmtid_writeback, tasksize );
   kaapi_Arg_writeback* taskarg = kaapi_task_getargst(task,kaapi_Arg_writeback); // == NAME(ARG)
 
   size_t Amt = Ah->mt;
@@ -813,7 +813,7 @@ static void xkblas_create_taskwriteback(
   taskarg->ld = ld;
   taskarg->frame = ctxt->unlink;
   kaapi_update_dependencies(thread, &taskarg->a, task,
-      KAAPI_ACCESS_MODE_R, xkblas_context_get()->xkblas_generation_cache, xkblas_get_handle(Ah,m,n));
+      KAAPI_ACCESS_MODE_R, xkblas_get_handle(Ah,m,n));
   kaapi_assert_debug( taskarg->a.mdi==0 );
   kaapi_ldid_t ldid = xkblas_get_ld(Ah, m, n);
   kaapi_taskflag_set(task, KAAPI_TASK_FLAG_INCOM);
@@ -893,7 +893,7 @@ static void xkblas_create_taskinvalidate(
   kaapi_thread_t* thread = xkblas_self_thread();
   kaapi_context_t* ctxt = kaapi_thread2context(thread);
   size_t tasksize = sizeof(kaapi_Arg_invalidate) + sizeof(kaapi_task_t);
-  task = kaapi_task_alloc( thread, ctxt->unlink, kaapi_task_fmtid_invalidate, tasksize );
+  task = kaapi_task_alloc( thread, kaapi_task_fmtid_invalidate, tasksize );
   kaapi_Arg_invalidate* taskarg = kaapi_task_getargst(task,kaapi_Arg_invalidate); // == NAME(ARG)
   size_t Amt = Ah->mt;
   size_t Ant = Ah->nt;
@@ -903,7 +903,7 @@ static void xkblas_create_taskinvalidate(
   taskarg->ld = ld;
   taskarg->frame = ctxt->unlink;
   kaapi_update_dependencies(thread, &taskarg->a, task,
-      KAAPI_ACCESS_MODE_RW, xkblas_context_get()->xkblas_generation_cache, xkblas_get_handle(Ah,m,n));
+      KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Ah,m,n));
   kaapi_ldid_t ldid = xkblas_get_ld(Ah, m, n);
   kaapi_taskflag_set(task, KAAPI_TASK_FLAG_INCOM);
   kaapi_task_set_ld(task, 0, ldid);
@@ -969,7 +969,7 @@ static void xkblas_create_distribute(
   kaapi_thread_t* thread = xkblas_self_thread();
   kaapi_context_t* ctxt = kaapi_thread2context(thread);
   size_t tasksize = sizeof(kaapi_Arg_distribute) + sizeof(kaapi_task_t);
-  task = kaapi_task_alloc( thread, ctxt->unlink, kaapi_task_fmtid_distribute, tasksize );
+  task = kaapi_task_alloc( thread, kaapi_task_fmtid_distribute, tasksize );
   kaapi_Arg_distribute* taskarg = kaapi_task_getargst(task,kaapi_Arg_distribute); // == NAME(ARG)
   size_t Amt = Ah->mt;
   size_t Ant = Ah->nt;
@@ -979,7 +979,7 @@ static void xkblas_create_distribute(
   taskarg->ld = ld;
   taskarg->frame = ctxt->unlink;
   kaapi_update_dependencies(thread, &taskarg->a, task,
-      KAAPI_ACCESS_MODE_R, xkblas_context_get()->xkblas_generation_cache, xkblas_get_handle(Ah,m,n));
+      KAAPI_ACCESS_MODE_R, xkblas_get_handle(Ah,m,n));
   kaapi_taskflag_set(task, KAAPI_TASK_FLAG_OUTCOM);
   kaapi_task_set_ld(task, 0, ldid);
   kaapi_task_commit( thread, task );

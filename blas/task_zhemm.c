@@ -80,7 +80,7 @@ void INSERT_TASK_zhemm(
     kaapi_thread_t* thread = ctxt->kthread;
     kaapi_context_t* kctxt = kaapi_thread2context(thread);
     size_t tasksize = sizeof(NAME(Arg)) + sizeof(kaapi_task_withperfcnt_t);
-    task = kaapi_task_alloc( thread, kctxt->unlink, NAME(task_fmtid), tasksize );
+    task = kaapi_task_alloc( thread, NAME(task_fmtid), tasksize );
     NAME(Arg)* taskarg = kaapi_task_getargst((kaapi_task_withperfcnt_t*)task,NAME(Arg));
 
     taskarg->side = side;
@@ -89,13 +89,13 @@ void INSERT_TASK_zhemm(
     taskarg->n = n;
     taskarg->alpha = alpha;
     kaapi_update_dependencies(thread, &taskarg->A, task,
-        KAAPI_ACCESS_MODE_R, xkblas_context_get_generation(),  xkblas_get_handle(Ah, Am, An));
+        KAAPI_ACCESS_MODE_R, xkblas_get_handle(Ah, Am, An));
     taskarg->lda = lda;
     kaapi_update_dependencies(thread, &taskarg->B, task,
-        KAAPI_ACCESS_MODE_R, xkblas_context_get_generation(),  xkblas_get_handle(Bh, Bm, Bn));
+        KAAPI_ACCESS_MODE_R, xkblas_get_handle(Bh, Bm, Bn));
     taskarg->ldb = ldb;
     kaapi_update_dependencies(thread, &taskarg->C, task,
-        KAAPI_ACCESS_MODE_RW, xkblas_context_get_generation(),  xkblas_get_handle(Ch, Cm, Cn));
+        KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Ch, Cm, Cn));
     taskarg->beta = beta;
     taskarg->ldc = ldc;
     taskarg->mm = xkblas_get_modemath();

@@ -333,16 +333,16 @@ static char* name_io[] = {
 static uint16_t host_get_source(
   kaapi_memory_device_t* dev,
   uint16_t lid0,
-  uint64_t valid_bit, uint64_t xfer_bit
+  KAAPI_MEMORY_VALUE_TYPE valid_bit, KAAPI_MEMORY_VALUE_TYPE xfer_bit
 )
 {
   uint16_t lid_src;
   kaapi_assert_debug((valid_bit !=0) || (xfer_bit !=0));
 
   if (valid_bit !=0)
-    lid_src = __builtin_ffsll( valid_bit );
+    lid_src = KAAPI_MEMORY_FFS( valid_bit );
   else
-    lid_src = __builtin_ffsll( xfer_bit );
+    lid_src = KAAPI_MEMORY_FFS( xfer_bit );
   --lid_src;
   kaapi_assert_debug(lid_src < KAAPI_MEMORY_MAX_NODES);
   return lid_src;

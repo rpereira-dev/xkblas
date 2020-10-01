@@ -214,7 +214,7 @@ kaapi_atomic_t count_queue_push = {0};
 kaapi_atomic_t count_queue_all_push = {0};
 kaapi_atomic_t count_queue_fifo_push = {0};
 #endif
-int32_t kaapi_queue_push( kaapi_thread_t* thread, kaapi_frame_t* frame, kaapi_task_t* task)
+int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_frame_t* frame, kaapi_task_t* task)
 {
   kaapi_context_t* ctxt = kaapi_thread2context(thread);
 
@@ -222,8 +222,87 @@ int32_t kaapi_queue_push( kaapi_thread_t* thread, kaapi_frame_t* frame, kaapi_ta
   kaapi_assert( pthread_equal( pthread_self(), ctxt->queue->owner ) );
   KAAPI_ATOMIC_INCR(&count_queue_all_push);
 #endif
-  /* explicit queue defined in LD attribut */
+  /* explicit queue defined in LD attribut :
+     - if not local lid, then push in the mail box queue (fifo order)
+     - else if local, do has if no attribut is defined : push in local workstealing queue
+   */
   kaapi_ldid_t ldid = kaapi_task_get_ld(task);
+#define KAAPI_USE_AFFINITY     1
+#define KAAPI_USE_OCR_AFFINITY 1
+
+#if KAAPI_USE_AFFINITY
+  /* means no locality information: try to build on */
+  if (ldid == (kaapi_ldid_t)-1)
+  {
+    unsigned int ith;
+    kaapi_memory_view_t view;
+    kaapi_access_t* access;
+    kaapi_metadata_info_t* mdi;
+    const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
+    unsigned int count_params = kaapi_format_get_count_params(fmt, kaapi_task_getargs(task));
+    
+    size_t affinity[KAAPI_MEMORY_MAX_NODES];
+    for (int i=0; i<KAAPI_MEMORY_MAX_NODES; ++i)
+      affinity[i] = 0;
+    for(ith= 0; ith < count_params; ++ith)
+    {
+      kaapi_access_mode_t m = kaapi_format_get_mode_param(fmt, ith, kaapi_task_getargs(task));
+      kaapi_access_mode_t mp = KAAPI_ACCESS_GET_MODE(m);
+      if (mp & KAAPI_ACCESS_MODE_V)
+        continue;
+
+#if KAAPI_USE_OCR_AFFINITY
+      if (!KAAPI_ACCESS_IS_WRITE(mp))
+        continue;
+#else
+      /* else affinity == best size of any task parameter */
+#endif
+      /* do bind ptr to the device->asid */
+      access = kaapi_format_get_access_param(fmt, (unsigned int)ith, kaapi_task_getargs(task));
+      kaapi_format_get_view_param(fmt, (unsigned int)ith, kaapi_task_getargs(task), &view);
+      mdi = (kaapi_metadata_info_t*)access->mdi;
+
+      /* Return the meta data information about the data (ptr, view) */
+      if (mdi ==0)
+        mdi = kaapi_dsm_findaccess_on_node(
+            &kaapi_the_dsm,
+            kaapi_local_asid,
+            0, /* do not create*/
+            access,
+            &view
+        );
+      
+      if (mdi !=0)
+      {
+        /* set affinity for each valid replica */
+        KAAPI_MEMORY_VALUE_TYPE valid_bit= KAAPI_ATOMIC_READ(&mdi->valid);
+        while (valid_bit !=0)
+        {
+          KAAPI_MEMORY_VALUE_TYPE lid = KAAPI_MEMORY_FFS(valid_bit);
+          --lid;
+          /* here: a way to implement info of matrix mapping is to allocate meta data replica without valid bit...
+             thus we are first interesting to map task where 1/ it exists valid data and 2/ it exist replica, even if not valid
+             This would also suppress the management in blas of mapping information within the matrix descriptor.
+           */
+          if (kaapi_memory_replica_is_valid(mdi, lid))
+            affinity[lid] += kaapi_memory_view_size(&mdi->replicas[lid]->view);
+          valid_bit &= ~(1<<lid);
+        }
+      }
+    }
+    /* find max in affinity */
+    int lidmax = 0;
+    for (int i=1; i<KAAPI_MEMORY_MAX_NODES; ++i)
+      if (affinity[i] > affinity[lidmax])
+        lidmax = i;
+    if (affinity[lidmax] ==0)
+    {
+      ldid = lidmax;
+    }
+    /* else no affinity from data, do nothing */
+  }
+#endif
+  
   if ((ldid != (kaapi_ldid_t)-1) && ((ctxt->ld ==0) || ((ctxt->ld !=0) && (ldid != ctxt->ld->ldid))))
   {
     kaapi_localitydomain_t* ld = kaapi_localitydomain_get(ldid);
@@ -235,8 +314,8 @@ int32_t kaapi_queue_push( kaapi_thread_t* thread, kaapi_frame_t* frame, kaapi_ta
 #endif
       return -1;
     }
+    if (frame ==0) frame = ctxt->unlink;
     kaapi_assert_debug(frame !=0);
-    //if (frame ==0) frame = ctxt->unlink;
 #if KAAPI_DEBUG_LOW
     KAAPI_ATOMIC_INCR(&count_queue_fifo_push);
 #endif
@@ -246,9 +325,18 @@ int32_t kaapi_queue_push( kaapi_thread_t* thread, kaapi_frame_t* frame, kaapi_ta
         task
     );
   }
-
-  kaapi_queue_t* rd = ctxt->queue;
   kaapi_assert_debug( ldid == ctxt->ld->ldid);
+  return kaapi_queue_push(ctxt, task);
+}
+
+/*
+*/
+int32_t kaapi_queue_push(
+    kaapi_context_t* ctxt,
+    kaapi_task_t* task
+)
+{
+  kaapi_queue_t* rd = ctxt->queue;
 #if KAAPI_DEBUG_LOW
   KAAPI_ATOMIC_INCR(&count_queue_push);
   KAAPI_ATOMIC_INCR(&rd->cnt_push);
@@ -748,7 +836,6 @@ kaapi_thread_t* kaapi_thread_bind(int proctype, size_t user_size)
   /* dummy running internal kaapi task */
   kaapi_taskmain_t* tmain = (kaapi_taskmain_t*)kaapi_task_alloc(
      &ctxt->thread,
-     topframe,
      kaapi_taskmain_body,
      sizeof(kaapi_taskmain_t));
   tmain->arg = 0;
@@ -927,7 +1014,7 @@ int kaapi_team_attach(kaapi_team_t* team, kaapi_thread_t* thread, int idx)
   return 0;
 }
 
-/**
+/*
 */
 int kaapi_team_deattach(kaapi_team_t* team, kaapi_thread_t* thread )
 {
@@ -1020,12 +1107,10 @@ int kaapi_update_dependencies(
   kaapi_access_t* a,
   kaapi_task_t*   task,
   kaapi_access_mode_t mode,
-  uint32_t gen,
   kaapi_handle_t* h
 )
 {
   a->data    = h->sync0.data;
-  a->gen     = gen;
   a->next    = 0;
   a->task    = task;
   a->mode    = mode;
@@ -1065,6 +1150,7 @@ int kaapi_update_dependencies(
   KAAPI_ATOMIC_INCR(&task->wc);
   return 0;
 }
+
 
 /*
 */
@@ -1159,7 +1245,8 @@ uint32_t kaapi_sched_activate_syncpoint(
       a->ready = 1;
       if (KAAPI_ATOMIC_DECR(&a->task->wc)==0)
       {
-        kaapi_queue_push(thread, frame, a->task);
+        a->task->frame = frame;
+        kaapi_thread_push(thread, frame, a->task);
         ++activated;
       }
       a = a->next;
@@ -1181,7 +1268,7 @@ uint32_t kaapi_sched_activate_successors (
 )
 {
   uint32_t activated = 0;
-  if (! (task->flags & KAAPI_TASK_FLAG_INDEPENDENT) )
+  if (! (task->flags & KAAPI_TASK_FLAG_INDEPENDENT))
   {
     const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
     unsigned int count_params = kaapi_format_get_count_params(fmt, kaapi_task_getargs(task));
@@ -1202,8 +1289,6 @@ uint32_t kaapi_sched_activate_successors (
 }
 
 
-extern double t_start;
-extern double t_sync;
 /*
 */
 int kaapi_sched_sync( kaapi_thread_t* thread )
@@ -1279,7 +1364,7 @@ exec_start:
 
       /* activate successors : reverse the natural order of ready successor
          - it could be best to keep this order by 1/ pushing into local list
-         2/ then appening the lists togther
+         2/ then appening the lists togethers
       */
       kaapi_sched_activate_successors(thread, unlink, task, 0, 0);
     }
@@ -1496,12 +1581,12 @@ r_exit:
 
 
 /* Current implementation lock the context.
-   CCsync algorithm has to be get back from XKaapi
+   CCsync algorithm has to been back-ported from XKaapi
 */
 int kaapi_sched_process_request (
-  kaapi_team_t*    team,
-  kaapi_context_t* ctxt,
-  kaapi_request_t* request
+  kaapi_team_t*    team,    // the team
+  kaapi_context_t* ctxt,    // the target context of the request
+  kaapi_request_t* request  // the request
 )
 {
   switch (request->header.op)
@@ -1531,7 +1616,7 @@ int kaapi_sched_process_request (
     case KAAPI_REQUEST_OP_PUSH:
     {
 #if 0
-      int err = kaapi_queue_push(kaapi_context2thread(ctxt), request->push_a.frame, request->push_a.task);
+      int err = kaapi_queue_push(ctxt, request->push_a.task);
       request->header.status = (err ==0 ? KAAPI_REQUEST_S_OK : KAAPI_REQUEST_S_NOK);
 #else
       abort();

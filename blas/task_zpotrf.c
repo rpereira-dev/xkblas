@@ -76,13 +76,13 @@ void INSERT_TASK_zpotrf(
     kaapi_thread_t* thread = xkblas_self_thread();
     kaapi_context_t* kctxt = kaapi_thread2context(thread);
     size_t tasksize = sizeof(NAME(Arg)) + sizeof(kaapi_task_t);
-    task = kaapi_task_alloc( thread, kctxt->unlink, NAME(task_fmtid), tasksize );
+    task = kaapi_task_alloc( thread, NAME(task_fmtid), tasksize );
     NAME(Arg)* taskarg = kaapi_task_getargst(task,NAME(Arg));
 
     taskarg->uplo = uplo;
     taskarg->n = n;
     kaapi_update_dependencies(thread, &taskarg->A, task,
-        KAAPI_ACCESS_MODE_R, xkblas_context_get_generation(),  xkblas_get_handle(Ah, Am, An));
+        KAAPI_ACCESS_MODE_R, xkblas_get_handle(Ah, Am, An));
     taskarg->lda = lda;
     taskarg->mm = xkblas_get_modemath();
     kaapi_task_set_ld(task, 0, xkblas_get_ld(Ah, Am, An ));

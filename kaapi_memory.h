@@ -101,9 +101,6 @@ static inline uint16_t kaapi_memory_asid_get_lid( kaapi_address_space_id_t kasid
 
 /* ====================== Management of replicated data ============================== */
 
-/* static limitation of the current implementation */
-#define KAAPI_MEMORY_MAX_NODES 16
-
 /* callback for replica
    By default one callback is stored in the replica data structure. Further callbacks may
    have to be dynamically allocated and link together.
@@ -127,7 +124,6 @@ typedef struct kaapi_data_replica {
     kaapi_atomic8_t          pinned;       /* counter: cannot be evicted if>0 */
     kaapi_pointer_t          ptr;
     kaapi_memory_view_t      view;
-    uint32_t                 gen;
     int                      count;        /* debug, length of cbk */
     kaapi_data_replica_cbk_t cbk;
     void*                    cachelist;
@@ -148,16 +144,21 @@ typedef struct kaapi_data_replica {
                       Used to mark data under write-back operation before possible eviction.
                       Could be read but not write.
 */
+/* static limitation of the current implementation */
+#define KAAPI_MEMORY_MAX_NODES 16
+#define KAAPI_MEMORY_BITFIELD_TYPE kaapi_atomic16_t
+#define KAAPI_MEMORY_VALUE_TYPE uint16_t
+#define KAAPI_MEMORY_FFS __builtin_ffs
 struct kaapi_metadata_info {
-    kaapi_data_replica_t*   replicas[KAAPI_MEMORY_MAX_NODES];
-    kaapi_atomic64_t        alloc;
-    kaapi_atomic64_t        valid;
-    kaapi_atomic64_t        xfer;
-    kaapi_atomic64_t        xferb; /* used ??? */
+    kaapi_data_replica_t*      replicas[KAAPI_MEMORY_MAX_NODES];
+    KAAPI_MEMORY_BITFIELD_TYPE alloc;
+    KAAPI_MEMORY_BITFIELD_TYPE valid;
+    KAAPI_MEMORY_BITFIELD_TYPE xfer;
+    KAAPI_MEMORY_BITFIELD_TYPE xferb; /* used ??? */
 #if defined(KAAPI_DEBUG)
-    const char*             debug_info;
-    pthread_t               owner;      /* current xkblas model => the user thread that call
-                                           xkblas have its own context and data */
+    const char*                debug_info;
+    pthread_t                  owner;      /* current xkblas model => the user thread that call
+                                             xkblas have its own context and data */
 #endif
 };
 
@@ -345,7 +346,6 @@ extern int kaapi_dsm_acquire_data(
       kaapi_task_t* task,
       kaapi_access_mode_t mp,
       kaapi_metadata_info_t* mdi,
-      uint32_t gen,
       kaapi_io_cbk_fnc_t cbk,
       void* arg0, void* arg1, void* arg2
 );
@@ -366,7 +366,6 @@ extern int kaapi_dsm_prefetch_on(
       kaapi_dsm_t* dsm,
       kaapi_address_space_id_t asid,
       kaapi_metadata_info_t* mdi,
-      uint32_t gen,
       kaapi_io_cbk_fnc_t cbk,
       void* arg0, void* arg1, void* arg2
 );
@@ -443,7 +442,6 @@ extern int kaapi_memory_copy_async(
 extern uint16_t _kaapi_get_source_lid(
   kaapi_dsm_t* dsm,
   kaapi_metadata_info_t* mdi,
-  uint32_t gen,
   kaapi_address_space_id_t dest_asid,
   int mark );
 

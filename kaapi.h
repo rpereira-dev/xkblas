@@ -268,17 +268,12 @@ struct kaapi_task {
   unsigned int                 prio: 3; // iff flag KAAPI_TASK_FLAG_PRIORITY is set, else ignored
   unsigned int                 ld: 13;  // iff flag KAAPI_TASK_FLAG_LD_BOUND is set, else ignored
   kaapi_atomic16_t             wc;
-#if KAAPI_DEBUG
-  kaapi_frame_t*               frame __attribute__ ((deprecated));
-#else
-  kaapi_frame_t*               frame;   // TODO TODO TODO: hack to pass frame on stolen task....
-#endif
-//  uint64_t                     pad;
+  kaapi_frame_t*               frame;
 };
 
 typedef kaapi_task_t kaapi_task_withperfcnt_t;
 
-/** Flag for task.
+/* Flag for task.
     Note that this is only for user level construction.
     Some values are exclusives (e.g. COOPERATIVE and CONCURRENT),
     and are only represented by one bit.
@@ -1000,12 +995,13 @@ struct kaapi_metadata_info;
 typedef struct kaapi_metadata_info kaapi_metadata_info_t;
 extern int kaapi_handle_init(kaapi_thread_t* thread, kaapi_handle_t* h, void* data, kaapi_metadata_info_t* mdi);
 
+/* add dependencies: task access to a using access mode
+ */
 extern int kaapi_update_dependencies(
   kaapi_thread_t* thread,
   kaapi_access_t* a,
   kaapi_task_t* task,
   kaapi_access_mode_t mode,
-  uint32_t gen,
   kaapi_handle_t* h
 );
 
@@ -1091,24 +1087,23 @@ void* kaapi_stack_restore(
 static inline __attribute__((__always_inline__))
 kaapi_task_t* kaapi_task_init(
     kaapi_task_t* task,
-    kaapi_frame_t* frame,
     kaapi_task_body_t body
 )
 {
   task->body      = body;
   task->flags     = KAAPI_TASK_FLAG_DEFAULT;
   KAAPI_ATOMIC_WRITE(&task->wc, 65535); // (1U<<16)-1U;
-  task->frame     = frame;
   return task;
 }
 
 
-/* external function to enqueue task
-*/
-extern int32_t kaapi_queue_push(
+
+extern int32_t kaapi_thread_push(
     kaapi_thread_t* thread,
     kaapi_frame_t* frame,
-    kaapi_task_t* task);
+    kaapi_task_t* task
+);
+
 
 
 /* Commit the task to the thread.
@@ -1123,7 +1118,7 @@ static inline int32_t kaapi_task_commit(kaapi_thread_t* thread, kaapi_task_t* ta
     return -1;
   ++thread->cnt;
   if (kaapi_taskflag_get(task, KAAPI_TASK_FLAG_INDEPENDENT) || (wc==0))
-    return kaapi_queue_push(thread, 0, task);
+    return kaapi_thread_push(thread, 0, task);
   return -1;
 }
 
@@ -1132,7 +1127,6 @@ static inline int32_t kaapi_task_commit(kaapi_thread_t* thread, kaapi_task_t* ta
 static inline __attribute__((__always_inline__))
 kaapi_task_t* kaapi_task_alloc(
      kaapi_thread_t* thread,
-     kaapi_frame_t* frame,
      kaapi_task_body_t body,
      uint32_t size
 )
@@ -1140,7 +1134,7 @@ kaapi_task_t* kaapi_task_alloc(
   kaapi_task_t* task = (kaapi_task_t*)thread->sp;
   if (!_kaapi_has_enough_dataspace(thread, size))
     task = (kaapi_task_t*)kaapi_thread_slow_push_data(thread, size);
-  kaapi_task_init(task, frame, body);
+  kaapi_task_init(task, body);
   thread->sp = size + (char*)thread->sp;
   return task;
 }
@@ -1277,8 +1271,6 @@ void kaapi_team_barrier_wait (
     int count,
     int flag
 );
-
-
 
 #define KAAPI_FRAME_FLAG_DFG_VOID     0
 #define KAAPI_FRAME_FLAG_NO_UNLINK    0x1 /* do not implicit unlink in sched_sync() */
