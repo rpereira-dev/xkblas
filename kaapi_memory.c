@@ -403,8 +403,9 @@ kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
   if (size < sizeof(kaapi_alloc_chunk_t)) size = sizeof(kaapi_alloc_chunk_t);
 
   kaapi_atomic_lock(&device->mem_lock);
-  if (device->free_chunk_list ==0)
+  if ((device->free_chunk_list ==0) && (device->main_chunk ==0))
   {
+//printf("%p do main chunk alloc on device: %p\n",pthread_self(), device);
     kaapi_assert( device->main_chunk == 0);
     /* first : get limit cache_size and reserve it */
     int flag = KAAPI_MEMORY_DEVICE_FLAG_NONE;
@@ -580,8 +581,9 @@ printf("%li:: Free : device ptr@=%p(%li), size=%li, meta=%p :: free_chunk_list:%
 #if KAAPI_USE_PERFCOUNTER
   size_t size_free = chunk->size;
 #endif
+
   kaapi_alloc_chunk_t* next_chunk = chunk->next;
-  if (next_chunk->state & FREE_STATE)
+  if (next_chunk && (next_chunk->state & FREE_STATE))
   { /* merge chunk into next_chunk; free chunk */
     next_chunk->prev = chunk->prev;
     if (chunk->prev)
@@ -3096,6 +3098,7 @@ int kaapi_dsm_register_device(
 #if KAAPI_USE_OWN_HEAP_ALLOCATOR
   device->free_chunk_list = 0;
   device->main_chunk = 0;
+//printf("%p do reset main chunk alloc on device: %p\n",pthread_self(), device);
 #endif
 
   uint16_t lid = kaapi_memory_asid_get_lid(device->asid);
@@ -3156,6 +3159,7 @@ int kaapi_dsm_unregister_device(
     device->f_free(device, device->main_chunk->device_ptr, device->main_chunk->size );
     free(device->main_chunk);
     device->main_chunk = 0;
+//printf("%p do unregister main chunk alloc on device: %p\n",pthread_self(), device);
   }
 #endif
 
