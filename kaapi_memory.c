@@ -138,7 +138,6 @@ static int kaapi_dsm_fetch_on(
       kaapi_dsm_t* dsm,
       kaapi_address_space_id_t asid,
       kaapi_metadata_info_t* mdi,
-      uint32_t gen,
       int flags,
       kaapi_io_cbk_fnc_t cbk,
       void* arg0, void* arg1, void* arg2
@@ -1511,8 +1510,7 @@ int kaapi_memory_cache_invalidate_data(
   kaapi_assert_debug(lidhost < KAAPI_MEMORY_MAX_NODES);
   kaapi_assert_debug(mdi->owner == pthread_self());
 
-  /* unmask all replicas with generation less than requested gen
-     due to few number of GPUs may be it is best to create mask of invalid
+  /* unmask all replicas due to few number of GPUs may be it is best to create mask of invalid
      replicas before unmasking them to valid_bit set.
   */
 #if 1
@@ -1744,7 +1742,6 @@ static void kaapi_memory_freehashmap( kaapi_hashmap_t* ht, kaapi_address_space_i
    the device and the host).
 */
 int kaapi_memory_copy_async(
-    kaapi_memory_device_t* dev,
     kaapi_pointer_t dest, const kaapi_memory_view_t* view_dest,
     kaapi_pointer_t src, const kaapi_memory_view_t* view_src,
     int flags,
@@ -1752,15 +1749,13 @@ int kaapi_memory_copy_async(
     void* arg0, void* arg1, void* arg2
 )
 {
-  if (1)//dev ==0)
-  {
-    kaapi_memory_device_t* dest_dev = kaapi_memory_device_get( dest.asid );
-    kaapi_memory_device_t* src_dev = kaapi_memory_device_get( src.asid );
-    dev= (
-       (dest_dev ==0) || (kaapi_memory_asid_get_arch(dest_dev->asid) == KAAPI_PROC_TYPE_HOST) ?
-         src_dev : dest_dev
-    );
-  }
+  kaapi_memory_device_t* dest_dev = kaapi_memory_device_get( dest.asid );
+  kaapi_memory_device_t* src_dev = kaapi_memory_device_get( src.asid );
+  kaapi_memory_device_t* dev= (
+     (dest_dev ==0) || (kaapi_memory_asid_get_arch(dest_dev->asid) == KAAPI_PROC_TYPE_HOST) ?
+       src_dev : dest_dev
+  );
+
   return dev->f_copy(
     dev,
     dest, view_dest,
@@ -1779,7 +1774,6 @@ int kaapi_memory_copy(
 )
 {
   int err = kaapi_memory_copy_async(
-    0,
     dest, view_dest, src, view_src,
     KAAPI_FETCH_PRIORITY_NORMAL,
     0, 0, 0, 0 /* cbk etc */
@@ -2126,7 +2120,6 @@ return_value:
 static int _kaapi_dsm_allocate_replica(
     kaapi_dsm_t* dsm,
     kaapi_metadata_info_t* mdi,
-    uint32_t gen,
     kaapi_address_space_id_t asid
 )
 {
@@ -2226,7 +2219,6 @@ static int _kaapi_dsm_deallocate_replica(
 uint16_t _kaapi_get_source_lid(
   kaapi_dsm_t* dsm,
   kaapi_metadata_info_t* mdi,
-  uint32_t gen,
   kaapi_address_space_id_t dest_asid,
   int mark
 )
@@ -2300,105 +2292,6 @@ reload:
     }
     return lid0;
   }
-#endif
-
-#elif 0
-/* REVOIR: topo en localitydomain & choix algorithmique
-*/
-#if 1 // for DGX1 or DGX1-MAXQ
-// TOPO DGX1 or DGX1-MAXQ
-/* 4 levels of affinity. LID=0 == CPU, so shift value +1*/
-#define HLEVEL_AFFINITY 4
-#define BIT(x) (1<<(1+(x)))
-static int affinity[9][HLEVEL_AFFINITY] = {
-  { 0, ~0,         0,                   0},
-  { BIT(1), BIT(3)|BIT(4), BIT(1)|BIT(2), BIT(5)|BIT(6)|BIT(7)},
-  { BIT(2), BIT(2)|BIT(5), BIT(0)|BIT(3), BIT(4)|BIT(6)|BIT(7)},
-  { BIT(3), BIT(1)|BIT(3), BIT(0)|BIT(6), BIT(4)|BIT(5)|BIT(7)},
-  { BIT(4), BIT(0)|BIT(2), BIT(1)|BIT(7), BIT(4)|BIT(5)|BIT(6)},
-  { BIT(5), BIT(0)|BIT(7), BIT(5)|BIT(6), BIT(1)|BIT(2)|BIT(3)},
-  { BIT(6), BIT(1)|BIT(6), BIT(4)|BIT(7), BIT(0)|BIT(2)|BIT(3)},
-  { BIT(7), BIT(5)|BIT(7), BIT(2)|BIT(4), BIT(0)|BIT(1)|BIT(3)},
-  { BIT(8), BIT(4)|BIT(6), BIT(3)|BIT(5), BIT(0)|BIT(1)|BIT(2)}
-};
-#else // for BLAISE
-// TOPO BLAISE
-/* 3 levels of affinity. LID=0 == CPU, so shift value +1*/
-#define BIT(x) (1<<(1+(x)))
-#define HLEVEL_AFFINITY 3
-static int affinity[5][HLEVEL_AFFINITY] = {
-  { 0, ~0,         0,       },
-  { 0, BIT(3), BIT(1)|BIT(2)},
-  { 1, BIT(2), BIT(0)|BIT(3)},
-  { 2, BIT(1), BIT(0)|BIT(3)},
-  { 3, BIT(0), BIT(1)|BIT(2)}
-};
-#endif // DGX1 of MAXQ
-
-  for (int i=1; i<HLEVEL_AFFINITY; ++i)
-  {
-    if (valid_bit & affinity[lid_dest][i])
-    {
-redo1:
-      lid_src = __builtin_ffsll( valid_bit & affinity[lid_dest][i] );
-      if (lid_src ==0) { ++i; continue; }
-      --lid_src;
-      valid_bit &= ~(1<<lid_src);
-      if (!kaapi_memory_replica_is_valid(mdi, lid_src))
-      {
-        goto redo1; // next valid at same level ?
-      }
-      kaapi_assert_debug(lid_src < KAAPI_MEMORY_MAX_NODES);
-      kaapi_assert_debug(kaapi_memory_replica_is_valid(mdi, lid_src));
-
-      return lid_src;
-    }
-  }
-  valid_bit=0;
-
-#if KAAPI_USE_FAVOR_D2D_1 // 1 to activate multi-OP
-  /* not found valid lid. Check if xfer source exist */
-  for (int i=1; i<HLEVEL_AFFINITY-1; ++i)
-  {
-    if (xfer_bit & affinity[lid_dest][i])
-    {
-redo2:
-      lid_src = __builtin_ffsll( xfer_bit & affinity[lid_dest][i] );
-      if (lid_src ==0) { ++i; continue; }
-      --lid_src;
-      xfer_bit &= ~(1<<lid_src);
-      kaapi_assert_debug(kaapi_memory_replica_is_xfer(mdi, lid_src)||kaapi_memory_replica_is_valid(mdi,lid_src));
-      if (!kaapi_memory_replica_is_xfer(mdi, lid_src)
-       && !kaapi_memory_replica_is_valid(mdi, lid_src))
-      {
-        goto redo2; // next valid at same level ?
-      }
-      kaapi_assert_debug(lid_src < KAAPI_MEMORY_MAX_NODES);
-      kaapi_assert_debug(kaapi_memory_replica_is_xfer(mdi, lid_src)
-        ||kaapi_memory_replica_is_valid(mdi, lid_src));
-
-      return lid_src;
-    }
-  }
-  xfer_bit=0;
-  return lid0;
-#endif
-
-  goto reload;
-#else // if 1
-
-#if 1 // RANDOM
-{
-  int rnd = rand() % __builtin_popcountll(valid_bit);
-  for (int i=0; i<rnd; ++i)
-  {
-    lid_src = __builtin_ffsll( valid_bit );
-    kaapi_assert_debug( lid_src != 0);
-    --lid_src;
-    valid_bit &= ~(1<<lid_src);
-  }
-}
-#endif
 #endif
 
 redo:
@@ -2578,7 +2471,6 @@ static void callback_resend_replica_on_callback_cbk(
     fflush(stdout);
 #endif
     int err = kaapi_memory_copy_async(
-        &kaapi_offload_self_device()->memdev, //kaapi_memory_device_get(asid),
         dest_replica->ptr, &dest_replica->view,
         src_replica->ptr, &src_replica->view,
         KAAPI_FETCH_PRIORITY_NORMAL,
@@ -2601,7 +2493,6 @@ static int kaapi_dsm_fetch_on(
       kaapi_dsm_t* dsm,
       kaapi_address_space_id_t asid,
       kaapi_metadata_info_t* mdi,
-      uint32_t gen,
       int flags,
       kaapi_io_cbk_fnc_t cbk,
       void* arg0, void* arg1, void* arg2
@@ -2624,7 +2515,7 @@ static int kaapi_dsm_fetch_on(
      lid_src may, if D2D heuristic is activated, return a lid with state xfer: a valid
      data is under transfer to lid_src.
   */
-  uint16_t lid_src = _kaapi_get_source_lid(dsm, mdi, gen, asid, 1);
+  uint16_t lid_src = _kaapi_get_source_lid(dsm, mdi, asid, 1);
 
   /* emit the communication between lid_src to lid */
   kaapi_data_replica_t* src_replica  = mdi->replicas[lid_src];
@@ -2632,7 +2523,7 @@ static int kaapi_dsm_fetch_on(
   kaapi_assert_debug( src_replica->ptr.ptr != 0 );
   kaapi_assert_debug( dest_replica->ptr.ptr != 0 );
 
-  /* lock lid_src & lid state evolution. Lock in order < to avoid deadlock. */
+  /* lock lid_src & lid state evolution. Lock in order < of local id of device to avoid deadlock. */
   kaapi_lock_t* lock1;
   kaapi_lock_t* lock2;
   if (lid < lid_src) 
@@ -2775,7 +2666,6 @@ static int kaapi_dsm_fetch_on(
   kaapi_assert_debug( kaapi_memory_view_size(&dest_replica->view) == kaapi_memory_view_size(&src_replica->view) );
 
   int err = kaapi_memory_copy_async(
-      &kaapi_offload_self_device()->memdev, //kaapi_memory_device_get(asid),
       dest_replica->ptr, &dest_replica->view,
       src_replica->ptr, &src_replica->view,
       flags,
@@ -2800,7 +2690,6 @@ int kaapi_dsm_acquire_data(
       kaapi_task_t* task,
       kaapi_access_mode_t mp,
       kaapi_metadata_info_t* mdi,
-      uint32_t gen,
       kaapi_io_cbk_fnc_t cbk,
       void* arg0, void* arg1, void* arg2
 )
@@ -2814,7 +2703,7 @@ int kaapi_dsm_acquire_data(
   kaapi_memory_replica_mark_pinned( mdi, lid );
 
   /* do allocation if any. Use view on 0 to determine size and layout */
-  err = _kaapi_dsm_allocate_replica( dsm, mdi, gen, asid );
+  err = _kaapi_dsm_allocate_replica( dsm, mdi, asid );
   kaapi_assert_debug( (err ==0)||(err == ENOMEM)) ;
 
   /* here on return there is possible error if device memory is full (ENOMEM).
@@ -2837,7 +2726,7 @@ int kaapi_dsm_acquire_data(
       if (task)
         KAAPI_ATOMIC_INCR(&task->wc);
 
-      err = kaapi_dsm_fetch_on( dsm, asid, mdi, gen, KAAPI_FETCH_PRIORITY_NORMAL, cbk, arg0, arg1, arg2 );
+      err = kaapi_dsm_fetch_on( dsm, asid, mdi, KAAPI_FETCH_PRIORITY_NORMAL, cbk, arg0, arg1, arg2 );
     }
 
     kaapi_memory_cache_touch( dsm, lid, KAAPI_ACCESS_MODE_R, mdi );
@@ -2893,7 +2782,6 @@ int kaapi_dsm_prefetch_on(
       kaapi_dsm_t* dsm,
       kaapi_address_space_id_t asid,
       kaapi_metadata_info_t* mdi,
-      uint32_t gen,
       kaapi_io_cbk_fnc_t cbk,
       void* arg0, void* arg1, void* arg2
 )
@@ -2902,12 +2790,12 @@ int kaapi_dsm_prefetch_on(
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
 
   /* if not allocated: do allocation. Use view on 0 to determine size and layout */
-  int err = _kaapi_dsm_allocate_replica( dsm, mdi, gen, asid );
+  int err = _kaapi_dsm_allocate_replica( dsm, mdi, asid );
   kaapi_assert_debug( (err ==0)||(err == ENOMEM)) ;
   if (err !=0) return err;
 
   if (!kaapi_memory_replica_is_valid(mdi, lid))
-    return kaapi_dsm_fetch_on( dsm, asid, mdi, gen, KAAPI_FETCH_PRIORITY_LOW,
+    return kaapi_dsm_fetch_on( dsm, asid, mdi, KAAPI_FETCH_PRIORITY_LOW,
         cbk, arg0, arg1, arg2
     );
 

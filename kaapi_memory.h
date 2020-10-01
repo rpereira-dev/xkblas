@@ -430,7 +430,6 @@ extern int kaapi_memory_cache_invalidate_bloc(
 /* High level memory copy
 */
 extern int kaapi_memory_copy_async(
-    kaapi_memory_device_t* dev,
     kaapi_pointer_t dest, const kaapi_memory_view_t* view_dest,
     kaapi_pointer_t src, const kaapi_memory_view_t* view_src,
     int flags,
