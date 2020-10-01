@@ -209,6 +209,7 @@ int kaapi_offload_device_execute_task(
   ((kaapi_task_bodyfnc_gpu_t)fmt->entrypoint[device->driver->f_get_type()])(
       task, kaapi_context2thread(ctxt), handle
   );
+//printf("Execute task: %p\n", task );
 
 #if KAAPI_HAVE_IO_THREADS==0
 #if KAAPI_USE_STREAM_D2D
@@ -641,19 +642,22 @@ int kaapi_sched_idle_offload(
       while ((device->request.op == KAAPI_DEVICEOP_NOP) 
           && (device->exec_count < device->spawn_count + device->ld->queue->push_count))
       {
-        frame = device->ctxt->unlink;
-        task = kaapi_queue_pop(device->ctxt, device->ctxt->queue, 0);
-        if (task ==0)
+        if (kaapi_offload_device_accept_new_task(device))
         {
-          task = kaapi_fifo_queue_pop(device->ld->queue, &frame);
-          kaapi_assert_debug((task ==0)||(frame != 0));
+          frame = device->ctxt->unlink;
+          task = kaapi_queue_pop(device->ctxt, device->ctxt->queue, 0);
+          if (task ==0)
+          {
+            task = kaapi_fifo_queue_pop(device->ld->queue, &frame);
+            kaapi_assert_debug((task ==0)||(frame != 0));
+          }
+          else
+          {
+            frame = task->frame;
+            ++device->spawn_count;
+          }
+          if (task !=0) goto prepare_execute;
         }
-        else
-        {
-          frame = task->frame;
-          ++device->spawn_count;
-        }
-        if (task !=0) goto prepare_execute;
         kaapi_offload_poll_device( device );
       }
 
@@ -822,21 +826,13 @@ prepare_execute:
       //kaapi_assert_debug( (frame ==0) || (frame == task->frame) );
       // Currently, each task commited to stack store its allocation frame used to signal it.
       // This extra field may be deleted if when the task is stolen the frame pointer is pass to the thief.
-      //frame = task->frame;
+      frame = task->frame;
       kaapi_offload_device_prepare_execute_task(device, frame, task );
 
       do {
         kaapi_offload_poll_device( device );
 
-      } while (
-#if 0
-              /*kaapi_offload_stream_size(&device->stream, KAAPI_IO_STREAM_KERN)*/
-                kaapi_offload_stream_sizepending(&device->stream, KAAPI_IO_STREAM_KERN) >= kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel
-#else
-               //device->cnt_pending >= kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel
-               device->cnt_ready >= kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel
-#endif
-      );
+      } while (!kaapi_offload_device_accept_new_task(device));
     }
     kaapi_offload_poll_device( device );
 

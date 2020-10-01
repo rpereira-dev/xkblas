@@ -118,9 +118,9 @@ struct kaapi_device {
       int                    err;           /* error returned by the request */
     } request;
 
-    size_t  cnt_pending;
-    size_t  cnt_ready;
-    size_t  cnt_exec;
+    size_t  cnt_pending;                     /* number of tasks waiting for data */
+    size_t  cnt_ready;                       /* number of ready tasks inserted into cuda stream */
+    size_t  cnt_exec;                        /* number of tasks executed */
 };
 
 
@@ -382,7 +382,14 @@ extern void kaapi_offload_set_current_device( kaapi_device_t* device);
  */
 extern kaapi_device_t* kaapi_offload_get_current_device(void);
 
-
+/* Return 1 iff device may accept new runing offloaded task 
+ */
+static inline int kaapi_offload_device_accept_new_task( kaapi_device_t* device )
+{
+  if ((device !=0) && (device->cnt_ready < kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel))
+    return 1;
+  return 0;
+}
 #endif // #if defined(KAAPI_USE_OFFLOAD)
 
 

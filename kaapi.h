@@ -4,7 +4,7 @@
 ** Contributors :
 **
 ** thierry.gautier@inrialpes.fr
-** vincent.danjean@imag.fr
+** KAAPI_TASK_FLAG_LD_BOUNDvincent.danjean@imag.fr
 **
 ** This software is a computer program whose purpose is to execute
 ** blas subroutines on multi-GPUs system.
@@ -1105,6 +1105,7 @@ extern int32_t kaapi_thread_push(
 );
 
 
+extern int32_t _kaapi_task_commit(kaapi_thread_t* thread, kaapi_task_t* task);
 
 /* Commit the task to the thread.
    After the call to function kaapi_task_commit,
@@ -1112,14 +1113,11 @@ extern int32_t kaapi_thread_push(
 */
 static inline int32_t kaapi_task_commit(kaapi_thread_t* thread, kaapi_task_t* task)
 {
-  int wc = KAAPI_ATOMIC_SUB(&task->wc,65535); // (1U<<16)-1U;
   /* KAAPI_TASK_FLAG_NOLINK: used to no push task in ready list */
   if (task->flags & KAAPI_TASK_FLAG_NOLINK)
     return -1;
   ++thread->cnt;
-  if (kaapi_taskflag_get(task, KAAPI_TASK_FLAG_INDEPENDENT) || (wc==0))
-    return kaapi_thread_push(thread, 0, task);
-  return -1;
+  return _kaapi_task_commit(thread,task);
 }
 
 /** Allocate and initialize task

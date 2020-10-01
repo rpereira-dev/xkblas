@@ -253,19 +253,15 @@ static inline int kaapi_format_get_cost(
 
 /*
 */
-extern kaapi_task_body_t kaapi_format_get_task_bodywh_by_arch
+static inline int kaapi_format_task_has_body_on_arch
 (
   const kaapi_format_t*	const	fmt, 
   unsigned int arch
-);
+)
+{
+  return  (fmt->mask_arch & (1U << arch)) != 0;
+}
 
-/*
-*/
-extern kaapi_task_body_t kaapi_format_get_task_body_by_arch
-(
-  const kaapi_format_t*	const	fmt, 
-  unsigned int arch
-);
 
 /** Initialise format module
 */

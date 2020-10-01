@@ -325,7 +325,7 @@ struct kaapi_frame {
   kaapi_atomic32_t          spawn_count; /* number of tasks completed */
   kaapi_atomic32_t          exec_count; /* number of tasks completed */
   kaapi_task_t*             start_task;
-  kaapi_queue_t*            rd;
+  kaapi_context_t*          ctxt;
   kaapi_thread_t            save_thread;
   int32_t                   save_T[KAAPI_TASK_MAX_PRIORITY+1];
   kaapi_task_t*             save_pc;
@@ -524,6 +524,18 @@ extern int32_t kaapi_queue_push(
     kaapi_context_t* owner,
     kaapi_task_t* task
 );
+
+/* size. estimation because do not lock field
+*/
+static inline uint64_t kaapi_fifo_queue_size(
+    kaapi_fifo_queue_t* ld
+)
+{
+  uint64_t puc = ld->push_count;
+  uint64_t pos = ld->pop_count;
+  if (puc>pos) return puc-pos;
+  return 0;
+}
 
 /*
 */

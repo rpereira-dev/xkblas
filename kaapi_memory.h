@@ -213,7 +213,7 @@ struct kaapi_memory_device {
     size_t (*f_get_free_mem)(struct kaapi_memory_device*);
 
     /* return source lid to reach lid_dest knowing valid_bit and xfer_bit for the data */
-    uint16_t (*f_get_source)( struct kaapi_memory_device*, uint16_t, uint64_t, uint64_t );
+    uint16_t (*f_get_source)( struct kaapi_memory_device*, uint16_t, KAAPI_MEMORY_VALUE_TYPE, KAAPI_MEMORY_VALUE_TYPE );
 
 #if KAAPI_DEBUG
     size_t size_alloc;     /* size alloc by the memory device */

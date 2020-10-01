@@ -297,6 +297,7 @@ uint16_t xkblas_get_ld(
   lid = Ah->ldid[ i*Ah->nt + j ];
 
   if (lid != (uint16_t)0)
+    /* ->ldid store ld+1 if defined */
     return lid-1;
 
   unsigned int count = kaapi_localitydomain_count(KAAPI_LD_GPU);
@@ -308,19 +309,22 @@ uint16_t xkblas_get_ld(
 
   kaapi_handle_t* h = xkblas_get_handle(Ah, i, j);
   kaapi_metadata_info_t* mdi = h->last->mdi;
-  if (mdi ==0)
+  if (mdi !=0)
   {
-    if (count >0)
-      lid = kaapi_localitydomain_get_num(KAAPI_LD_GPU, rand()%count);
-    else
-      lid = lid0;
-    goto retval;
-  }
-  else {
     lid = _kaapi_get_source_lid( &kaapi_the_dsm, mdi, 0, 0 );
     if ((lid ==lid0) && (count >0))
       lid = kaapi_localitydomain_get_num(KAAPI_LD_GPU, rand()%count);
+    goto retval;
   }
+
+#if 0//
+  if (count >0)
+    lid = kaapi_localitydomain_get_num(KAAPI_LD_GPU, rand()%count);
+  else
+    lid = lid0;
+#endif
+  lid = (uint16_t)-1;
+
 retval:
   Ah->ldid[ i*Ah->nt + j ] = lid+1;
   return lid;

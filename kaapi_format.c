@@ -227,6 +227,8 @@ kaapi_format_id_t kaapi_format_taskregister_func(
     kaapi_format_taskregister_body(fmt, body_cpu, KAAPI_PROC_TYPE_HOST);
 
   fmt->entrypoint[KAAPI_PROC_TYPE_GPU] = (kaapi_task_bodyfnc_t)body_gpu;
+  if (body_gpu !=0)
+    fmt->mask_arch |= (1U << KAAPI_PROC_TYPE_GPU);
 
   return fmt->fmtid;
 }

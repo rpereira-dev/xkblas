@@ -354,7 +354,10 @@ int32_t kaapi_fifo_queue_push(
   ++rd->push_count;
 
   if (rd->cbk_fnc)
+  {
+    printf("Call call back\n");
     rd->cbk_fnc(rd->cbk_arg);
+  }
 
   pthread_mutex_unlock(&rd->lock);
 
