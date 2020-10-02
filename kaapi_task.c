@@ -224,7 +224,99 @@ int32_t _kaapi_task_commit(kaapi_thread_t* thread, kaapi_task_t* task)
   return -1;
 }
 
-/*
+
+
+/* Affinity: compute the score of executing the task on the ressource ldid
+  The algorithm returns a score for 4 criteria:
+  0: size of data store in the ressource ldid
+  1: size of data stored in a ressource close to ldid with higher performance
+  2: size of data stored in the ressources of the same type than ldid with high performance network (nvlink)
+  3: size of data outside the ressources of the same type than ldid
+  score must be of size 4 size_t.
+*/
+int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* score)
+{
+#if KAAPI_USE_AFFINITY
+  /* look if task as affinity with one of the ressource */
+  uint16_t lid0 = kaapi_memory_asid_get_lid(kaapi_local_asid);
+  kaapi_localitydomain_t* ld_target = kaapi_localitydomain_get(ldid);
+  unsigned int ith;
+  kaapi_memory_view_t view;
+  kaapi_access_t* access;
+  kaapi_metadata_info_t* mdi;
+  const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
+  unsigned int count_params = kaapi_format_get_count_params(fmt, kaapi_task_getargs(task));
+  
+  for (int i=0; i<4; ++i)
+    score[i] = 0;
+
+  for(ith= 0; ith < count_params; ++ith)
+  {
+    kaapi_access_mode_t m = kaapi_format_get_mode_param(fmt, ith, kaapi_task_getargs(task));
+    kaapi_access_mode_t mp = KAAPI_ACCESS_GET_MODE(m);
+    if (mp & KAAPI_ACCESS_MODE_V)
+      continue;
+
+#if KAAPI_USE_OCR_AFFINITY
+    if (!KAAPI_ACCESS_IS_WRITE(mp))
+      continue;
+#else
+    /* else affinity == best size of any task parameter */
+#endif
+    /* do bind ptr to the device->asid */
+    access = kaapi_format_get_access_param(fmt, (unsigned int)ith, kaapi_task_getargs(task));
+    kaapi_format_get_view_param(fmt, (unsigned int)ith, kaapi_task_getargs(task), &view);
+    mdi = (kaapi_metadata_info_t*)access->mdi;
+
+    /* Return the meta data information about the data (ptr, view) */
+    if (mdi ==0)
+      mdi = kaapi_dsm_findaccess_on_node(
+          &kaapi_the_dsm,
+          kaapi_local_asid,
+          0, /* do not create*/
+          access,
+          &view
+      );
+    
+    if (mdi !=0)
+    {
+      /* set affinity for each valid replica */
+      KAAPI_MEMORY_VALUE_TYPE valid_bit= KAAPI_ATOMIC_READ(&mdi->valid);
+      valid_bit &= ~(1<<lid0);
+      while (valid_bit !=0)
+      {
+        KAAPI_MEMORY_VALUE_TYPE lid = KAAPI_MEMORY_FFS(valid_bit);
+        --lid;
+        /* here: a way to implement info of matrix mapping is to allocate meta data replica without valid bit...
+           thus we are first interesting to map task where 1/ it exists valid data and 2/ it exist replica, even if not valid
+           This would also suppress the management in blas of mapping information within the matrix descriptor.
+         */
+        if (kaapi_memory_replica_is_valid(mdi, lid))
+        {
+          kaapi_localitydomain_t* ld = kaapi_localitydomain_get(lid+1);
+          if (ld !=0)
+          {
+            size_t sz = kaapi_memory_view_size(&mdi->replicas[lid]->view);
+            if (ld ==ld_target)
+              score[0] += sz;
+            else if (ld->type == ld_target->type)
+              score[1] += sz;
+            else
+              score[3] += sz;
+          }
+        }
+        valid_bit &= ~(1<<lid);
+      }
+    }
+  }
+#endif // if AFFINITY
+}
+
+/* Affinity: compute the best (=ldid with at least a write of the task, see IPDPS2013.
+   It remains to transfer the affinity during the steal operations where device
+   may has the capacity to select the best task or at least:
+	- a task with most of its input on the device
+	- a task with inputs on the device close to the target device.
  */
 #define KAAPI_USE_AFFINITY     1
 #define KAAPI_USE_OCR_AFFINITY 1
@@ -337,6 +429,7 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_frame_t* frame, kaapi_t
     /* take task affinity definition */
     ldid = kaapi_task_get_ld(task);
     
+#if 0 // code because device does not steal task and we are forced to push them on device queue
     /* next if is only to push GPU task on GPU and not into the local queue */
     if (ldid == (kaapi_ldid_t)-1)
     {
@@ -348,6 +441,7 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_frame_t* frame, kaapi_t
         kaapi_task_set_ld(task, 0, (int)ldid );
       }
     }
+#endif
   }
 
   kaapi_assert(ctxt->ld !=0);
@@ -360,6 +454,7 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_frame_t* frame, kaapi_t
 #if KAAPI_DEBUG_LOW
     KAAPI_ATOMIC_INCR(&count_queue_fifo_push);
 #endif
+    //if (task) printf("(1)push to:%p\n", ld->queue);
     return kaapi_fifo_queue_push(
         ld->queue,
         frame,
@@ -367,9 +462,15 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_frame_t* frame, kaapi_t
     );
   }
   
+#if 1 // push into the shared NUMA queue
+  /* no locality domain: push in local work queue */
+  //if (task) printf("(2)push to:%p\n", ctxt->ld->queue);
+  return kaapi_fifo_queue_push(ctxt->ld->queue, frame, task);
+#else
   /* no locality domain: push in local work queue */
   kaapi_assert_debug( ldid == ctxt->ld->ldid);
   return kaapi_queue_push(ctxt, task);
+#endif
 }
 
 /*

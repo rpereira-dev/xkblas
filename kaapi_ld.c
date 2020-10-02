@@ -94,7 +94,7 @@ int kaapi_localitydomain_init( kaapi_localitydomain_t* ld, kaapi_device_t* devic
   rd->push_count = 0;
   rd->pop_count = 0;
   rd->waiter_push = 0;
-  //rd->waiter_pop  = 0;
+  
   err = pthread_mutex_init(&rd->lock, 0);
   if (err) return err;
   err = pthread_cond_init(&rd->cond_push, 0);
@@ -102,7 +102,6 @@ int kaapi_localitydomain_init( kaapi_localitydomain_t* ld, kaapi_device_t* devic
     goto label_err1;
   rd->cbk_fnc = 0;
   rd->cbk_arg = 0;
-  //err = pthread_cond_init(&rd->cond_pop, 0);
 
   if (err)
   {
@@ -113,6 +112,9 @@ label_err1:
     ld->queue = 0;
     return err;
   }
+  ld->subldcount = 0;
+  ld->subld      = 0;
+  ld->parent     = 0;
   return 0;
 }
 
@@ -127,6 +129,7 @@ int kaapi_localitydomain_destroy( kaapi_localitydomain_t* ld )
   free(ld->queue->data);
   free(ld->queue->frame);
   free(ld->queue);
+  if (ld->subld) free(ld->subld);
   return 0;
 }
 
@@ -134,7 +137,10 @@ int kaapi_localitydomain_destroy( kaapi_localitydomain_t* ld )
    Set its identifier.
    Return 0 iff no error
 */
-int kaapi_localitydomain_attach( kaapi_ld_type_t type, kaapi_localitydomain_t* ld )
+int kaapi_localitydomain_attach(
+    kaapi_ld_type_t type,
+    kaapi_localitydomain_t* parent,
+    kaapi_localitydomain_t* ld )
 {
   int err =0;
   if ((__builtin_popcountl(((unsigned int)type) & KAAPI_LD_ALLTYPE) != 1) &&
@@ -160,6 +166,7 @@ int kaapi_localitydomain_attach( kaapi_ld_type_t type, kaapi_localitydomain_t* l
   ld->type = type;
   ld->idx = kaapi_all_lddomains[idx].count++;
   ld->ldid = kaapi_ldid++;
+  ld->parent = parent;
   map_ldid2ld = (kaapi_localitydomain_t**)realloc(
     map_ldid2ld, sizeof(kaapi_localitydomain_t*)*kaapi_ldid
   );
@@ -179,6 +186,15 @@ int kaapi_localitydomain_attach( kaapi_ld_type_t type, kaapi_localitydomain_t* l
     goto out;
   }
   kaapi_all_lddomains[idx].ld[ld->idx] = ld;
+  
+  /* attach ld to its parent */
+  if (parent)
+  {
+    parent->subldcount++;
+    parent->subld =
+      (kaapi_localitydomain_t**)realloc(parent->subld, parent->subldcount*sizeof(kaapi_localitydomain_t*));
+    parent->subld[parent->subldcount-1] = ld;
+  }
 
 out:
   kaapi_atomic_unlock(&kaapi_ldlock);
@@ -204,6 +220,19 @@ int kaapi_localitydomain_deattach( kaapi_ld_type_t type, kaapi_localitydomain_t*
   kaapi_all_lddomains[idx].ld[ld->idx] = 0;
   ld->idx = (unsigned int)-1;
   map_ldid2ld[ld->ldid] = 0;
+  
+  kaapi_localitydomain_t* parent = ld->parent;
+  if (parent)
+  {
+    for (unsigned int i=0; i<parent->subldcount; ++i)
+      if (parent->subld[i] == ld)
+      {
+        --parent->subldcount;
+        for (unsigned j=i; j < parent->subldcount; ++j)
+          parent->subld[j] = parent->subld[j+1];
+        break;
+      }
+  }
 
 out:
   kaapi_atomic_unlock(&kaapi_ldlock);
@@ -321,7 +350,8 @@ static void kaapi_fifo_queue_alloc(
 }
 
 
-/* */
+/*
+*/
 int32_t kaapi_fifo_queue_push(
     kaapi_fifo_queue_t* rd,
     kaapi_frame_t* frame,
@@ -364,7 +394,9 @@ int32_t kaapi_fifo_queue_push(
   return T; /* [debug] */;
 }
 
-/* non blocking version */
+
+/* blocking version 
+*/
 kaapi_task_t* kaapi_fifo_queue_pop(
     kaapi_fifo_queue_t* rd,
     kaapi_frame_t** frame
@@ -393,6 +425,84 @@ kaapi_task_t* kaapi_fifo_queue_pop(
   kaapi_assert_debug((task ==0) || (*frame != 0));
   return task;
 }
+
+
+/*
+*/
+static inline int is_maxscore(size_t* score_a, size_t* score_b)
+{
+  if (score_a[0] > score_b[0]) return 1;
+  if (score_a[0] < score_b[0]) return 0;
+
+  if (score_a[1] > score_b[1]) return 1;
+  if (score_a[1] < score_b[1]) return 0;
+
+  if (score_a[2] > score_b[2]) return 1;
+  if (score_a[2] < score_b[2]) return 0;
+
+  if (score_a[3] > score_b[3]) return 1;
+  return 0;
+}
+
+/*
+*/
+kaapi_task_t* kaapi_fifo_queue_pop_with_affinity(
+    kaapi_fifo_queue_t* rd,
+    kaapi_frame_t** frame,
+    kaapi_device_t* device
+)
+{
+  kaapi_task_t* task = 0;
+#define MAX_HISTORY 4
+  size_t score[MAX_HISTORY][4];
+  size_t score_max[4]={0,0,0,0};
+  int nscore = 0;
+  int nbest =0;
+  kaapi_ldid_t ldid_target = device->ld->ldid;
+  
+  pthread_mutex_lock(&rd->lock);
+  int32_t size = rd->size;
+  /* iterate from T-1 to H */
+  for (int32_t i = rd->T; (i > rd->H)&&(nscore<MAX_HISTORY); )
+  {
+    --i;
+    int32_t idx = i%size;
+    int r = kaapi_compute_affinity_score( ldid_target, rd->data[idx], score[nscore]);
+    if (r)
+    {
+      if (is_maxscore(score_max,score[nscore]))
+      {
+        score_max[0] = score[nscore][0];
+        score_max[1] = score[nscore][1];
+        score_max[2] = score[nscore][2];
+        score_max[3] = score[nscore][3];
+        nbest = i;
+      }
+      ++nscore;
+    }
+  }
+  if (nscore >0)
+  {
+    int32_t idx = nbest%size;
+    task = rd->data[idx];
+    *frame = rd->frame[idx];
+    rd->data[idx] = 0;
+    rd->frame[idx] = 0;
+    ++rd->pop_count;
+    if (nbest == rd->H)
+    {
+      /* because we leave 0 where the task was picked, we assume the device making a pop with achieve */
+      ++rd->H;
+      if (rd->waiter_push)
+        pthread_cond_signal(&rd->cond_push);
+    }
+  }
+    
+  pthread_mutex_unlock(&rd->lock);
+  kaapi_assert_debug((task ==0) || (*frame != 0));
+  return task;
+}
+
 
 
 /* block caller while the queue is empty */

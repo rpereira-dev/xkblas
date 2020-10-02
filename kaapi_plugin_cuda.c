@@ -2187,7 +2187,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
   kaapi_localitydomain_t* ld = malloc(sizeof(kaapi_localitydomain_t));
   kaapi_localitydomain_init(ld, &device->inherited);
   device->inherited.ld = ld;
-  kaapi_localitydomain_attach( KAAPI_LD_GPU, ld );
+  kaapi_localitydomain_attach( KAAPI_LD_GPU, 0, ld );
 
   kaapi_dsm_register_device(&kaapi_the_dsm, &dev->memdev, dev->driver->f_get_type() );
 
@@ -2423,7 +2423,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_finalize)(kaapi_device_t* dev)
   CudaCheckError(res);
 
   kaapi_dsm_unregister_device(&kaapi_the_dsm, &dev->memdev);
-  kaapi_localitydomain_attach( KAAPI_LD_NUMA, dev->ld );
+  kaapi_localitydomain_deattach( KAAPI_LD_GPU, dev->ld );
 
 #if KAAPI_CUDA_CACHE
   if (!getenv("KAAPI_NO_GPUALLOCATOR"))

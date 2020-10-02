@@ -162,7 +162,8 @@ static void callback_set_valid(
       /* launch task : be carrefull ios->stream may differs from &device->stream
          due to forward of callback 
       */
-      kaapi_assert_debug( device->ld->ldid == kaapi_task_get_ld(task) );
+      //Bad assertion: now we can push task to device without having ld set
+      //kaapi_assert_debug( device->ld->ldid == kaapi_task_get_ld(task) );
       kaapi_stream_insert_io_task_inst(
         &device->stream,
         KAAPI_IO_STREAM_KERN,
@@ -482,7 +483,8 @@ printf("[%p]:: Task: %p %s, #params=%i, modes=%s, #wc=%i\n",
     /* could be blocking call if windows is fill */
     --device->cnt_pending;
     ++device->cnt_ready;
-    kaapi_assert_debug( device->ld->ldid == kaapi_task_get_ld(task) );
+    //Bad assertion: now we can push task to device without having ld set
+    //kaapi_assert_debug( device->ld->ldid == kaapi_task_get_ld(task) );
     kaapi_stream_insert_io_task_inst(
       &device->stream,
       KAAPI_IO_STREAM_KERN,
@@ -626,7 +628,23 @@ int kaapi_sched_idle_offload(
     if (task ==0)
     {
       task = kaapi_fifo_queue_pop(device->ld->queue, &frame);
+      //if (task) printf("(1)pop from:%p, device->ld:%p\n", device->ld->queue, device->ld);
       kaapi_assert_debug((task ==0)||(frame != 0));
+      if (task ==0)
+      {
+       /* Affinity: compute the best (=ldid with at least a write of the task, see IPDPS2013.
+          It remains to transfer the affinity during the steal operations where device
+          may has the capacity to select the best task or at least:
+	       0- a task with most of its input on the device.
+	       1- a task with inputs on the device close to the target device.
+	       2- a task with inputs on the device. 
+	       3- a task with inputs on the machine. 
+        */
+        kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_NUMA, 0);
+        task = kaapi_fifo_queue_pop_with_affinity(ld->queue, &frame, device);
+        //if (task) printf("(1)STEAL from:%p, NUMA node\n", ld->queue);
+        kaapi_assert_debug((task ==0)||(frame != 0));
+      }
     }
     else
     {
@@ -649,6 +667,7 @@ int kaapi_sched_idle_offload(
           if (task ==0)
           {
             task = kaapi_fifo_queue_pop(device->ld->queue, &frame);
+            //if (task) printf("(2)pop from:%p, device->ld:%p\n", device->ld->queue, device->ld);
             kaapi_assert_debug((task ==0)||(frame != 0));
           }
           else
@@ -771,6 +790,7 @@ printf("Recv memsync device:%i counter: %lu\n", kaapi_memory_asid_get_lid(device
           if (task ==0)
           {
             task = kaapi_fifo_queue_pop(device->ld->queue, &frame);
+            //if (task) printf("(3)pop from:%p, device->ld:%p\n", device->ld->queue, device->ld);
             kaapi_assert_debug((task ==0)||(frame != 0));
           }
           else

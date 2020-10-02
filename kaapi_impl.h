@@ -207,13 +207,16 @@ typedef struct __attribute__((aligned(KAAPI_CACHE_LINE))) kaapi_threadinfo {
    The queue is a mail box between external ressources and the ressource of the domain.
    It is managed as a bounded FIFO priority queue using kaapi_queue_fifo_push and kaapi_queue_fifo_pop.
 */
-typedef struct {
-  kaapi_ld_type_t      type;
-  kaapi_ldid_t         ldid;
-  kaapi_device_t*      device;
-  unsigned int         idx;         /* in kaapi_all_lddomains[type]->ld */
-  kaapi_fifo_queue_t*  queue;  /* same data structure as a queue, but managed to be FIFO */
-} kaapi_localitydomain_t;
+struct kaapi_localitydomain {
+  kaapi_ld_type_t         type;
+  kaapi_ldid_t            ldid;
+  kaapi_device_t*         device;
+  unsigned int            idx;         /* in kaapi_all_lddomains[type]->ld */
+  kaapi_fifo_queue_t*     queue;  /* same data structure as a queue, but managed to be FIFO */
+  kaapi_localitydomain_t* parent;
+  unsigned int            subldcount;
+  kaapi_localitydomain_t**subld;
+};
 
 
 /* Meta inf about locality domain type
@@ -371,6 +374,10 @@ static inline size_t _kaapi_task_getsize(
   }
   return size;
 }
+
+/* Compute a score and return the total volume of data
+ */
+extern int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* score);
 
 
 /* ========================================================================= */
@@ -552,6 +559,16 @@ extern kaapi_task_t* kaapi_fifo_queue_pop(
     kaapi_frame_t** frame
 );
 
+/*
+*/
+extern kaapi_task_t* kaapi_fifo_queue_pop_with_affinity(
+    kaapi_fifo_queue_t* ld,
+    kaapi_frame_t** frame,
+    kaapi_device_t* device
+);
+
+/*
+*
 extern int kaapi_fifo_register_waiter(
     kaapi_fifo_queue_t* rd,
     void (*callback)(void*),
@@ -623,7 +640,13 @@ extern int kaapi_localitydomain_destroy( kaapi_localitydomain_t* ld );
    Set its identifier.
    Return 0 iff no error
 */
-extern int kaapi_localitydomain_attach( kaapi_ld_type_t type, kaapi_localitydomain_t* ld );
+extern int kaapi_localitydomain_attach(
+    kaapi_ld_type_t type,
+    kaapi_localitydomain_t* parent,
+    kaapi_localitydomain_t* ld
+);
+
+                                       
 
 /*
 */
