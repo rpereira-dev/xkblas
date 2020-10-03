@@ -83,6 +83,15 @@ const char* get_kaapi_info(void)
             "  NSTREAMS : %i\n"
             "  NKERNELS : %i\n" 
             "  PREFETCH : %i\n" 
+#if KAAPI_PIPELINE_GPUTASK 
+# if KAAPI_REORDER_TASK_EXEC
+            "  REORDER  : yes\n" 
+# else
+            "  REORDER  : no\n" 
+# endif
+#else
+            "  REORDER  : unlimited\n" 
+#endif
             "  STREAMD2D: %s\n" 
             "  D2D OPT1 : %s\n" 
 #if KAAPI_SLEEP_DEVICETHREAD

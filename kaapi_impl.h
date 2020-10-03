@@ -40,7 +40,6 @@
 
 #define KAAPI_ADVANCED_VERSION 0   /* to compile with mix code where next features are already present but not yet fully validated */
 
-
 #define KAAPI_HAVE_IO_THREADS 0    /* do not use IO threads [Experimental feature!!!!] */
 
 #define KAAPI_SLEEP_DEVICETHREAD 0 /* activate a sleeping state for device thread [Yet experimental feature] */
@@ -67,6 +66,17 @@
 #  define KAAPI_HEAP_STRATEGY KAAPI_HEAP_BEST_FIT
 #endif
 
+/* use pipeline to order task insertions, communications and kernel launchs
+   else the only the number of inserted task + pending task in the stream is limited
+*/
+#define KAAPI_PIPELINE_GPUTASK 1
+
+#if KAAPI_PIPELINE_GPUTASK
+/* reorder stream execution on GPU */
+#define KAAPI_REORDER_TASK_EXEC 1
+#endif
+
+
 /* do not use prefetch for successor task */
 #define KAAPI_USE_PREFETCH 0
 #define KAAPI_MAX_PREFETCH_WINDOW 2
@@ -74,8 +84,11 @@
 /* to allow transfert between GPUi to GPUj if data is under xfer data to GPUi*/
 #define KAAPI_USE_FAVOR_D2D_1 1
 
-/* to use specific stream for D2D operation */
-#define KAAPI_USE_STREAM_D2D 1
+/* to allow to route data through NVlink is 2 GPUs is not interconnected */
+#define KAAPI_USE_D2D_ROUTE 0
+
+/* to use specific stream for D2D operation. */
+#define KAAPI_USE_STREAM_D2D 0
 
 /* Mark that we compile source of the library.
    Only used to avoid to include public definitition of some types.
@@ -317,6 +330,7 @@ typedef struct kaapi_context {
   kaapi_queue_t*             queue;            /* the running queue */
   kaapi_queue_t*             free_wqueue;      /* free queues list */
   kaapi_queue_t*             suspended_queues; /* suspended queue */
+  int                        last_ldid;        /* for round robin distribution */
 } kaapi_context_t;
 
 
@@ -377,7 +391,7 @@ static inline size_t _kaapi_task_getsize(
 
 /* Compute a score and return the total volume of data
  */
-extern int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* score);
+extern int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* score, int level);
 
 
 /* ========================================================================= */
@@ -442,7 +456,6 @@ struct kaapi_fifo_queue {
   uint64_t        push_count;
   uint64_t        pop_count;
   kaapi_task_t**  data;     /* queue of task */
-  kaapi_frame_t** frame;    /* task' frame context where to signal */
   pthread_cond_t  cond_push;
   int             waiter_push;
   //pthread_cond_t* cond_pop;
@@ -548,27 +561,25 @@ static inline uint64_t kaapi_fifo_queue_size(
 */
 extern int32_t kaapi_fifo_queue_push(
     kaapi_fifo_queue_t* ld,
-    kaapi_frame_t* frame,
     kaapi_task_t* task
 );
+
 
 /*
 */
 extern kaapi_task_t* kaapi_fifo_queue_pop(
-    kaapi_fifo_queue_t* ld,
-    kaapi_frame_t** frame
+    kaapi_fifo_queue_t* ld
 );
 
 /*
 */
-extern kaapi_task_t* kaapi_fifo_queue_pop_with_affinity(
+extern kaapi_task_t* kaapi_fifo_queue_steal_with_affinity(
     kaapi_fifo_queue_t* ld,
-    kaapi_frame_t** frame,
     kaapi_device_t* device
 );
 
 /*
-*
+*/
 extern int kaapi_fifo_register_waiter(
     kaapi_fifo_queue_t* rd,
     void (*callback)(void*),
@@ -612,7 +623,6 @@ struct queue_frame_t {
 extern int _kaapi_queue_frame_ready( void* arg);
 
 
-
 /*
 */
 extern void kaapi_barrier_init (kaapi_barrier_t *barrier);
@@ -620,6 +630,7 @@ extern void kaapi_barrier_init (kaapi_barrier_t *barrier);
 /*
 */
 extern void kaapi_barrier_destroy (kaapi_barrier_t *barrier);
+
 
 /* ===================== Locality Domain  ============================================= */
 extern kaapi_localitydomain_type_t* kaapi_all_lddomains;
@@ -645,8 +656,6 @@ extern int kaapi_localitydomain_attach(
     kaapi_localitydomain_t* parent,
     kaapi_localitydomain_t* ld
 );
-
-                                       
 
 /*
 */
@@ -682,7 +691,6 @@ struct kaapi_handle {
 */
 extern uint32_t kaapi_sched_activate_successors(
     kaapi_thread_t* thread,
-    kaapi_frame_t* frame,
     kaapi_task_t* task,
     void (*cbk)(kaapi_task_t*, unsigned int, kaapi_access_t*, uint64_t arg),
     uint64_t arg
@@ -693,9 +701,7 @@ extern uint32_t kaapi_sched_activate_successors(
 */
 extern uint32_t kaapi_sched_activate_syncpoint(
     kaapi_thread_t* thread,
-    kaapi_frame_t* frame,
-    kaapi_access_t* sync,
-    int freesync
+    kaapi_access_t* sync
 );
 
 /* ===================== Stack iterator  ============================================= */

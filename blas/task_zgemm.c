@@ -109,7 +109,7 @@ void INSERT_TASK_zgemm(
         KAAPI_ACCESS_MODE_R, xkblas_get_handle(Bh, Bm, Bn));
     taskarg->ldb = ldb;
     kaapi_update_dependencies(thread, &taskarg->C, task,
-        KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Ch, Cm, Cn));
+        beta == 0.0 ? KAAPI_ACCESS_MODE_W : KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Ch, Cm, Cn));
     taskarg->beta = beta;
     taskarg->ldc = ldc;
     taskarg->mm = xkblas_get_modemath();

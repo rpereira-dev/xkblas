@@ -1039,8 +1039,7 @@ static int kaapi_memory_cache_touch(
 
 #if KAAPI_USE_PERFCOUNTER
     ++kaapi_perthread_stat[tid].counter[KAAPI_CNT_CACHE_HIT];
-    kaapi_perthread_stat[tid].counter[KAAPI_CNT_CACHE_HIT_BYTES] +=
-      kaapi_memory_view_size( &kdr->view );
+    kaapi_perthread_stat[tid].counter[KAAPI_CNT_CACHE_HIT_BYTES] += kaapi_memory_view_size( &kdr->view );
 #endif
   }
   if ((oldlist == &cache->rw) && !kaapi_memory_replica_is_valid_on(mdi,lidhost))
@@ -1732,14 +1731,9 @@ static void kaapi_memory_freehashmap( kaapi_hashmap_t* ht, kaapi_address_space_i
 
 /* -------------------------------------------------------------------------- */
 /* High level function: do memory copy
-   Return 0 if the operation successfully completes before
-   returning to the caller.
-   It returns EINPROGRESS if the operation does not complete.
+   Returns 0 if the operation successfully completes before returning to the caller.
+   It returns EINPROGRESS if the operation is under progression.
    Else it returns error code.
-   Depending on the source and dest pointer, the function dispatch the call
-   to the corresponding device that is not pure host device (host device
-   cannot talk with true device while true device can transfer data between
-   the device and the host).
 */
 int kaapi_memory_copy_async(
     kaapi_pointer_t dest, const kaapi_memory_view_t* view_dest,
@@ -1749,15 +1743,29 @@ int kaapi_memory_copy_async(
     void* arg0, void* arg1, void* arg2
 )
 {
+#if KAAPI_DEBUG
+  kaapi_assert_debug( kaapi_memory_view_size(view_dest) == kaapi_memory_view_size(view_src) );
+#endif
+
+  kaapi_memory_device_t* memdev;
+#if 0
+  /* get the self device to manage the communication, else testing completion is a non local operation*/
+  kaapi_device_t* dev = kaapi_offload_self_device();
+  kaapi_assert_debug(dev !=0);
+  memdev = &dev->memdev;
+  kaapi_assert(kaapi_memory_asid_get_arch(memdev->asid) != KAAPI_PROC_TYPE_HOST);
+#else
   kaapi_memory_device_t* dest_dev = kaapi_memory_device_get( dest.asid );
   kaapi_memory_device_t* src_dev = kaapi_memory_device_get( src.asid );
-  kaapi_memory_device_t* dev= (
+  kaapi_assert_debug( (dest_dev !=0) && (src_dev !=0) );
+  memdev= (
      (dest_dev ==0) || (kaapi_memory_asid_get_arch(dest_dev->asid) == KAAPI_PROC_TYPE_HOST) ?
        src_dev : dest_dev
   );
+#endif
 
-  return dev->f_copy(
-    dev,
+  return memdev->f_copy(
+    memdev,
     dest, view_dest,
     src, view_src,
     flags,
@@ -2129,10 +2137,7 @@ static int _kaapi_dsm_allocate_replica(
   /* */
   kaapi_memory_cache_t* cache = kaapi_the_dsm.nodes[lid]->cache;
   kaapi_data_replica_t* kdr = mdi->replicas[lid];
-
-  /* in this version, cache invalidation does not suppress replicas */
   kaapi_assert_debug(kdr !=0);
-  if (kdr ==0) return EINVAL;
 
   uint16_t lid0 = kaapi_memory_asid_get_lid(kaapi_local_asid);
   size_t size = kaapi_memory_view_size(&kdr->view);
@@ -2144,13 +2149,13 @@ static int _kaapi_dsm_allocate_replica(
     return 0;
   }
 
-  /* replica cannot be valid if requested to allocate it */
+  /* basic assertion: replica to allocate cannot be also valid */
   kaapi_assert_debug( !kaapi_memory_replica_is_valid(mdi,lid) );
-
-  /* else allocate data */
+  /* basic assertion: replica to allocate cannot has non null attached pointer */
   kaapi_assert_debug( kaapi_pointer_isnull( kdr->ptr ) );
-  int retry_cnt = 0;
 
+  /* try to allocate data memory */
+  int retry_cnt = 0;
   kdr->ptr = kaapi_memory_alloc( asid, size );
   while (kaapi_pointer_isnull( kdr->ptr ))// && (++retry_cnt <32))
   {
@@ -2162,9 +2167,11 @@ static int _kaapi_dsm_allocate_replica(
     retry_cnt++;
   }
 
+  /* if pointer is null: memory has not been allocated, returns error */
   if (kaapi_pointer_isnull( kdr->ptr ))
     return ENOMEM;
 
+  /* last step: mark replica allocated */
   kaapi_memory_replica_set_allocated(mdi,lid);
   return 0;
 }
@@ -2215,12 +2222,13 @@ static int _kaapi_dsm_deallocate_replica(
 
 /* Take the first valid lid to make copy to dest_asid.
    If several possibility should return the "best" lid.
+   mark is used to
 */
 uint16_t _kaapi_get_source_lid(
   kaapi_dsm_t* dsm,
   kaapi_metadata_info_t* mdi,
   kaapi_address_space_id_t dest_asid,
-  int mark
+  uint16_t* sel_dest
 )
 {
   uint16_t lid0, lid_dest;
@@ -2232,7 +2240,7 @@ uint16_t _kaapi_get_source_lid(
 
   lid0 = kaapi_memory_asid_get_lid(kaapi_local_asid);
   lid_dest = kaapi_memory_asid_get_lid(dest_asid);
-
+  
   /* choose valid copies to move data to device
      - warning: only replica with valid bit, not in transit are
      ensured to be send to the device
@@ -2259,7 +2267,8 @@ reload:
   if (valid_bit ==0)
 #endif
   {
-    return lid0;
+    lid_src = lid0;
+    goto return_value;
   }
 
   /* return the best source pointer for the device lid_dest */
@@ -2276,10 +2285,10 @@ reload:
       if (lid_src == (uint16_t)-1) break;
       valid_bit &= ~(1<<lid_src);
       if (kaapi_memory_replica_is_valid(mdi, lid_src))
-        return lid_src;
+        goto return_value;
     }
-
-#if KAAPI_USE_FAVOR_D2D_1 // 1 to activate multi-OP
+    
+#if KAAPI_USE_FAVOR_D2D_1
     /* not found valid lid. Check if xfer source exist */
     while (xfer_bit !=0)
     {
@@ -2290,9 +2299,10 @@ reload:
 
       if (kaapi_memory_replica_is_xfer(mdi, lid_src)
        || kaapi_memory_replica_is_valid(mdi, lid_src))
-        return lid_src;
+        goto return_value;
     }
-    return lid0;
+    lid_src = lid0;
+    goto return_value;
 #endif
   }
 
@@ -2311,53 +2321,32 @@ redo:
   --lid_src;
   valid_bit &= ~(1<<lid_src);
   if (!kaapi_memory_replica_is_valid(mdi, lid_src))
-  {
     goto redo;
-  }
   kaapi_assert_debug(lid_src < KAAPI_MEMORY_MAX_NODES);
+
+return_value:
+  /* NOTE: because GPUs on DGX-1 are not fully connected with high speed NVLink,
+     some GPUs need to pass through an indirect GPU to benefit from NVLink. This
+     later GPU can directly send data to destination.
+     To handle this case the idea is:
+     - change the destination to the intermediate GPU
+     - change the callback on this GPU that will repost communication through the initial
+     destination GPU.
+  */
+#if KAAPI_USE_D2D_ROUTE==0
+  if (sel_dest) *sel_dest = lid_dest;
+#else
+  /* lock at affinity between dest/src */
+#endif
+
   return lid_src;
 }
 
 
-#if KAAPI_DEBUG_LOW
-kaapi_atomic_t pending_xfer={0};
-kaapi_atomic_t received_xfer={0};
-kaapi_atomic_t count_cbk={0};
-kaapi_atomic_t count_cbk_called={0};
-typedef struct {
-  kaapi_io_cbk_fnc_t    cbk;
-  kaapi_io_cbk_fnc_t    cbk0;
-  kaapi_metadata_info_t*mdi;
-  kaapi_data_replica_t* r;
-  int                   lid_dst;
-  int                   lid_src;
-  KAAPI_MEMORY_VALUE_TYPE valid;
-  KAAPI_MEMORY_VALUE_TYPE xfer;
-  int                   err;
-  kaapi_device_t*       device_topost;
-  kaapi_io_stream_t*    ios_topost;
-} dbg_cbk_t;
-
-dbg_cbk_t all_cbk[16384];
-__thread dbg_cbk_t* current_all_cbk = 0;
-
-void debug_low_set_info_cbk( kaapi_device_t* dev, kaapi_io_stream_t* ios)
-{
-  if (current_all_cbk ==0) return;
-  current_all_cbk->device_topost = dev;
-  current_all_cbk->ios_topost = ios;
-}
-
-static void callback_called(
-    kaapi_io_status_t status,
-    kaapi_io_stream_t* ios,
-    void* arg0, void* arg1, void* arg2
-)
-{ }
-#endif
-
-
 /* Activate the list of callbacks for a given replica
+   arg0: mdi the meta data of the replica
+   arg1: asid the address space of the replica
+   arg2: lid_src the source that initiate the 
 */
 static void callback_activate_replica_on_receive_cbk(
     kaapi_io_status_t status,
@@ -2368,11 +2357,10 @@ static void callback_activate_replica_on_receive_cbk(
   kaapi_metadata_info_t* mdi = (kaapi_metadata_info_t*)arg0;
   kaapi_address_space_id_t asid = (kaapi_address_space_id_t)arg1;
   uint16_t lid_src = (uint16_t)(uintptr_t)arg2;
+
   kaapi_assert_debug(lid_src < KAAPI_MEMORY_MAX_NODES);
   uint16_t lid = kaapi_memory_asid_get_lid(asid);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-
-//printf("*** CBK end of xfer data @%p: src:%i -> dest: %i\n", (void*)mdi, lid_src, lid); fflush(stdout);
 
   /* begin critical section */
   kaapi_atomic_lock(&mdi->replicas[lid]->lock);
@@ -2380,25 +2368,11 @@ static void callback_activate_replica_on_receive_cbk(
   /* mark data received : unxfer source data and set validity */
   kaapi_memory_replica_set_valid(mdi, lid);
   kaapi_memory_replica_unset_xfer(mdi, lid);
-#if KAAPI_DEBUG_LOW
-  KAAPI_ATOMIC_INCR(&received_xfer);
-#endif
-
-#if KAAPI_DEBUG_LOW
-  //printf("r:@%p -> cbk length: %i\n", mdi->replicas[lid], mdi->replicas[lid]->count);
-  mdi->replicas[lid]->count = 0;
-#endif
 
   /* activate cbk and unpin memory once per callback (see fetch_on) */
   kaapi_data_replica_cbk_t* drc0 = &mdi->replicas[lid]->cbk;
   kaapi_data_replica_cbk_t* drc = drc0;
   do {
-#if KAAPI_DEBUG_LOW
-    KAAPI_ATOMIC_INCR(&count_cbk_called);
-#endif
-#if LOG1
-    printf("Call cbk: %p mdi: %p, lid: %i\n", drc, mdi, lid);
-#endif
     kaapi_assert_debug( drc->iocbk.fnc !=0 );
     if (drc->iocbk.fnc !=0)
     {
@@ -2406,16 +2380,7 @@ static void callback_activate_replica_on_receive_cbk(
           drc->iocbk.arg[0], drc->iocbk.arg[1], drc->iocbk.arg[2]
       );
     }
-#if KAAPI_DEBUG_LOW
-    int idx = drc->idx % 16384;
-    /* is assert becomes fails it could also be due to bounded size of all_cbk */
-    kaapi_assert_debug( all_cbk[idx].cbk == drc->iocbk.fnc );
-    all_cbk[idx].cbk = callback_called;
-#endif
     /* reset callback  */
-#if LOG1
-    printf("Reset cbk: %p\n",drc);
-#endif
     drc->iocbk.fnc = 0;
 
     kaapi_data_replica_cbk_t* drcn = drc->next;
@@ -2492,12 +2457,32 @@ static void callback_resend_replica_on_callback_cbk(
   }
 }
 
+/* Allocate a callback to data replica. Chains it and returns it before initialized (by the caller)
+ */
+static inline kaapi_data_replica_cbk_t* _allocate_callback( kaapi_data_replica_t* r )
+{
+  /* add callback on lid_src: atomic with the receiver that will call the callbacks in the list */
+  kaapi_data_replica_cbk_t* drc;
+  if (r->cbk.iocbk.fnc == 0)
+    drc = &r->cbk;
+  else
+    drc = malloc(sizeof(kaapi_data_replica_cbk_t));
+  drc->iocbk.fnc    = 0;
+  drc->next = 0;
+  if (drc != &r->cbk)
+  {
+    drc->next   = r->cbk.next;
+    r->cbk.next = drc;
+  }
+  return drc;
+}
+
+
 /* fetch data on node asid if data is not valid on it.
    Look if data is already present or not on asid. If present, then the call returns 0.
    If data is not present a message to get it back is sent except if already under transit.
    Flag is one of KAAPI_FETCH_XX values.
-   Return 0: data is already present
-   Return EINVAL: data is already valid
+   Return 0: data is already present and valid
    Return EINPROGRESS if a message is send and data is under transfer
 */
 static int kaapi_dsm_fetch_on(
@@ -2509,15 +2494,15 @@ static int kaapi_dsm_fetch_on(
       void* arg0, void* arg1, void* arg2
 )
 {
-  uint16_t lid = kaapi_memory_asid_get_lid(asid);
-  kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
+  uint16_t lid_dest = kaapi_memory_asid_get_lid(asid);
+  kaapi_assert_debug(lid_dest < KAAPI_MEMORY_MAX_NODES);
   kaapi_assert_debug(
        (flags ==KAAPI_FETCH_PRIORITY_LOW)
     || (flags == KAAPI_FETCH_PRIORITY_NORMAL)
     || (flags == KAAPI_FETCH_PRIORITY_HIGH) );
 
-  /* fast path */
-  if (kaapi_memory_replica_is_valid(mdi, lid)) return EINVAL;
+  /* non atomic fast path */
+  if (kaapi_memory_replica_is_valid(mdi, lid_dest)) return 0;
 
   /* get a replica with good locality to be used to send data to lid/asid.
      Note that on return, the replicas[lid_src] is pinned (counter incremented)
@@ -2526,156 +2511,105 @@ static int kaapi_dsm_fetch_on(
      lid_src may, if D2D heuristic is activated, return a lid with state xfer: a valid
      data is under transfer to lid_src.
   */
-  uint16_t lid_src = _kaapi_get_source_lid(dsm, mdi, asid, 1);
+  uint16_t selected_dest;
+  uint16_t lid_src = _kaapi_get_source_lid(dsm, mdi, asid, &selected_dest);
 
   /* emit the communication between lid_src to lid */
   kaapi_data_replica_t* src_replica  = mdi->replicas[lid_src];
-  kaapi_data_replica_t* dest_replica = mdi->replicas[lid];
+  kaapi_data_replica_t* dest_replica = mdi->replicas[lid_dest];
   kaapi_assert_debug( src_replica->ptr.ptr != 0 );
   kaapi_assert_debug( dest_replica->ptr.ptr != 0 );
 
-  /* lock lid_src & lid state evolution. Lock in order < of local id of device to avoid deadlock. */
+  /* Lock lid_src & lid metadata state evolution.
+     Lock in order < of local id of device to avoid deadlock.
+  */
   kaapi_lock_t* lock1;
   kaapi_lock_t* lock2;
-  if (lid < lid_src) 
+  if (lid_dest < lid_src)
   {
-    lock1 = &mdi->replicas[lid]->lock;
+    lock1 = &mdi->replicas[lid_dest]->lock;
     lock2 = &mdi->replicas[lid_src]->lock;
   }
   else
   {
     lock1 = &mdi->replicas[lid_src]->lock;
-    lock2 = &mdi->replicas[lid]->lock;
+    lock2 = &mdi->replicas[lid_dest]->lock;
   }
   kaapi_atomic_lock(lock1);
   if (lock2 != lock1)
     kaapi_atomic_lock(lock2);
 
-  if (kaapi_memory_replica_is_valid(mdi, lid))
+  if (kaapi_memory_replica_is_valid(mdi, lid_dest))
   {
     if (lock2 != lock1)
       kaapi_atomic_unlock(lock2);
     kaapi_atomic_unlock(lock1);
-    return EINVAL;
+    return 0;
   }
 
   /* replica where to add callback */
-  kaapi_data_replica_t* r = mdi->replicas[lid];
+  kaapi_data_replica_t* r = mdi->replicas[lid_dest];
 
   kaapi_assert_debug( cbk !=0 );
   cbk = cbk == 0 ? callback_nop : cbk;
 
-  /* If selected source lid_src is xfer, then attach callback that will transfer it to lid when
-     lid_src will receive it.
+  /* If selected source lid_src is xfer, then attach a callback to transfer back data to lid_dest
+     when data will be receive on src.
   */
-  int d2d_route = kaapi_memory_replica_is_xfer(mdi, lid_src) && !kaapi_memory_replica_is_xfer(mdi, lid);
+  int d2d_route = kaapi_memory_replica_is_xfer(mdi, lid_src) && !kaapi_memory_replica_is_xfer(mdi, lid_dest);
   if (d2d_route)
   {
-    /* add callback on lid */
-    kaapi_data_replica_cbk_t* drc;
-    if (r->cbk.iocbk.fnc == 0)
-      drc = &r->cbk;
-    else
-      drc = malloc(sizeof(kaapi_data_replica_cbk_t));
+    /* add callback on lid_src: atomic with the receiver that will call the callbacks in the list */
+    kaapi_data_replica_cbk_t* drc =_allocate_callback(r);
     drc->iocbk.fnc    = cbk;
-    kaapi_assert( drc->iocbk.fnc != 0);
     drc->iocbk.arg[0] = arg0;
     drc->iocbk.arg[1] = arg1;
     drc->iocbk.arg[2] = arg2;
-    drc->next = 0;
-    if (drc != &r->cbk)
-    {
-      drc->next   = r->cbk.next;
-      r->cbk.next = drc;
-    }
 
-    /* Mark destination lid as under xfer to avoid multiple copy */
-    kaapi_memory_replica_set_xfer( mdi, lid );
+    /* Mark destination lid as under xfer to avoid multiple transfer */
+    kaapi_memory_replica_set_xfer( mdi, lid_dest );
 
-#if LOG1
-    printf("Insert resend cbk: %p mdi: %p, lid_src: %i, lid_dest: %i, state: %i\n", drc, mdi, lid_src, lid, (int)KAAPI_ATOMIC_READ(&mdi->xfer));
-#endif
-
-    /* replace callback */
+    /* next callback will ocurrs on lid_src to forward data when receive */
+    r = mdi->replicas[lid_src];
     cbk = callback_resend_replica_on_callback_cbk;
     arg0 = (void*)(uintptr_t)lid_src;
     arg1 = (void*)asid;
     arg2 = mdi;
-    /* add next callback to replicas[lid_src] to forward data to lid (asid) upon reception */
-    r = mdi->replicas[lid_src];
   }
 
-  /* chain callbacks together.
-     TODO: optimize memory allocation here
+  /* Add the call on lid_dest to signal reception of the data
   */
-  kaapi_data_replica_cbk_t* drc;
-  if (r->cbk.iocbk.fnc == 0)
-    drc = &r->cbk;
-  else
-    drc = malloc(sizeof(kaapi_data_replica_cbk_t));
+  kaapi_data_replica_cbk_t* drc =_allocate_callback(r);
   drc->iocbk.fnc    = cbk;
-  kaapi_assert( drc->iocbk.fnc != 0);
   drc->iocbk.arg[0] = arg0;
   drc->iocbk.arg[1] = arg1;
   drc->iocbk.arg[2] = arg2;
-  drc->next = 0;
-  if (drc != &r->cbk)
-  {
-    drc->next   = r->cbk.next;
-    r->cbk.next = drc;
-  }
-#if LOG1
-  printf("Insert cbk: %p mdi: %p, lid: %i\n", drc, mdi, (d2d_route ? lid_src : lid));
-#endif
 
-#if KAAPI_DEBUG_LOW
-  ++r->count;
-  int idx = KAAPI_ATOMIC_INCR(&count_cbk);
-  drc->idx = idx;
-  idx = idx % 16384;
-  all_cbk[idx].cbk     = drc->iocbk.fnc;
-  all_cbk[idx].cbk0    = drc->iocbk.fnc;
-  all_cbk[idx].mdi     = mdi;
-  all_cbk[idx].r       = r;
-  all_cbk[idx].lid_dst = lid;
-  all_cbk[idx].lid_src = lid_src;
-  all_cbk[idx].valid   = KAAPI_ATOMIC_READ(&mdi->valid);
-  all_cbk[idx].xfer    = KAAPI_ATOMIC_READ(&mdi->xfer);
-  current_all_cbk      = &all_cbk[idx]; /* to pass information to lower API */
-  all_cbk[idx].err     = -1;
-#endif
-
-  /* Return if current fetch op is pending op on destination lid or if d2d_route is on:
+  /* Return if current fetch op is under progress to lid_dest or if d2d_route is on:
      - callback was registered and action will be garantee to be executed (I hope so)
   */
-  if  ((kaapi_memory_replica_is_xfer(mdi, lid)) ||  d2d_route)
+#if KAAPI_DEBUG
+  if (d2d_route) kaapi_assert(kaapi_memory_replica_is_xfer(mdi, lid_dest));
+#endif
+  if  (kaapi_memory_replica_is_xfer(mdi, lid_dest))
   {
-    /* callback was linked; nothing else to do */
     if (lock2 != lock1)
       kaapi_atomic_unlock(lock2);
     kaapi_atomic_unlock(lock1);
-#if KAAPI_DEBUG_LOW
-    all_cbk[idx].err = -(kaapi_memory_replica_is_xfer(mdi, lid) ? 1 : 2);
-#endif
     return EINPROGRESS;
   }
 
-  kaapi_assert_debug( !kaapi_memory_replica_is_valid(mdi, lid) );
-  kaapi_assert_debug( !kaapi_memory_replica_is_xfer(mdi, lid) );
+  kaapi_assert_debug( !kaapi_memory_replica_is_valid(mdi, lid_dest) );
+  kaapi_assert_debug( !kaapi_memory_replica_is_xfer(mdi, lid_dest) );
 
-  /* Mark destination lid as under xfer to be valid */
-  kaapi_memory_replica_set_xfer( mdi, lid );
-#if KAAPI_DEBUG_LOW
-  KAAPI_ATOMIC_INCR(&pending_xfer);
-#endif
+  /* ok now we can mark destination data to lid_dest under xfer and unlock replicas */
+  kaapi_memory_replica_set_xfer( mdi, lid_dest );
 
   if (lock2 != lock1)
     kaapi_atomic_unlock(lock2);
   kaapi_atomic_unlock(lock1);
 
-  /* do not have concurrent access to device structure: one thread manages each device */
-  kaapi_assert_debug( kaapi_memory_view_size(&dest_replica->view) == kaapi_memory_view_size(&src_replica->view) );
-
+  /* post asynchronous memory copy */
   int err = kaapi_memory_copy_async(
       dest_replica->ptr, &dest_replica->view,
       src_replica->ptr, &src_replica->view,
@@ -2684,10 +2618,6 @@ static int kaapi_dsm_fetch_on(
       mdi, (void*)asid, (void*)(uintptr_t)lid_src
   );
   kaapi_assert((err ==0) || (err ==EINPROGRESS));
-#if KAAPI_DEBUG_LOW
-  all_cbk[idx].err     = err;
-  current_all_cbk      = 0;
-#endif
   return err;
 }
 
@@ -2706,7 +2636,6 @@ int kaapi_dsm_acquire_data(
 )
 {
   int err = 0;
-  uint16_t lid0 = kaapi_memory_asid_get_lid(kaapi_local_asid);
   uint16_t lid  = kaapi_memory_asid_get_lid(asid);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
 
@@ -2714,15 +2643,12 @@ int kaapi_dsm_acquire_data(
   kaapi_memory_replica_mark_pinned( mdi, lid );
 
   /* do allocation if any. Use view on 0 to determine size and layout */
-  err = _kaapi_dsm_allocate_replica( dsm, mdi, asid );
-  kaapi_assert_debug( (err ==0)||(err == ENOMEM)) ;
-
-  /* here on return there is possible error if device memory is full (ENOMEM).
-     TODO: process this error
-  */
-  if (err !=0) return err;
-
-  kaapi_data_replica_t* r = mdi->replicas[lid];
+  if (!kaapi_memory_replica_is_allocated(mdi,lid))
+  {
+    err = _kaapi_dsm_allocate_replica( dsm, mdi, asid );
+    kaapi_assert_debug( (err ==0)||(err == ENOMEM));
+    if (err !=0) return err;
+  }
 
   /* if read then make copy on device->memorydevice.asid */
   if (KAAPI_ACCESS_IS_READ(mp))
@@ -2733,11 +2659,14 @@ int kaapi_dsm_acquire_data(
     */
     if (!kaapi_memory_replica_is_valid(mdi, lid))
     {
-      /* need aync comm -> increment waiting counter */
+      /* need aync comm -> increment waiting counter but is err=0, fetch does not call the callback
+       */
       if (task)
         KAAPI_ATOMIC_INCR(&task->wc);
 
       err = kaapi_dsm_fetch_on( dsm, asid, mdi, KAAPI_FETCH_PRIORITY_NORMAL, cbk, arg0, arg1, arg2 );
+      if (err ==0)
+        KAAPI_ATOMIC_DECR(&task->wc);
     }
 
     kaapi_memory_cache_touch( dsm, lid, KAAPI_ACCESS_MODE_R, mdi );
@@ -2800,11 +2729,17 @@ int kaapi_dsm_prefetch_on(
   uint16_t lid = kaapi_memory_asid_get_lid(asid);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
 
+  int err = 0;
+  
   /* if not allocated: do allocation. Use view on 0 to determine size and layout */
-  int err = _kaapi_dsm_allocate_replica( dsm, mdi, asid );
-  kaapi_assert_debug( (err ==0)||(err == ENOMEM)) ;
-  if (err !=0) return err;
+  if (!kaapi_memory_replica_is_allocated(mdi,lid))
+  {
+    err=_kaapi_dsm_allocate_replica( dsm, mdi, asid );
+    kaapi_assert_debug( (err ==0)||(err == ENOMEM)) ;
+    if (err !=0) return err;
+  }
 
+  /* non atomic test here: dsm_fetch will do it correctly */
   if (!kaapi_memory_replica_is_valid(mdi, lid))
     return kaapi_dsm_fetch_on( dsm, asid, mdi, KAAPI_FETCH_PRIORITY_LOW,
         cbk, arg0, arg1, arg2

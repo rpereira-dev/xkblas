@@ -78,6 +78,11 @@ int kaapi_localitydomain_finalize(void)
 
 /*
 */
+static int _kaapi_fifo_queue_init( kaapi_fifo_queue_t* rd );
+
+
+/*
+*/
 int kaapi_localitydomain_init( kaapi_localitydomain_t* ld, kaapi_device_t* device )
 {
   int err;
@@ -86,28 +91,9 @@ int kaapi_localitydomain_init( kaapi_localitydomain_t* ld, kaapi_device_t* devic
   ld->queue = rd = malloc(sizeof(kaapi_fifo_queue_t));
   if (rd ==0) return ENOMEM;
 
-  /* fifo_queue_init */
-  rd->T = rd->H = 0;
-  rd->data = 0;
-  rd->frame = 0;
-  rd->size = 0;
-  rd->push_count = 0;
-  rd->pop_count = 0;
-  rd->waiter_push = 0;
-  
-  err = pthread_mutex_init(&rd->lock, 0);
-  if (err) return err;
-  err = pthread_cond_init(&rd->cond_push, 0);
-  if (err)
-    goto label_err1;
-  rd->cbk_fnc = 0;
-  rd->cbk_arg = 0;
-
+  err = _kaapi_fifo_queue_init(rd);
   if (err)
   {
-    pthread_cond_destroy(&rd->cond_push);
-label_err1:
-    pthread_mutex_destroy(&rd->lock);
     free(ld->queue);
     ld->queue = 0;
     return err;
@@ -127,7 +113,6 @@ int kaapi_localitydomain_destroy( kaapi_localitydomain_t* ld )
   pthread_cond_destroy(&rd->cond_push);
   //pthread_cond_destroy(&rd->cond_pop);
   free(ld->queue->data);
-  free(ld->queue->frame);
   free(ld->queue);
   if (ld->subld) free(ld->subld);
   return 0;
@@ -326,6 +311,34 @@ const char* kaapi_localitydomain_info(
 }
 
 
+/*
+*/
+static int _kaapi_fifo_queue_init( kaapi_fifo_queue_t* rd )
+{
+  int err = 0;
+  rd->T = rd->H = 0;
+  rd->data = 0;  /* lazy allocation */
+  rd->size = 0;
+  rd->push_count = 0;
+  rd->pop_count = 0;
+  rd->waiter_push = 0;
+  
+  err = pthread_mutex_init(&rd->lock, 0);
+  if (err) return err;
+  err = pthread_cond_init(&rd->cond_push, 0);
+  if (err)
+    goto label_err1;
+  rd->cbk_fnc = 0;
+  rd->cbk_arg = 0;
+
+  if (err)
+  {
+    pthread_cond_destroy(&rd->cond_push);
+label_err1:
+    pthread_mutex_destroy(&rd->lock);
+  }
+  return err;
+}
 
 
 /* */
@@ -337,15 +350,11 @@ static void kaapi_fifo_queue_alloc(
   if (rd->data ==0)
   {
     kaapi_task_t** data;
-    kaapi_frame_t** frame;
     int32_t size = QUEUE_DEFAULT_SIZE;
     data = (kaapi_task_t**)malloc( size*sizeof(kaapi_task_t*));
-    frame = (kaapi_frame_t**)malloc( size*sizeof(kaapi_frame_t*));
     memset(data, 0, size*sizeof(kaapi_task_t*));
-    memset(frame, 0, size*sizeof(kaapi_frame_t*));
     rd->size = size;
     rd->data = data;
-    rd->frame = frame;
   }
 }
 
@@ -354,13 +363,11 @@ static void kaapi_fifo_queue_alloc(
 */
 int32_t kaapi_fifo_queue_push(
     kaapi_fifo_queue_t* rd,
-    kaapi_frame_t* frame,
     kaapi_task_t* task
 )
 {
   unsigned int p = kaapi_task_get_priority(task);
   kaapi_assert_debug(p<= KAAPI_TASK_MAX_PRIORITY);
-  kaapi_assert_debug(frame != 0);
 
   pthread_mutex_lock(&rd->lock);
 
@@ -380,7 +387,6 @@ int32_t kaapi_fifo_queue_push(
   int32_t T      = rd->T++;
   int32_t idx    = T%size;
   rd->data[idx]  = task;
-  rd->frame[idx] = frame;
   ++rd->push_count;
 
   if (rd->cbk_fnc)
@@ -395,11 +401,10 @@ int32_t kaapi_fifo_queue_push(
 }
 
 
-/* blocking version 
+/* queue mutex is locked during operation
 */
 kaapi_task_t* kaapi_fifo_queue_pop(
-    kaapi_fifo_queue_t* rd,
-    kaapi_frame_t** frame
+    kaapi_fifo_queue_t* rd
 )
 {
   kaapi_task_t* task = 0;
@@ -413,21 +418,19 @@ kaapi_task_t* kaapi_fifo_queue_pop(
     int32_t H = rd->H;
     int32_t idx = H%size;
     task = rd->data[idx];
-    *frame = rd->frame[idx];
     rd->data[idx] = 0;
-    rd->frame[idx] = 0;
-    ++rd->pop_count;
+    if (task)
+      ++rd->pop_count;
     ++rd->H;
     if (rd->waiter_push)
       pthread_cond_signal(&rd->cond_push);
   }
   pthread_mutex_unlock(&rd->lock);
-  kaapi_assert_debug((task ==0) || (*frame != 0));
   return task;
 }
 
 
-/*
+/* sort score for stealing with affinity
 */
 static inline int is_maxscore(size_t* score_a, size_t* score_b)
 {
@@ -446,60 +449,74 @@ static inline int is_maxscore(size_t* score_a, size_t* score_b)
 
 /*
 */
-kaapi_task_t* kaapi_fifo_queue_pop_with_affinity(
+kaapi_task_t* kaapi_fifo_queue_steal_with_affinity(
     kaapi_fifo_queue_t* rd,
-    kaapi_frame_t** frame,
     kaapi_device_t* device
 )
 {
   kaapi_task_t* task = 0;
-#define MAX_HISTORY 4
+#define MAX_HISTORY 8
   size_t score[MAX_HISTORY][4];
   size_t score_max[4]={0,0,0,0};
   int nscore = 0;
-  int nbest =0;
-  kaapi_ldid_t ldid_target = device->ld->ldid;
+  int nsbest =0;
+  int ibest =0;
   
+  //if (kaapi_fifo_queue_size(rd) <16) return 0;
+
+  kaapi_ldid_t ldid_target = device->ld->ldid;
+  if (rd->T <= rd->H) return 0;
+
   pthread_mutex_lock(&rd->lock);
   int32_t size = rd->size;
+  if (size ==0) 
+  {
+    pthread_mutex_unlock(&rd->lock);
+    return 0;
+  }
+
   /* iterate from T-1 to H */
-  for (int32_t i = rd->T; (i > rd->H)&&(nscore<MAX_HISTORY); )
+  for (int32_t i = rd->T; (i > rd->H); )
   {
     --i;
     int32_t idx = i%size;
-    int r = kaapi_compute_affinity_score( ldid_target, rd->data[idx], score[nscore]);
+    if (rd->data[idx] ==0) continue;
+    int r = kaapi_compute_affinity_score( ldid_target, rd->data[idx], score[nscore], 3);
     if (r)
     {
-      if (is_maxscore(score_max,score[nscore]))
+      if (is_maxscore(score[nscore], score_max))
       {
         score_max[0] = score[nscore][0];
         score_max[1] = score[nscore][1];
         score_max[2] = score[nscore][2];
         score_max[3] = score[nscore][3];
-        nbest = i;
+        nsbest = nscore;
+        ibest = i;
       }
       ++nscore;
+      if (nscore==MAX_HISTORY) break;
     }
   }
   if (nscore >0)
   {
-    int32_t idx = nbest%size;
+    int32_t idx = ibest%size;
     task = rd->data[idx];
-    *frame = rd->frame[idx];
     rd->data[idx] = 0;
-    rd->frame[idx] = 0;
     ++rd->pop_count;
-    if (nbest == rd->H)
+    if (1+ibest == rd->T)
     {
       /* because we leave 0 where the task was picked, we assume the device making a pop with achieve */
-      ++rd->H;
+      --rd->T;
       if (rd->waiter_push)
         pthread_cond_signal(&rd->cond_push);
     }
+#if LOG_AFF
+    if (task !=0)
+      printf("%p: task %p stolen to %i queue size:%i, score=[%lu, %lu, %lu, %lu]\n", pthread_self(), task, ldid_target, kaapi_fifo_queue_size(rd), score[nsbest][0], score[nsbest][1], score[nsbest][2], score[nsbest][3]);
+#endif
   }
     
   pthread_mutex_unlock(&rd->lock);
-  kaapi_assert_debug((task ==0) || (*frame != 0));
   return task;
 }
 

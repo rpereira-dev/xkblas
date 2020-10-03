@@ -57,6 +57,13 @@ static char* name_io[] __attribute__((unused)) = {
 };
 
 
+static char* name_io_type[] __attribute__((unused)) = {
+  "IO_STREAM_H2D",
+  "IO_STREAM_KER",
+  "IO_STREAM_D2H",
+  "IO_STREAM_D2D"
+};
+
 
 /*
 */
@@ -72,6 +79,10 @@ static int _kaapi_offload_iostream_init(
 
   io->type    = type;
   kaapi_assert(0==kaapi_atomic_initlock(&io->mutex));
+
+  io->smax    = 0;
+  io->smax_p  = 0;
+  io->max_p   = (uint64_t)-1; /* means not used */
   io->pos_r   = 0;
   io->pos_rp  = 0;
   io->pos_w   = 0;
@@ -99,6 +110,10 @@ static int _kaapi_offload_iostream_destroy(
   if (io ==0) return 0;
   int err = 0;
   KAAPI_OFFLOAD_TRACE_IN
+#if 0
+  printf("* stream[%s]:%p smax:%i, smax_p: %i\n", name_io_type[io->type], io, io->smax, io->smax_p );
+#endif
+
   if (io->pos_r != io->pos_w)
     err = EBUSY;
   else
@@ -256,6 +271,7 @@ static kaapi_io_stream_t* kaapi_offload_select_io_stream(
             || (stype == KAAPI_IO_STREAM_D2D)
 #endif
             || (stype == KAAPI_IO_STREAM_KERN));
+#if ROUND_ROBIN
   /* increment the next stream to used */
   int snext0 = KAAPI_ATOMIC_READ(&stream->next[stype]);
   int snext = snext0;
@@ -264,14 +280,42 @@ static kaapi_io_stream_t* kaapi_offload_select_io_stream(
     snext0 = KAAPI_ATOMIC_INCR_ORIG(&stream->next[stype]);
     snext = snext0 % stream->count[stype];
   }
+#elif 1
+  int count = stream->count[stype];
+  int snext0 = KAAPI_ATOMIC_READ(&stream->next[stype]);
+  int snext = snext0;
+  if (count >1)
+  {
+    snext0 = KAAPI_ATOMIC_INCR_ORIG(&stream->next[stype]);
+    snext = snext0 % count;
+    if (stype == KAAPI_IO_STREAM_KERN)
+    {
+      int snextorig= snext;
+      //int smin = kaapi_io_stream_sizeinstr(stream->ios[stype][snext]) + kaapi_io_stream_sizepending(stream->ios[stype][snext]);
+      int smin = kaapi_io_stream_sizepending(stream->ios[stype][snext]);
+      int smax = smin;
+      for (int i=1; i<count; ++i)
+      {
+        //int load = kaapi_io_stream_sizeinstr(stream->ios[stype][snext]) + kaapi_io_stream_sizepending(stream->ios[stype][snext]);
+        int load = kaapi_io_stream_sizepending(stream->ios[stype][snext]);
+        if (load < smin)
+        {  
+          smin = load;
+          snext = i;
+        }
+        else if (load > smax)
+          smax = load;
+      }
+      if (snextorig != snext)
+        printf("Stream load #%i[min:%i, max:%i] -> %i\n", count, smin, smax, snext);
+    }
+  }
+#elif 0
+#warning
+  int snext = 0;
+#endif
   retval = stream->ios[stype][snext];
   kaapi_assert_debug( retval != 0 );
-#if KAAPI_DEBUG
-  int found = 0;
-  for (int i=0; i<stream->count[stype]; ++i)
-    if (retval == stream->ios[stype][i]) { found = 1; break; }
-  kaapi_assert( found != 0 );
-#endif
   return retval;
 }
 
@@ -395,23 +439,21 @@ kaapi_io_instruction_t* kaapi_offload_stream_push(
   kaapi_io_stream_t* ios = kaapi_offload_select_io_stream( stream, stype );
   kaapi_assert_debug( ios != 0 );
 
-#if KAAPI_DEBUG_LOW
-  extern void debug_low_set_info_cbk( kaapi_device_t* dev, kaapi_io_stream_t* ios);
-  debug_low_set_info_cbk( stream->device, ios );
-#endif
-
   *sios = ios;
 
-  // acquire lock + spin test 
-  kaapi_atomic_lock(&ios->mutex);
-
-  while (kaapi_io_stream_fullinstr(ios))
-  {
-    kaapi_atomic_unlock(&ios->mutex);
-    kaapi_offload_test_stream( stream, stype );
-
-    kaapi_atomic_lock(&ios->mutex);
-  }
+  /* lock the stream to add a new entry
+     mutex is released in commit operation.
+     between them, caller should initialize the io_instruction
+   */
+  do {
+    //kaapi_offload_test_stream( stream, stype );
+    if (!kaapi_io_stream_fullinstr(ios))
+    {
+      kaapi_atomic_lock(&ios->mutex);
+      if (!kaapi_io_stream_fullinstr(ios)) break;
+      kaapi_atomic_unlock(&ios->mutex);
+    }
+  } while (kaapi_io_stream_fullinstr(ios));
 
   kaapi_io_instruction_t* inst = &ios->instr[ios->pos_w % ios->count];
   kaapi_assert_debug( ios->mutex._owner == pthread_self());
@@ -479,6 +521,15 @@ kaapi_io_instruction_t* kaapi_offload_stream_commit(
   return inst;
 }
 
+
+/** blocking=1 -> wait; blocking=0 -> test
+*/
+static int _kaapi_offload_onestream_process_pending(kaapi_offload_stream_t* const stream, kaapi_io_stream_t* ios, int mode)
+{
+  return stream->f_stream_process_pending(stream->device, ios, mode);
+}
+
+
 /*
  */
 static int _kaapi_offload_onestream_process_instruction(
@@ -492,6 +543,9 @@ static int _kaapi_offload_onestream_process_instruction(
 
   int err = 0;
   kaapi_assert_debug( ios->pos_r <= ios->pos_wp );
+  uint64_t s = ios->pos_w - ios->pos_r;
+  if (s > ios->smax) ios->smax = s;
+uint64_t s0 = s;
   while (!kaapi_io_stream_emptyinstr(ios))
   {
     kaapi_atomic_lock(&ios->mutex);
@@ -500,18 +554,28 @@ static int _kaapi_offload_onestream_process_instruction(
       int p  = ios->pos_r  % ios->count;
       err = stream->f_stream_decode_ioinstruction(stream->device, ios, &ios->instr[p]);
       kaapi_assert_debug(err ==0 || err == EINPROGRESS);
+      ++ios->pos_r;
       if (err == EINPROGRESS)
       {
         /* recopy op in pending op */
         int wp = ios->pos_wp  % ios->count;
         ios->pending[wp] = ios->instr[p];
         ++ios->pos_wp;
+#if 0//FORCE
+        if ((ios->type == KAAPI_IO_STREAM_KERN) && (ios->pos_wp - ios->pos_rp > kaapi_default_param.cuda_conc_kernel))
+        {
+          kaapi_atomic_unlock(&ios->mutex);
+          while (ios->pos_wp - ios->pos_rp > kaapi_default_param.cuda_conc_kernel)
+            _kaapi_offload_onestream_process_pending(stream, ios,  0);
+          kaapi_atomic_lock(&ios->mutex);
+        }
+#endif
       }
       else kaapi_assert(err==0);
-      ++ios->pos_r;
     }
     kaapi_atomic_unlock(&ios->mutex);
   }
+
   KAAPI_OFFLOAD_TRACE_OUT
   return err;
 }
@@ -558,6 +622,7 @@ int kaapi_offload_stream_process_instruction(
 }
 
 
+
 /** blocking=1 -> wait; blocking=0 -> test
 */
 static int _kaapi_offload_waittest_stream(
@@ -577,8 +642,6 @@ static int _kaapi_offload_waittest_stream(
             || (stype == KAAPI_IO_STREAM_ALL));
   KAAPI_OFFLOAD_TRACE_IN
 
-  //kaapi_assert_debug( kaapi_offload_self_device() == stream->device );
-
   unsigned int deb;
   unsigned int end;
   if (stype == KAAPI_IO_STREAM_ALL)
@@ -593,9 +656,15 @@ static int _kaapi_offload_waittest_stream(
   for (unsigned int s=deb; s<end; ++s)
     for (unsigned int i=0; i< stream->count[s]; ++i)
     {
-      if (!kaapi_io_stream_emptypending(stream->ios[s][i]))
+      kaapi_io_stream_t* ios = stream->ios[s][i];
+      if (!kaapi_io_stream_emptypending(ios));
       {
-        err = stream->f_stream_process_pending(stream->device, stream->ios[s][i], blocking);
+        uint64_t s = ios->pos_wp - ios->pos_rp;
+        if (s > ios->smax_p) ios->smax_p = s;
+        do {
+          s = ios->pos_wp - ios->pos_rp;
+          err = _kaapi_offload_onestream_process_pending( stream, ios, blocking ); 
+        } while ((ios->type == KAAPI_IO_STREAM_KERN) && (s > kaapi_default_param.cuda_conc_kernel));
         kaapi_assert(err ==0 || err == EINPROGRESS);
       }
     }

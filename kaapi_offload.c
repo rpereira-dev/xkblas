@@ -100,14 +100,6 @@ void kaapi_offload_set_current_device(kaapi_device_t* device)
 
 /*
 */
-kaapi_device_t* kaapi_offload_get_current_device(void)
-{
-  kaapi_device_t* device = kaapi_offload_current_device;
-  return device;
-}
-
-/*
-*/
 kaapi_device_t* kaapi_offload_self_device(void)
 {
   kaapi_device_t* device = kaapi_offload_current_device;
@@ -489,51 +481,28 @@ unsigned int kaapi_offload_get_num_devices(void)
   return kaapi_offload_num_devices;
 }
 
+
 /* This function is  make all communications progress through all the stream.
    A a thread or a set of threads management communication progress for the device, this
    function becomes not necessary.
    This function must be called by the agregation protocol through call
    to kaapi_place_internalop for instance.
 */
- int kaapi_offload_poll_device( kaapi_device_t* device)
+int kaapi_offload_poll_device( kaapi_device_t* device)
 {
   int err =0;
   kaapi_assert_debug( device->is_initialized );
   kaapi_assert_debug( kaapi_offload_self_device() == device );
 
-#if KAAPI_HAVE_IO_THREADS
 #if KAAPI_USE_STREAM_D2D
   err = kaapi_offload_stream_process_instruction(&device->stream, KAAPI_IO_STREAM_D2D);
-  kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
-
-  err = kaapi_offload_test_stream(&device->stream, KAAPI_IO_STREAM_D2D);
-  kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
-#endif
-
-  err = kaapi_offload_test_stream(&device->stream, KAAPI_IO_STREAM_H2D);
-  kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
-
-  err = kaapi_offload_stream_process_instruction( &device->stream, KAAPI_IO_STREAM_KERN );
-  kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
-
-  err = kaapi_offload_test_stream(&device->stream, KAAPI_IO_STREAM_KERN);
-  kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
-
-  err = kaapi_offload_test_stream( &device->stream, KAAPI_IO_STREAM_D2H );
-  kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
-#else
-#if KAAPI_USE_STREAM_D2D
-  err = kaapi_offload_stream_process_instruction(&device->stream, KAAPI_IO_STREAM_D2D);
-  kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
-
-  err = kaapi_offload_test_stream(&device->stream, KAAPI_IO_STREAM_D2D);
   kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
 #endif
 
   err = kaapi_offload_stream_process_instruction(&device->stream, KAAPI_IO_STREAM_H2D);
   kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
 
-  err = kaapi_offload_test_stream(&device->stream, KAAPI_IO_STREAM_H2D);
+  err = kaapi_offload_stream_process_instruction( &device->stream, KAAPI_IO_STREAM_D2H );
   kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
 
   err = kaapi_offload_stream_process_instruction( &device->stream, KAAPI_IO_STREAM_KERN );
@@ -542,18 +511,17 @@ unsigned int kaapi_offload_get_num_devices(void)
   err = kaapi_offload_test_stream(&device->stream, KAAPI_IO_STREAM_KERN);
   kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
 
-  if (kaapi_offload_stream_isempty(&device->stream, KAAPI_IO_STREAM_H2D))
-  {
-    err = kaapi_offload_stream_process_instruction( &device->stream, KAAPI_IO_STREAM_D2H );
-    kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
-
-    err = kaapi_offload_test_stream( &device->stream, KAAPI_IO_STREAM_D2H );
-    kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
-  }
+#if KAAPI_USE_STREAM_D2D
+  err = kaapi_offload_test_stream(&device->stream, KAAPI_IO_STREAM_D2D);
+  kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
 #endif
+  err = kaapi_offload_test_stream(&device->stream, KAAPI_IO_STREAM_H2D);
+  kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
+
+  err = kaapi_offload_test_stream( &device->stream, KAAPI_IO_STREAM_D2H );
+  kaapi_assert_debug( (err == 0) || (err == EINPROGRESS));
   return err;
 }
-
 
 
 /* Pool for all devices.
@@ -578,7 +546,6 @@ int kaapi_offload_poll_devices(void)
  * memory copies, kernel launches. The internal offload thread only test/wait for 
  * completion of asynchronous operation.
  */
-
 /*
 */
 int kaapi_offload_init(int flag)

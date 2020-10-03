@@ -443,7 +443,8 @@ extern uint16_t _kaapi_get_source_lid(
   kaapi_dsm_t* dsm,
   kaapi_metadata_info_t* mdi,
   kaapi_address_space_id_t dest_asid,
-  int mark );
+  uint16_t* sel_dest
+);
 
 
 static inline bool kaapi_memory_replica_is_valid(

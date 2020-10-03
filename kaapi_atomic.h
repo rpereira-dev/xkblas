@@ -397,7 +397,10 @@ static inline int kaapi_atomic_destroylock( kaapi_lock_t* lock )
 
 static inline int kaapi_atomic_trylock( kaapi_lock_t* lock )
 {
-  return 0 == pthread_mutex_trylock( &lock->_mutex );
+  int err = pthread_mutex_trylock( &lock->_mutex );
+  if (err ==0) return 0;
+  if (err ==EBUSY) return EBUSY;
+  return EINVAL;
 }
 
 static inline int kaapi_atomic_lock( kaapi_lock_t* lock )

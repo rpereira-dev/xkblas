@@ -303,7 +303,8 @@ extern int xkblas_map_1Dblock_cyclic(
    with blocking factor (Bp,Bq).
 */
 extern int xkblas_distribute_2Dblock_cyclic_async(
-  int hlevel, int storage, size_t NB,
+  int hlevel, int storage, 
+  int uplo, size_t NB,
   size_t m, size_t n, const void* A, size_t ld, size_t eltsize,
   size_t Bp, size_t Bq, /* blocking size */
   size_t Gp, size_t Gq  /* grid size */
@@ -313,7 +314,7 @@ extern int xkblas_distribute_2Dblock_cyclic_async(
    with blocking factor B.
 */
 extern int xkblas_distribute_1Dblock_cyclic_async(
-  int hlevel, int storage, int colrow, 
+  int hlevel, int storage, int uplo, int colrow, 
   size_t NB, size_t m, size_t n, const void* A, size_t ld, size_t eltsize,
   size_t B, size_t G    /* grid size */
 );

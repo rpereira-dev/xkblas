@@ -151,13 +151,6 @@ int kaapi_queue_init( kaapi_queue_t* rd, kaapi_task_t** bloc0, int32_t size )
     rd->data[i] = rd->data0[i] = 0;
     rd->size[i] = 0;
   }
-#if KAAPI_DEBUG_LOW
-  rd->owner = pthread_self();
-  KAAPI_ATOMIC_WRITE(&rd->cnt_push, 0);
-  KAAPI_ATOMIC_WRITE(&rd->cnt_pop, 0);
-  KAAPI_ATOMIC_WRITE(&rd->cnt_steal, 0);
-#endif
-
   if (rd->data[0] ==0) return ENOMEM;
   return 0;
 }
@@ -216,16 +209,19 @@ printf("Realloc queue: size=%i\n", newsize);
 */
 int32_t _kaapi_task_commit(kaapi_thread_t* thread, kaapi_task_t* task)
 {
-  int wc = KAAPI_ATOMIC_SUB(&task->wc,65535); // (1U<<16)-1U;
+  int wc = KAAPI_ATOMIC_DECR(&task->wc); //
   kaapi_context_t* ctxt = kaapi_thread2context(thread);
   task->frame = ctxt->unlink;
   if (kaapi_taskflag_get(task, KAAPI_TASK_FLAG_INDEPENDENT) || (wc==0))
-    return kaapi_thread_push(thread, 0, task);
+    return kaapi_thread_push(thread, task);
   return -1;
 }
 
 
+#define LOG_AFF 0
 
+#define KAAPI_USE_AFFINITY     0
+#define KAAPI_USE_OCR_AFFINITY 0
 /* Affinity: compute the score of executing the task on the ressource ldid
   The algorithm returns a score for 4 criteria:
   0: size of data store in the ressource ldid
@@ -234,9 +230,10 @@ int32_t _kaapi_task_commit(kaapi_thread_t* thread, kaapi_task_t* task)
   3: size of data outside the ressources of the same type than ldid
   score must be of size 4 size_t.
 */
-int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* score)
+int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* score, int level)
 {
-#if KAAPI_USE_AFFINITY
+#if 1//KAAPI_USE_AFFINITY
+  int s = 0;
   /* look if task as affinity with one of the ressource */
   uint16_t lid0 = kaapi_memory_asid_get_lid(kaapi_local_asid);
   kaapi_localitydomain_t* ld_target = kaapi_localitydomain_get(ldid);
@@ -247,6 +244,7 @@ int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* 
   const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
   unsigned int count_params = kaapi_format_get_count_params(fmt, kaapi_task_getargs(task));
   
+  kaapi_assert((level>=1) && (level <=4));
   for (int i=0; i<4; ++i)
     score[i] = 0;
 
@@ -277,25 +275,24 @@ int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* 
           access,
           &view
       );
+    //else 
+    //  printf("Found access to metadata\n");
     
     if (mdi !=0)
     {
       /* set affinity for each valid replica */
-      KAAPI_MEMORY_VALUE_TYPE valid_bit= KAAPI_ATOMIC_READ(&mdi->valid);
-      valid_bit &= ~(1<<lid0);
-      while (valid_bit !=0)
+      for (int lid=0; lid< KAAPI_MEMORY_MAX_NODES; ++lid)
       {
-        KAAPI_MEMORY_VALUE_TYPE lid = KAAPI_MEMORY_FFS(valid_bit);
-        --lid;
         /* here: a way to implement info of matrix mapping is to allocate meta data replica without valid bit...
            thus we are first interesting to map task where 1/ it exists valid data and 2/ it exist replica, even if not valid
            This would also suppress the management in blas of mapping information within the matrix descriptor.
          */
-        if (kaapi_memory_replica_is_valid(mdi, lid))
+        if (kaapi_memory_replica_is_valid(mdi, lid)) //||kaapi_memory_replica_is_xfer(mdi,lid))
         {
           kaapi_localitydomain_t* ld = kaapi_localitydomain_get(lid+1);
           if (ld !=0)
           {
+            s =1;
             size_t sz = kaapi_memory_view_size(&mdi->replicas[lid]->view);
             if (ld ==ld_target)
               score[0] += sz;
@@ -305,11 +302,22 @@ int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* 
               score[3] += sz;
           }
         }
-        valid_bit &= ~(1<<lid);
       }
     }
+    else 
+    {
+      size_t sz = kaapi_memory_view_size(&view);
+      score[3] += sz;
+    }
   }
+
+#if LOG_AFF
+  printf("%p: task %p for ld %i  metadata score=[%i, %i, %i, %i]\n", pthread_self(), task, ldid, score[0], score[1], score[2], score[3]);
+#endif
+  for (int i=0; i<level; ++i)
+    if (score[i] >0) return 1;
 #endif // if AFFINITY
+  return 0;
 }
 
 /* Affinity: compute the best (=ldid with at least a write of the task, see IPDPS2013.
@@ -318,8 +326,6 @@ int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* 
 	- a task with most of its input on the device
 	- a task with inputs on the device close to the target device.
  */
-#define KAAPI_USE_AFFINITY     1
-#define KAAPI_USE_OCR_AFFINITY 1
 static kaapi_ldid_t kaapi_compute_best_ld( kaapi_task_t* task)
 {
   kaapi_ldid_t ldid = (kaapi_ldid_t)-1;
@@ -334,9 +340,11 @@ static kaapi_ldid_t kaapi_compute_best_ld( kaapi_task_t* task)
   const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
   unsigned int count_params = kaapi_format_get_count_params(fmt, kaapi_task_getargs(task));
   
-  size_t affinity[KAAPI_MEMORY_MAX_NODES];
+  size_t affinity_r[KAAPI_MEMORY_MAX_NODES];
+  size_t affinity_w[KAAPI_MEMORY_MAX_NODES];
+  size_t* affinity = 0;
   for (int i=0; i<KAAPI_MEMORY_MAX_NODES; ++i)
-    affinity[i] = 0;
+    affinity_r[i] = affinity_w[i] = 0;
 
   for(ith= 0; ith < count_params; ++ith)
   {
@@ -345,12 +353,11 @@ static kaapi_ldid_t kaapi_compute_best_ld( kaapi_task_t* task)
     if (mp & KAAPI_ACCESS_MODE_V)
       continue;
 
-#if KAAPI_USE_OCR_AFFINITY
-    if (!KAAPI_ACCESS_IS_WRITE(mp))
-      continue;
-#else
-    /* else affinity == best size of any task parameter */
-#endif
+    if (KAAPI_ACCESS_IS_WRITE(mp))
+      affinity = affinity_w;
+    else
+      affinity = affinity_r;
+
     /* do bind ptr to the device->asid */
     access = kaapi_format_get_access_param(fmt, (unsigned int)ith, kaapi_task_getargs(task));
     kaapi_format_get_view_param(fmt, (unsigned int)ith, kaapi_task_getargs(task), &view);
@@ -387,91 +394,141 @@ static kaapi_ldid_t kaapi_compute_best_ld( kaapi_task_t* task)
   }
 
   /* find max in affinity */
-  int lidmax = 0;
+  int lidmax_w = 0;
+  int lidmax_r = 0;
 
-  for (int i=1; i<KAAPI_MEMORY_MAX_NODES; ++i)
+#if LOG_AFF
+  char buff[256];
+  char* b=buff;
+  ssize_t s = sprintf(b,"%p: task %p affinity [", pthread_self(), task );
+  b+=s;
+#endif
+  for (int i=0; i<KAAPI_MEMORY_MAX_NODES; ++i)
   {
-    if (affinity[i] > affinity[lidmax])
-      lidmax = i;
+#if LOG_AFF
+    s = sprintf(b,"%i=%i/%i,", i+1,affinity_w[i],affinity_r[i]); b+= s;
+#endif
+    if (affinity_w[i] > affinity_w[lidmax_w])
+      lidmax_w = i;
+    if (affinity_r[i] > affinity_r[lidmax_r])
+      lidmax_r = i;
   }
+#if LOG_AFF
+  s = sprintf(b," ]\n"); b+= s;
+#endif
 
-  if (affinity[lidmax] !=0)
-  {
-    ldid = lidmax+1;
-   // printf("Push task %p on GPUs: %i\n", task, ldid );
+  ldid = (kaapi_ldid_t)-1;
+  if (affinity_w[lidmax_w] !=0)
+    ldid = lidmax_w+1;
+  else if (affinity_r[lidmax_r] !=0)
+    ldid = lidmax_r+1;
+  if (ldid != (kaapi_ldid_t)-1)
     kaapi_task_set_ld(task, 0, ldid );
-  }
+#if LOG_AFF
+  printf(buff);
+#endif
 #endif // if AFFINITY
   return ldid;
 }
 
 
 /* */
-#if KAAPI_DEBUG_LOW
-kaapi_atomic_t count_queue_push = {0};
-kaapi_atomic_t count_queue_all_push = {0};
-kaapi_atomic_t count_queue_fifo_push = {0};
-#endif
-int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_frame_t* frame, kaapi_task_t* task)
+int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
 {
   kaapi_context_t* ctxt = kaapi_thread2context(thread);
+  kaapi_assert(ctxt->ld !=0);
 
-#if KAAPI_DEBUG_LOW
-  kaapi_assert( pthread_equal( pthread_self(), ctxt->queue->owner ) );
-  KAAPI_ATOMIC_INCR(&count_queue_all_push);
-#endif
-
-  kaapi_ldid_t ldid = kaapi_compute_best_ld(task);
-
-  /* try to select locality domain where to push the task */
+#if 1//ROUND_ROBIN_BASIC if no locality
+  /* this restricted version for xkblas where only GPU tasks are defined */
+  kaapi_localitydomain_t* ld;
+  kaapi_ldid_t ldid = kaapi_task_get_ld(task);
   if (ldid == (kaapi_ldid_t)-1)
   {
-    /* take task affinity definition */
+    ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, ctxt->last_ldid++);
+    int count = kaapi_localitydomain_count(KAAPI_LD_GPU);
+    if (ctxt->last_ldid >= count) ctxt->last_ldid = 0;
+  }
+  else
+    ld = kaapi_localitydomain_get(ldid);
+
+  if (ld == ctxt->ld)
+    return
+      kaapi_queue_push(ctxt, task );
+  else
+    return 
+      kaapi_fifo_queue_push(
+          ld->queue,
+          task
+      );
+#else
+{
+  kaapi_ldid_t ldid = (kaapi_ldid_t)-1;
+
+  if (ctxt->ld->ldid !=1) 
+  {
     ldid = kaapi_task_get_ld(task);
-    
-#if 0 // code because device does not steal task and we are forced to push them on device queue
-    /* next if is only to push GPU task on GPU and not into the local queue */
+#if AFFINITY
     if (ldid == (kaapi_ldid_t)-1)
-    {
-      const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
-      if (kaapi_format_task_has_body_on_arch(fmt,KAAPI_PROC_TYPE_GPU))
-      {
-        unsigned int count = kaapi_localitydomain_count(KAAPI_LD_GPU);
-        ldid = kaapi_localitydomain_get_num(KAAPI_LD_GPU, rand() % count );
-        kaapi_task_set_ld(task, 0, (int)ldid );
-      }
-    }
+      ldid = kaapi_compute_best_ld(task);
 #endif
+#if LOG_AFF
+    printf("%p/ld %i: task %p best ld: %i\n", pthread_self(), ctxt->ld->ldid, task, ldid);
+#endif
+  
+    if ((ldid != (kaapi_ldid_t)-1) && (ctxt->ld->ldid != ldid))
+    {
+      kaapi_localitydomain_t* ld = kaapi_localitydomain_get(ldid);
+      kaapi_assert(ld !=0);
+      //if (task) printf("(1)push to:%p\n", ld->queue);
+#if LOG_AFF
+      printf("%p: (1) push task %p to ld: %i\n", pthread_self(), task, ldid);
+#endif
+      return kaapi_fifo_queue_push(
+          ld->queue,
+          task
+      );
+    }
+    else
+      return kaapi_queue_push(ctxt, task);
   }
 
-  kaapi_assert(ctxt->ld !=0);
-  if ((ldid != (kaapi_ldid_t)-1) && (ldid != ctxt->ld->ldid))
-  {
+  kaapi_assert(ctxt->ld->ldid ==1);
+#if 1
+  ldid = kaapi_task_get_ld(task);
+  if (ldid != (kaapi_ldid_t)-1)
+  {   
     kaapi_localitydomain_t* ld = kaapi_localitydomain_get(ldid);
     kaapi_assert(ld !=0);
-    if (frame ==0) frame = ctxt->unlink;
-    kaapi_assert_debug(frame !=0);
-#if KAAPI_DEBUG_LOW
-    KAAPI_ATOMIC_INCR(&count_queue_fifo_push);
-#endif
-    //if (task) printf("(1)push to:%p\n", ld->queue);
     return kaapi_fifo_queue_push(
         ld->queue,
-        frame,
         task
     );
   }
-  
-#if 1 // push into the shared NUMA queue
+#elif 0
+  {
+    static int id_gpu = 0;
+    int count = kaapi_localitydomain_count(KAAPI_LD_GPU);
+    //kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand() % count);
+    kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, id_gpu );
+kaapi_assert(ld !=0 );
+    ++id_gpu;
+    if (id_gpu >= count) id_gpu = 0;
+    return kaapi_fifo_queue_push(ld->queue, frame, task);
+  }
+#endif
+ 
   /* no locality domain: push in local work queue */
   //if (task) printf("(2)push to:%p\n", ctxt->ld->queue);
-  return kaapi_fifo_queue_push(ctxt->ld->queue, frame, task);
-#else
-  /* no locality domain: push in local work queue */
-  kaapi_assert_debug( ldid == ctxt->ld->ldid);
+  kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_NUMA, 0);
+#if LOG_AFF
+  printf("%p: (2) push task %p to ld: %i\n", pthread_self(), task, ld->ldid);
+#endif
   return kaapi_queue_push(ctxt, task);
+  //return kaapi_fifo_queue_push(ld->queue, task);
+}
 #endif
 }
+
 
 /*
 */
@@ -481,10 +538,6 @@ int32_t kaapi_queue_push(
 )
 {
   kaapi_queue_t* rd = ctxt->queue;
-#if KAAPI_DEBUG_LOW
-  KAAPI_ATOMIC_INCR(&count_queue_push);
-  KAAPI_ATOMIC_INCR(&rd->cnt_push);
-#endif
 
   unsigned int p = kaapi_task_get_priority(task);
   kaapi_assert_debug(p<= KAAPI_TASK_MAX_PRIORITY);
@@ -514,18 +567,12 @@ int32_t kaapi_queue_push(
    Else return 0;
    Never pop
 */
-#if KAAPI_DEBUG_LOW
-kaapi_atomic_t count_queue_pop = {0};
-#endif
 extern kaapi_task_t* kaapi_queue_pop(
     kaapi_context_t* owner,
     kaapi_queue_t* rd,
     int32_t* T0
 )
 {
-#if KAAPI_DEBUG_LOW
-  kaapi_assert( pthread_equal( pthread_self(), rd->owner ) );
-#endif
   uint32_t bitmap;
   int32_t p;
   int32_t T;
@@ -534,12 +581,6 @@ redo:
   bitmap = rd->bitmap;
   if (bitmap ==0)
   {
-#if KAAPI_DEBUG_LOW
-    for (int i=0; i<KAAPI_TASK_MAX_PRIORITY+1; ++i)
-    {
-      kaapi_assert(rd->T[i] == rd->H[i]);
-    }
-#endif
     return 0;
   }
   p = sizeof(int)*8 - __builtin_clz( bitmap )-1;
@@ -592,10 +633,6 @@ out:
     rd->bitmap &= ~(1U<<p);
     goto redo;
   }
-#if KAAPI_DEBUG_LOW
-  KAAPI_ATOMIC_INCR(&count_queue_pop);
-  KAAPI_ATOMIC_INCR(&rd->cnt_pop);
-#endif
   return task;
 }
 
@@ -604,9 +641,6 @@ out:
    Assume that mutex on queue is locked.
    Return 0 in case of failure, else return the task stolen
 */
-#if KAAPI_DEBUG_LOW
-kaapi_atomic_t count_queue_steal = {0};
-#endif
 static inline __attribute__((__always_inline__))
 kaapi_task_t* kaapi_queue_steal(
   kaapi_context_t* victim,
@@ -661,10 +695,6 @@ out:
   }
   *idx = H0;
   *prio = p;
-#if KAAPI_DEBUG_LOW
-  KAAPI_ATOMIC_INCR(&count_queue_steal);
-  KAAPI_ATOMIC_INCR(&rd->cnt_steal);
-#endif
   return task;
 }
 
@@ -943,6 +973,7 @@ kaapi_thread_t* kaapi_thread_bind(int proctype, size_t user_size)
   ctxt->tid    = KAAPI_ATOMIC_INCR(&_kaapi_thread_tid);
   ctxt->kid    = 0;
   ctxt->team   = 0;
+  ctxt->last_ldid = 0;
   kaapi_atomic_initlock(&ctxt->lock);
   ctxt->queue  = kaapi_data_push(&ctxt->thread, sizeof(kaapi_queue_t));
   kaapi_task_t** bloc0= malloc(sizeof(kaapi_task_t*)*QUEUE_DEFAULT_SIZE);
@@ -1290,7 +1321,8 @@ int kaapi_update_dependencies(
   a->sync = h->sync;
   a->ready= 0;
 
-  /* assume in this version, task not ready: activation of sync will make it ready */
+  /* assume in this version, task is not ready until activation of sync is done */
+  kaapi_writemem_barrier();
   KAAPI_ATOMIC_INCR(&h->sync->wc);
   KAAPI_ATOMIC_INCR(&task->wc);
   return 0;
@@ -1370,13 +1402,12 @@ redo:
 }
 
 
-/*
+/* Activate all tasks waiting the version from sync.
+   TOD: separate the version marker contains in kaapi_access_t.
 */
 uint32_t kaapi_sched_activate_syncpoint(
     kaapi_thread_t* thread,
-    kaapi_frame_t* frame,
-    kaapi_access_t* sync,
-    int freesync /* deprecated */
+    kaapi_access_t* sync
 )
 {
   kaapi_access_t* a;
@@ -1389,13 +1420,16 @@ uint32_t kaapi_sched_activate_syncpoint(
       a->ready = 1;
       if (KAAPI_ATOMIC_DECR(&a->task->wc)==0)
       {
-        a->task->frame = frame;
-        kaapi_thread_push(thread, frame, a->task);
+        kaapi_thread_push(thread, a->task);
+#if 0
+    const kaapi_format_t* fmt = kaapi_task_getformat_ref(a->task);
+    printf("  activate %p: %s\n", a->task, fmt->name );
+#endif
+
         ++activated;
       }
       a = a->next;
     }
-    if (freesync) free(sync);
   }
   return activated;
 }
@@ -1405,7 +1439,6 @@ uint32_t kaapi_sched_activate_syncpoint(
 */
 uint32_t kaapi_sched_activate_successors (
     kaapi_thread_t* thread,
-    kaapi_frame_t* frame,
     kaapi_task_t* task,
     void (*cbk)(kaapi_task_t*, unsigned int, kaapi_access_t*, uint64_t),
     uint64_t arg
@@ -1416,6 +1449,9 @@ uint32_t kaapi_sched_activate_successors (
   {
     const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
     unsigned int count_params = kaapi_format_get_count_params(fmt, kaapi_task_getargs(task));
+#if 0
+printf(">>>>>>>>end task %p: %s\n", task, fmt->name );
+#endif
     for (unsigned int i=0; i<count_params; ++i)
     {
       kaapi_access_mode_t mode = kaapi_format_get_mode_param(fmt, i, kaapi_task_getargs(task));
@@ -1425,8 +1461,11 @@ uint32_t kaapi_sched_activate_successors (
       kaapi_access_t* a  = kaapi_format_get_access_param( fmt, i, kaapi_task_getargs(task));
       if (cbk) cbk(task, i, a, arg);
 
-      activated += kaapi_sched_activate_syncpoint( thread, frame, a->sync, 0 );
+      activated += kaapi_sched_activate_syncpoint( thread, a->sync );
     }
+#if 0
+printf("<<<<<<<<end task %p: %s\n", task, fmt->name );
+#endif
   }
   
   return activated;
@@ -1510,7 +1549,7 @@ exec_start:
          - it could be best to keep this order by 1/ pushing into local list
          2/ then appening the lists togethers
       */
-      kaapi_sched_activate_successors(thread, unlink, task, 0, 0);
+      kaapi_sched_activate_successors(thread, task, 0, 0);
     }
   } while (1);
 

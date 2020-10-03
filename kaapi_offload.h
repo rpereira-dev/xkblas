@@ -91,36 +91,46 @@ typedef struct  {
    a communication stream between host and the ressource
 */
 struct kaapi_device {
-    kaapi_memory_device_t    memdev;     /* casted to kaapi_device */
-    kaapi_offload_stream_t   stream;     /* communication streams host<->device */
-    kaapi_localitydomain_t*  ld;         /* the device locality domain */
-    kaapi_context_t*         ctxt;       /* running thread */
-    kaapi_atomic_t           cnt_push;   /* number of times the ressource is pushed */
-    unsigned int             device_id;  /* Internal id for a specific device type (ordering) */
-    pthread_t                tid;
-    struct kaapi_driver*     driver;
-    uint64_t                 spawn_count;   /* number of tasks */
-    uint64_t                 exec_count;    /* number of tasks completed */
-    int volatile             finalize;      /* true iff driver stop device */
-    int                      is_initialized;/* True if driver is initialized */
+    kaapi_memory_device_t       memdev;     /* casted to kaapi_device */
+    kaapi_offload_stream_t      stream;     /* communication streams host<->device */
+    kaapi_localitydomain_t*     ld;         /* the device locality domain */
+    kaapi_context_t*            ctxt;       /* running thread */
+    kaapi_atomic_t              cnt_push;   /* number of times the ressource is pushed */
+    unsigned int                device_id;  /* Internal id for a specific device type (ordering) */
+    pthread_t                   tid;
+    struct kaapi_driver*        driver;
+    uint64_t                    spawn_count;   /* number of tasks */
+    uint64_t                    exec_count;    /* number of tasks completed */
+    int volatile                finalize;      /* true iff driver stop device */
+    int                         is_initialized;/* True if driver is initialized */
     kaapi_offload_perfcounter_t perfcnt; /* */
-    const char*              name;          /* Device name */
-    void*                    handle;        /* device handle, e.g. cublas handle for GPU*/
+    const char*                 name;          /* Device name */
+    void*                       handle;        /* device handle, e.g. cublas handle for GPU*/
 
-    pthread_mutex_t          lock;          /* used to synchronize device thread */
-    pthread_cond_t           cond;          /* and cpu threads if any */
-    pthread_cond_t           cond_sleep;    /* and cpu threads if any */
-    int                      issleeping;    /* */
+    pthread_mutex_t             lock;          /* used to synchronize device thread */
+    pthread_cond_t              cond;          /* and cpu threads if any */
+    pthread_cond_t              cond_sleep;    /* and cpu threads if any */
+    int                         issleeping;    /* */
     struct {
-      kaapi_device_op_t      op;            /* op request for the device */
+      kaapi_device_op_t      op;            /* op request for a device */
       uintptr_t              arg;
       kaapi_atomic64_t*      counter;       /* for MEMSYNC or WRITEBACK request */
       int                    err;           /* error returned by the request */
     } request;
-
-    size_t  cnt_pending;                     /* number of tasks waiting for data */
-    size_t  cnt_ready;                       /* number of ready tasks inserted into cuda stream */
-    size_t  cnt_exec;                        /* number of tasks executed */
+  
+#if KAAPI_PIPELINE_GPUTASK
+    /* pipline: a way to enforce execution order of kernel to device */
+    pthread_mutex_t             pipe_lock __attribute__((aligned(KAAPI_CACHE_LINE_SIZE)));
+    uint64_t                    pipe_size;
+    kaapi_task_t**              pipeline;      /* circular buffer to store pipeline of task to run on the device */
+    uint64_t                    p_write;       /* next position in the pipeline to write a new task */
+    uint64_t                    p_ready;       /* position of the first ready task submitted to stream but not yet tested finish */
+    uint64_t                    p_finish;      /* position in the stream of the next task to finish */
+#endif
+  
+    kaapi_atomic16_t            cnt_pending;   /* number of tasks waiting for data (not too much) */
+    kaapi_atomic16_t            cnt_ready;     /* number of ready tasks inserted into device stream  (not too much) */
+    kaapi_atomic32_t            cnt_exec;      /* number of tasks executed */
 };
 
 
@@ -207,7 +217,6 @@ extern kaapi_device_t* kaapi_offload_get_host_device(void);
 */
 extern int kaapi_offload_device_execute_task(
      kaapi_device_t* const device,
-     kaapi_frame_t* frame, /* to signal */
      kaapi_task_t* task,   /* task was pushed in the context of 'frame' */
      void* handle
 );
@@ -377,17 +386,20 @@ extern int kaapi_offload_poll_devices(void);
  */
 extern void kaapi_offload_set_current_device( kaapi_device_t* device);
 
-/** \ingroup Offload
- * Return the current device
- */
-extern kaapi_device_t* kaapi_offload_get_current_device(void);
-
-/* Return 1 iff device may accept new runing offloaded task 
+/* Return 1 iff device may accept new runing offloaded task
  */
 static inline int kaapi_offload_device_accept_new_task( kaapi_device_t* device )
 {
-  if ((device !=0) && (device->cnt_ready < kaapi_default_param.cuda_conc_stream_kernel*kaapi_default_param.cuda_conc_kernel))
-    return 1;
+#if KAAPI_PIPELINE_GPUTASK
+  if (device !=0)
+    return (device->p_write - device->p_finish) < device->pipe_size;
+#else
+#if 0
+  return (KAAPI_ATOMIC_READ(&device->cnt_ready) + KAAPI_ATOMIC_READ(&device->cnt_pending)) <= kaapi_default_param.cuda_conc_kernel;
+#else
+  return (KAAPI_ATOMIC_READ(&device->cnt_pending)) <= kaapi_default_param.cuda_conc_kernel;
+#endif
+#endif
   return 0;
 }
 #endif // #if defined(KAAPI_USE_OFFLOAD)

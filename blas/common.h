@@ -115,7 +115,8 @@ struct xkblas_context {
   kaapi_hashmap_t         xkblas_ptr2handle;
   kaapi_hashentries_t*    xkblas_mapentries[1ULL<<KAAPI_SIZE_DSM_MAP];
 
-  kaapi_handle_t*         xkblas_list_sync0; /* re-used unused sync0->sync field as ptr to handle */
+  kaapi_handle_t*         xkblas_list_sync0;      /* re-used unused sync0->sync field as ptr to handle */
+  kaapi_handle_t*         xkblas_list_sync0_tail; /* re-used unused sync0->sync field as ptr to handle */
   uint32_t                xkblas_generation_cache;
   xkblas_matrix_descr_t*  xkblas_matrix_descr_list;
   xkblas_mode_math_t      xkblas_modemath;

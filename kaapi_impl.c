@@ -119,6 +119,15 @@ static kaapi_counter_info_t kaapi_name_counter[] = {
   {0, "Cuda Pin", "s", 1, 0},
   {0, "Cuda Unpin", "s", 1, 0},
   {0, "Overhead pin", "s", 1, 0},
+#if KAAPI_PIPELINE_GPUTASK
+  {1, "Reorder hit", 0, 0, 0},
+  {1, "Reorder miss", 0, 0, 0},
+  {1, "Reorder miss len", 0, 0, 0},
+#else
+  {0, "Reorder hit", 0, 0, 0},
+  {0, "Reorder miss", 0, 0, 0},
+  {0, "Reorder miss len", 0, 0, 0},
+#endif
   {0, "", "", 0, 0}
 };
 
@@ -273,7 +282,10 @@ int kaapi_setup_param(void)
   if (getenv("KAAPI_CUDA_KERNEL_PER_STREAM"))
   {
     uint8_t cuda_conc_kernel = (uint8_t )atoi(getenv("KAAPI_CUDA_KERNEL_PER_STREAM"));
-    if (cuda_conc_kernel  < 1) cuda_conc_kernel = 1;
+    if (cuda_conc_kernel  < 1) 
+    {
+      cuda_conc_kernel = 1;
+    }
     kaapi_default_param.cuda_conc_kernel = cuda_conc_kernel;
   }
 

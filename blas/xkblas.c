@@ -97,6 +97,7 @@ xkblas_context_t* xkblas_context_alloc(void)
     int err = kaapi_hashmap_init(&ctxt->xkblas_ptr2handle, ctxt->xkblas_mapentries, KAAPI_SIZE_DSM_MAP, 0);
     kaapi_assert(err ==0);
     ctxt->xkblas_list_sync0 = 0;
+    ctxt->xkblas_list_sync0_tail = 0;
     ctxt->xkblas_generation_cache = 0;
     ctxt->xkblas_matrix_descr_list = 0;
     ctxt->xkblas_modemath = xkblas_default_math;
@@ -271,8 +272,17 @@ int xkblas_init_matrix_handle( xkblas_matrix_descr_t* Ah,
 char* name =kaapi_dbg_get_name(Ah);
 printf("New handle (%i,%i) / %s\n",m,n, name == 0 ? "" : name );
 #endif
+#if 1
+      handle->sync0.sync = 0;
+      if (ctxt->xkblas_list_sync0_tail !=0)
+        ctxt->xkblas_list_sync0_tail->sync0.sync = (kaapi_access_t*)handle;
+      else
+        ctxt->xkblas_list_sync0 = handle;
+      ctxt->xkblas_list_sync0_tail = handle;
+#else
       handle->sync0.sync = (kaapi_access_t*)ctxt->xkblas_list_sync0;
       ctxt->xkblas_list_sync0 = handle;
+#endif
       Ah->ldid[m*Ah->nt+n] = 0;
     }
 
@@ -311,18 +321,27 @@ uint16_t xkblas_get_ld(
   kaapi_metadata_info_t* mdi = h->last->mdi;
   if (mdi !=0)
   {
-    lid = _kaapi_get_source_lid( &kaapi_the_dsm, mdi, 0, 0 );
-    if ((lid ==lid0) && (count >0))
-      lid = kaapi_localitydomain_get_num(KAAPI_LD_GPU, rand()%count);
-    goto retval;
+    int idxvalid[KAAPI_MEMORY_MAX_NODES];
+    int count = 0;
+    KAAPI_MEMORY_VALUE_TYPE valid_bit= KAAPI_ATOMIC_READ(&mdi->valid);
+    valid_bit &= ~(1<<lid0);
+    while (valid_bit !=0)
+    {
+      KAAPI_MEMORY_VALUE_TYPE lid = KAAPI_MEMORY_FFS(valid_bit);
+      --lid;
+      /* here: a way to implement info of matrix mapping is to allocate meta data replica without valid bit...
+         thus we are first interesting to map task where 1/ it exists valid data and 2/ it exist replica, even if not valid
+         This would also suppress the management in blas of mapping information within the matrix descriptor.
+       */
+      if (kaapi_memory_replica_is_valid(mdi, lid))
+        idxvalid[count++] = lid;
+      valid_bit &= ~(1<<lid);
+    }
+    if (count ==1)
+      return 1+idxvalid[0];  
+    else if (count >0)
+      return 1+idxvalid[rand() % count];  
   }
-
-#if 0//
-  if (count >0)
-    lid = kaapi_localitydomain_get_num(KAAPI_LD_GPU, rand()%count);
-  else
-    lid = lid0;
-#endif
   lid = (uint16_t)-1;
 
 retval:
@@ -612,6 +631,52 @@ int xkblas_map_1Dblock_cyclic(
   abort();
 #endif
   return EINVAL;
+}
+
+
+int xkblas_map_cyclic(
+  int hlevel, int storage, size_t m, size_t n,
+  const void* A, size_t lda, size_t eltsize,
+  int force
+)
+{
+  xkblas_matrix_descr_t* Ah = xkblas_find(A);
+  if (!xkblas_matrix_descr_isinit(Ah)) return EINVAL;
+
+  kaapi_ld_type_t type;
+  switch (hlevel) {
+    case 0: type = KAAPI_LD_BOARD; break;
+    case 1: type = KAAPI_LD_GPU; break;
+    case 2: type = KAAPI_LD_CORE; break;
+    default:
+      printf("[%s] unknown type, returns immediatly\n", __func__);
+#if KAAPI_DEBUG
+      abort();
+#endif
+      return EINVAL;
+  };
+
+  unsigned int count = kaapi_localitydomain_count(type);
+  if (count ==0) return EINVAL;
+
+  size_t Amt = Ah->mt;
+  size_t Ant = Ah->nt;
+  char* ptr = (char*)A;
+  void* addr;
+
+  for (size_t i=0; i<Amt; ++i)
+  {
+    for (size_t j=0; j<Ant; ++j)
+    {
+      uint16_t ldid = xkblas_get_ldid(Ah, i, j );
+      if ((ldid ==0) || force)
+      {
+        int r = (i*Ant+j)%count;
+        xkblas_set_ldid(Ah, i, j, ldid = 1+kaapi_localitydomain_get_num(type, r));
+      }
+    }
+  }
+  return 0;
 }
 
 
@@ -1288,8 +1353,8 @@ int xkblas_finalize(void)
     printf("\t Global counters on GPU(s):\n");
     kaapi_print_counter();
     printf("[XKBlas stats]\n");
-#endif
   }
+#endif
 }
 
 
@@ -1314,7 +1379,7 @@ int xkblas_sync(void)
 #if KAAPI_DEBUG
       count += 
 #endif
-        kaapi_sched_activate_syncpoint(xk_ctxt->kthread, ctxt->unlink, &curr->sync0, 0);
+        kaapi_sched_activate_syncpoint(xk_ctxt->kthread, &curr->sync0);
 #if KAAPI_DEBUG
       ++cnt_activated_handle;
 #endif
@@ -1336,10 +1401,12 @@ int xkblas_sync(void)
   xkblas_free_curr_blochandle();
   kaapi_hashmap_clear(&xk_ctxt->xkblas_ptr2handle);
   xk_ctxt->xkblas_list_sync0 = 0;
+  xk_ctxt->xkblas_list_sync0_tail = 0;
 #else
   /* reset all entries in ctxt->xkblas_list_sync0 */
   curr = xk_ctxt->xkblas_list_sync0;
   xk_ctxt->xkblas_list_sync0 = 0;
+  xk_ctxt->xkblas_list_sync0_tail = 0;
   while (curr != 0)
   {
     kaapi_handle_t* next = (kaapi_handle_t*)curr->sync0.sync;
@@ -1367,6 +1434,7 @@ int xkblas_memory_invalidate_caches(void)
   xkblas_free_curr_blochandle();
   kaapi_hashmap_clear(&_kblas_ptr2handle);
   ctxt->xkblas_list_sync0 = 0;
+  ctxt->xkblas_list_sync0_tail = 0;
 #else
   ++ctxt->xkblas_generation_cache;
 
@@ -1424,12 +1492,14 @@ int xkblas_memory_free(void)
   }
   /* kaapi_handle_t are store in matrix descriptor */
   ctxt->xkblas_list_sync0 = 0;
+  ctxt->xkblas_list_sync0_tail = 0;
   kaapi_hashmap_clear(&ctxt->xkblas_ptr2handle);
 
 #if OLD_FLUSH //see just above
   xkblas_free_curr_blochandle();
   kaapi_hashmap_clear(&ctxt->xkblas_ptr2handle);
   ctxt->xkblas_list_sync0 = 0;
+  ctxt->xkblas_list_sync0_tail = 0;
 #endif
 }
 
@@ -1556,7 +1626,7 @@ int xkblas_memory_invalidate_async(const void* A)
    If matrix is not found return EINVAL
 */
 int xkblas_distribute_2Dblock_cyclic_async(
-  int hlevel, int storage, size_t NB,
+  int hlevel, int storage, int uplo, size_t NB,
   size_t m, size_t n, const void* A, size_t lda, size_t eltsize,
   size_t Bp, size_t Bq, /* blocking size */
   size_t Gp, size_t Gq  /* grid size */
@@ -1589,15 +1659,24 @@ int xkblas_distribute_2Dblock_cyclic_async(
   char* ptr = (char*)A;
   void* addr;
 
+#if 0
+  printf("Distribute on grid: %i x %i\n", Gp, Gq);
+#endif
   for (size_t i=0; i<Amt; ++i)
   {
     for (size_t j=0; j<Ant; ++j)
     {
       int r = ( ((i/Bp)%Gp)*Gq + (j/Bq)%Gq ) %count;
+#if 0
+printf("%i ", r );
+#endif
       uint16_t ldid = kaapi_localitydomain_get_num(type, r);
       xkblas_create_distribute( Ah, i, j, lda, eltsize, ldid );
       xkblas_set_ldid(Ah, i, j, 1+ldid );
     }
+#if 0
+printf("\n");
+#endif
   }
   return 0;
 }
@@ -1609,7 +1688,7 @@ int xkblas_distribute_2Dblock_cyclic_async(
    colrow = 1 -> row mapping
 */
 int xkblas_distribute_1Dblock_cyclic_async(
-  int hlevel, int storage, int colrow, size_t NB, 
+  int hlevel, int storage, int uplo, int colrow, size_t NB, 
   size_t m, size_t n, const void* A, size_t lda, size_t eltsize,
   size_t B, size_t G    /* grid size */
 )
@@ -1619,7 +1698,7 @@ int xkblas_distribute_1Dblock_cyclic_async(
   if (colrow == 0)
   {
     return xkblas_distribute_2Dblock_cyclic_async(
-      hlevel, storage, NB, m, n, A, lda, eltsize,
+      hlevel, storage, uplo, NB, m, n, A, lda, eltsize,
       (m+MB-1)/MB, B,
       1, G
     );
@@ -1627,7 +1706,7 @@ int xkblas_distribute_1Dblock_cyclic_async(
   else
   {
     return xkblas_distribute_2Dblock_cyclic_async(
-      hlevel, storage, NB, m, n, A, lda, eltsize,
+      hlevel, storage, uplo, NB, m, n, A, lda, eltsize,
       B, (n+NB-1)/NB,
       G, 1
     );
@@ -1661,7 +1740,7 @@ size_t xkblas_auto_tilesize(
       size_t NB = xkblas_get_param();
       if (NB !=0) return NB;
 
-    #define FACTOR 4
+    #define FACTOR 2
 #if 0
       size_t ngpu = xkblas_get_ngpus();
       double tNB = ((double)M*(double)N) / (double)(ngpu * FACTOR);
@@ -1702,18 +1781,96 @@ size_t xkblas_auto_tilesize(
       //if (NB <896) NB = 896;
 //printf("Tilesize: %i\n",NB);
       return NB;
-#elif 1
+#elif 0 // all bench ipdps
       size_t ngpu = xkblas_get_ngpus();
       size_t fact = ngpu/2;
       if (fact ==0) fact = 1;
       if (M<N) N =M;
       size_t tNB = ((double)N) / (double)fact;
-      size_t k =  tNB / (4096/fact);
+      size_t k =  tNB / (8192/fact);
       if (k ==0) NB = N / fact;
       else NB = N / (k * fact);
       NB = (NB + 255) & ~255UL;
       if (NB <512) NB = 512;
       //if (NB <896) NB = 896;
+printf("Mat size: %i tilesize: %i\n",(int)M, NB);
+      return NB;
+#elif 0 // job-12 
+      size_t ngpu = xkblas_get_ngpus();
+      double tNB = M / (ngpu);
+      NB = (size_t)tNB;
+      if (NB >=3000) NB = M / (2*ngpu);
+      if (NB <512) NB = 512;
+      NB = (NB + 63) & ~63UL;
+printf("Mat size: %i tilesize: %i\n",(int)M, NB);
+      return NB;
+#elif 0
+      size_t ngpu = xkblas_get_ngpus();
+      size_t fact = 1;
+      if (M<=23*1024)
+        fact = 2;
+      else if ((kernel != KERN_SYMM)||(kernel != KERN_SYRK)||(kernel != KERN_SYR2K))
+        fact = 4;
+      double tNB = M / (fact*ngpu);
+      NB = (size_t)tNB;
+      //if ((kernel != KERN_SYMM)||(kernel != KERN_SYRK)||(kernel != KERN_SYR2K))
+      //{
+      if (NB >=4096) NB = M / (2*fact*ngpu);
+      //}
+      if (NB <512) NB = 512;
+      NB = (NB + 63) & ~63UL;
+printf("Mat size: %i tilesize: %i\n",(int)M, NB);
+      return NB;
+#elif 0
+      size_t ngpu = xkblas_get_ngpus();
+      size_t fact = 1;
+      if (M<=23*1024)
+        fact = 2;
+      double tNB = M / (fact*ngpu);
+      NB = (size_t)tNB;
+      if ((kernel == KERN_SYMM)||(kernel == KERN_SYR2K)||(kernel == KERN_TRSM)||(kernel == KERN_TRMM))
+      {
+        if (NB >=2800) NB = M / (4*fact*ngpu);
+      } 
+      else
+      {
+        if (NB >=4096) NB = M / (2*fact*ngpu);
+      } 
+      if (NB <1024) NB = 1024;
+      NB = (NB + 63) & ~63UL;
+printf("Mat size: %i tilesize: %i\n",(int)M, NB);
+      return NB;
+#elif 1 // FINAL IPDPS ???
+      size_t ngpu = xkblas_get_ngpus();
+      size_t fact = 2;
+      if (kernel == KERN_SYRK)
+      {
+        fact = 4;
+        NB = M / (fact*ngpu);
+        if (NB >3000) NB = M / (2*fact*ngpu);
+      }
+      else if (kernel == KERN_SYR2K)
+      {
+        fact = 4;
+        NB = M / (fact*ngpu);
+        if (NB >3000) NB = M / (2*fact*ngpu);
+      }
+      else if (kernel == KERN_SYMM)
+      {
+        fact = 2;
+        NB = M / (fact*ngpu);
+        if (NB >3000) NB = M / (2*fact*ngpu);
+      } 
+      else if ((kernel == KERN_TRSM)||(kernel == KERN_TRMM))
+      {
+        fact = 2;
+        NB = M / (fact*ngpu);
+      }
+      else  
+        NB = M / (fact*ngpu);
+        if (NB >=4096) NB = M / (2*fact*ngpu);
+      if (NB <1024) NB = 1024;
+      NB = (NB + 63) & ~63UL;
 printf("Mat size: %i tilesize: %i\n",(int)M, NB);
       return NB;
 #elif 0
@@ -1725,7 +1882,7 @@ printf("Mat size: %i tilesize: %i\n",(int)M, NB);
   	Rfit = Rfit +4;
         BSfit = floor((N/Rfit+ALIGN-1)/ALIGN)*ALIGN;
       }
-printf("Mat size: %i tilesize: %i\n",(int)M, BSfit);
+printf("DSMat size: %i tilesize: %i\n",(int)N, (int)BSfit);
       return BSfit;
 #endif
     };
@@ -1807,20 +1964,20 @@ printf("%s\n",buffer);
         0
       );
       break;
-      xkblas_map_1Dblock_cyclic(
-        1, CblasColMajor, 0,
+      xkblas_map_cyclic(
+        1, CblasColMajor,
         Ah->M, Ah->N, Ah->addr, Ah->ld, Ah->eltsize,
-        1, xkblas_get_ngpus(), 0
+        0
       );
       break;
 #endif
-    case KERN_GEMM:
     case KERN_SYMM:
-    case KERN_GEMMT:
+    case KERN_GEMM:
     case KERN_SYRK:
+    case KERN_TRMM:
+    case KERN_GEMMT:
     case KERN_SYR2K:
     case KERN_TRSM:
-    case KERN_TRMM:
     case KERN_HEMM:
     case KERN_HERK:
     case KERN_HER2K:

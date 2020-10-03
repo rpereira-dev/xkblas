@@ -307,7 +307,6 @@ static char* name_io[] = {
       struct kaapi_io_kernel* op = &instr->inst.k_io;
       err = kaapi_offload_device_execute_task(
         device,
-        op->frame,
         op->task,
         0
       );

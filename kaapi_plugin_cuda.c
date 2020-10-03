@@ -546,6 +546,7 @@ static uintptr_t cuda_alloc(kaapi_memory_device_t* dev, size_t size, int* flag)
   {
     printf(" CUDA_ERROR_OUT_OF_MEMORY:: free %li, request: %li\n", cuda_get_free_mem(dev), size);
     if (flag) *flag = KAAPI_MEMORY_DEVICE_FLAG_FULL;
+    kaapi_assert(0);
     return 0;
   }
   CudaCheckError(res);
@@ -597,7 +598,8 @@ static void cuda_free(kaapi_memory_device_t* dev, uintptr_t ptr, size_t size)
 }
 
 
-/*
+/* Implementation of kaapi_memory_copy_async through f_copy interface of memory device.
+    
 */
 static int cuda_copy(
     kaapi_memory_device_t* dev,
@@ -609,10 +611,11 @@ static int cuda_copy(
 )
 {
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev->device;
+  kaapi_assert_debug( &device->inherited == kaapi_offload_self_device() );
+
 #if _PLUGIN_DEBUG
   fprintf(stdout, "cuda:%s: device %d init\n", __FUNCTION__, device->inherited.device_id);
 #endif
-
 
 #if _PLUGIN_DEBUG
   CUcontext ctx;
@@ -678,14 +681,16 @@ static int cuda_copy(
 #else
     tstream = KAAPI_IO_STREAM_H2D;
 #endif
-#if KAAPI_USE_PERFCOUNTER
+# if KAAPI_USE_PERFCOUNTER
     ++kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYD2D];
     kaapi_perthread_stat[device->inherited.ctxt->tid].counter[KAAPI_CNT_CPYD2D_BYTES] +=
       kaapi_memory_view_size( view_dest );
-#endif
+# endif
   }
 
   /* verify iff all inputs are in local node */
+  kaapi_assert_debug( device->inherited.stream.device == &device->inherited );
+
   kaapi_stream_insert_io_copy_inst(
       &device->inherited.stream,
       tstream,
@@ -1210,7 +1215,6 @@ static int cuda_stream_decode_ioinstruction(
               kaapi_assert_debug(0);
           };
           CudaCheckError(res);
-          //kaapi_assert(res == CUDA_SUCCESS);
         } break;
 
         case KAAPI_MEMORY_VIEW_2D:
@@ -1230,9 +1234,6 @@ static int cuda_stream_decode_ioinstruction(
               pcopy.srcHost       = src;
               pcopy.dstMemoryType = CU_MEMORYTYPE_HOST;
               pcopy.dstHost       = dest;
-#if LOG_DBG
-              printf("%s: pos: %i, instr '%s' 2D data: src:%p, dest:%p, size:%i\n", __FUNCTION__, ios->pos_r, name_io[instr->type], (void*)src, (void*)dest, (int)size);
-#endif
             break;
             case KAAPI_IO_COPY_H2D:
               pcopy.srcMemoryType = CU_MEMORYTYPE_HOST;
@@ -1241,9 +1242,6 @@ static int cuda_stream_decode_ioinstruction(
               pcopy.dstDevice     = (CUdeviceptr)dest;
               COUNTER_CNT_H2D++;
               COUNTER_SIZE_H2D   += size;
-#if LOG_DBG
-              printf("%s: pos: %i, instr '%s' 2D data: src:%p, dest:%p, size:%i\n", __FUNCTION__, ios->pos_r, name_io[instr->type], (void*)src, (void*)dest, (int)size);
-#endif
             break;
             case KAAPI_IO_COPY_D2H:
               pcopy.srcMemoryType = CU_MEMORYTYPE_DEVICE;
@@ -1252,9 +1250,6 @@ static int cuda_stream_decode_ioinstruction(
               pcopy.dstHost       = dest;
               COUNTER_CNT_D2H++;
               COUNTER_SIZE_D2H   += size;
-#if LOG_DBG
-              printf("%s: pos: %i, instr '%s' 2D data: src:%p, dest:%p, size:%i\n", __FUNCTION__, ios->pos_r, name_io[instr->type], (void*)src, (void*)dest, (int)size);
-#endif
             break;
             case KAAPI_IO_COPY_D2D:
               pcopy.srcMemoryType = CU_MEMORYTYPE_DEVICE;
@@ -1263,9 +1258,6 @@ static int cuda_stream_decode_ioinstruction(
               pcopy.dstDevice     = (CUdeviceptr)dest;
               COUNTER_CNT_D2D++;
               COUNTER_SIZE_D2D   += size;
-#if LOG_DBG
-              printf("%s: pos: %i, instr '%s' 2D data: src:%p, dest:%p, size:%i\n", __FUNCTION__, ios->pos_r, name_io[instr->type], (void*)src, (void*)dest, (int)size);
-#endif
             break;
             default:
               kaapi_assert(0);
@@ -1283,7 +1275,6 @@ static int cuda_stream_decode_ioinstruction(
             kaapi_abort( __LINE__, __FILE__, "Invalid storage");
           }
 
-//printf("%s:: copy: %p->%p ~~ srcPitch:%i, destPich:%i, Width:%i, Height:%i\n",__func__, src, dest, pcopy.srcPitch, pcopy.dstPitch, pcopy.WidthInBytes, pcopy.Height);
           res = cuMemcpy2DAsync( &pcopy, *stream );
           CudaCheckErrorWithDump(res, 
             printf("%p:: tid: %i,  type: %s, %p -> %p, size:%i\n", 
@@ -1306,7 +1297,6 @@ static int cuda_stream_decode_ioinstruction(
 #elif CONFIG_USE_EVENT 
       res = cuEventRecord( cios->end_events[ ios->pos_wp % ios->count ], *stream );
       CudaCheckError(res);
-      //printf("End event recorded for IO %s at pos: %i\n", name_io[instr->type], ios->pos_wp );
 #else // no use event, no synchronous == synchronous
       #error "Unsupported configuration"
 #endif
@@ -1342,9 +1332,6 @@ static int cuda_stream_decode_ioinstruction(
       );
 #if KAAPI_USE_PERFCOUNTER
       instr->t1 = kaapi_get_elapsedtime();
-#if 0
-printf("Kernel start at: %f\n", instr->t1 );
-#endif
 #if CONFIG_USE_EVENT
       res = cuEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
       kaapi_assert(res == CUDA_SUCCESS);
@@ -1352,7 +1339,6 @@ printf("Kernel start at: %f\n", instr->t1 );
 #endif
       kaapi_offload_device_execute_task(
         &device->inherited,
-        op->frame,
         op->task,
         cios->handle
       );
@@ -1401,65 +1387,30 @@ static int cuda_stream_advance_pending(
     return 0;
   }
 
-#if 1//OLD_IMPL
-  /* ios->ok_p is past the last ok pending request: test from ok_p to pos_wp */
-  while (ios->ok_p < ios->pos_wp)
+  size_t len_p = kaapi_io_stream_sizepending(ios);
+
+#if 0 // best
+  int queue_max[4];
+  queue_max[KAAPI_IO_STREAM_H2D]  = 9; 
+  queue_max[KAAPI_IO_STREAM_KERN] = 2; //kaapi_default_param.cuda_conc_kernel; 
+  queue_max[KAAPI_IO_STREAM_D2H]  = 6; 
+#if KAAPI_USE_STREAM_D2D
+  queue_max[KAAPI_IO_STREAM_D2D]  = 4; 
+#endif
+  if ((len_p >1) && (len_p> queue_max[ios->type]))
   {
-    int idx = ios->ok_p % ios->count;
-    kaapi_io_instruction_t* op = &ios->pending[idx];
-    res = CUDA_SUCCESS;
-    switch (op->type)
-    {
-      case KAAPI_IO_KERN:
-      case KAAPI_IO_COPY_H2H:
-      case KAAPI_IO_COPY_H2D:
-      case KAAPI_IO_COPY_D2H:
-      case KAAPI_IO_COPY_D2D:
-        res = cuEventQuery( cios->end_events[idx] );
-        kaapi_assert((res == CUDA_ERROR_NOT_READY)  || (res == CUDA_SUCCESS));
-        if (res == CUDA_ERROR_NOT_READY)
-          return EINPROGRESS;
-#if KAAPI_USE_PERFCOUNTER
-        op->t2 = kaapi_get_elapsedtime();
-#if 0
- if (op->type == KAAPI_IO_KERN)
-   printf("Kernel stop at: %f, delay: %f\n", op->t2,  op->t2-op->t1 );
-#endif
-#  if KAAPI_DEBUG 
-        res = cuEventQuery( cios->start_events[idx] );
-        kaapi_assert(res == CUDA_SUCCESS);
-#  endif
-#endif
-#if LOG_DBG
-        printf("%s:: instruction pos:%i, instr '%s' ok\n", __func__, ios->ok_p,  name_io[op->type]);
-#endif
-
-      case KAAPI_IO_END:
-      case KAAPI_IO_BARRIER:
-      case KAAPI_IO_NOP:
-        ++ios->ok_p;
-        break;
-
-      default:
-        fprintf(stderr, "%i:: bad instruction type at pos:%li\n", device->ld->idx, ios->ok_p);
-        kaapi_assert(0);
-        break;
-    }
+    int shift = 0; //(ios->type == KAAPI_IO_STREAM_KERN ? 0: len_p/2-1);
+    int idx = (ios->ok_p + shift)% ios->count;
+    res = cuEventSynchronize(cios->end_events[idx]);
   }
-  return 0;
-#else //NEW_IMPL//
+#endif
   /* ios->ok_p is past the last ok pending request: test from ok_p to pos_wp */
-  int count_test = 2;
-redo:
-  if (--count_test ==0) return 0;
-
-  uint64_t curr = ios->ok_p;
-  uint64_t len = ios->pos_wp - ios->ok_p;
-  if (len == 0) return 0;
-  for (uint64_t i = 0; i < len; ++i)
+  int cnt;
+  uint64_t ios_okp = ios->ok_p; 
+  int prev_iosokp = ios_okp-1;
+  while (ios_okp < ios->pos_wp)
   {
-    curr = ios->pos_wp - 1 - i; 
-    int idx = curr % ios->count;
+    int idx = ios_okp % ios->count;
     kaapi_io_instruction_t* op = &ios->pending[idx];
     res = CUDA_SUCCESS;
     switch (op->type)
@@ -1469,60 +1420,46 @@ redo:
       case KAAPI_IO_COPY_H2D:
       case KAAPI_IO_COPY_D2H:
       case KAAPI_IO_COPY_D2D:
-        res = cuEventQuery( cios->end_events[idx] );
-        if ((res != CUDA_SUCCESS) && (res != CUDA_ERROR_NOT_READY))
-          printf("Cuda Error: %i\n", res );
-   
-        kaapi_assert((res == CUDA_ERROR_NOT_READY)  || (res == CUDA_SUCCESS));
+        for (int cnt=0; cnt<5; ++cnt)
+        {
+          res = cuEventQuery( cios->end_events[idx] );
+          kaapi_assert_debug((res == CUDA_ERROR_NOT_READY)  || (res == CUDA_SUCCESS));
+          if (res == CUDA_ERROR_NOT_READY) 
+            pthread_yield();
+          else
+            if (prev_iosokp+1 == ios_okp) ++prev_iosokp;
+        }
+  
+#if KAAPI_USE_PERFCOUNTER
         if (res == CUDA_SUCCESS)
-        {
-#if KAAPI_DEBUG
-          if (curr > ios->ok_p)
-          {
-            //printf("Advance test ok: %u/[%u,%u]\n", curr, ios->ok_p, ios->pos_wp);
-            for (uint64_t i = ios->ok_p; i<curr; ++i)
-            {
-              int idx = curr % ios->count;
-              res = cuEventQuery( cios->end_events[idx] );
-              if (res != CUDA_SUCCESS)
-                printf("   invalid state at: %lu non fifo order ?\n", i );
-              kaapi_assert(res == CUDA_SUCCESS);
-#if KAAPI_USE_PERFCOUNTER
-              res = cuEventQuery( cios->start_events[idx] );
-              kaapi_assert(res == CUDA_SUCCESS);
+          op->t2 = kaapi_get_elapsedtime();
 #endif
-            }
-          }
+
+#if LOG_DBG
+        printf("%s:: instruction pos:%i, instr '%s' ok\n", __func__, ios_okp,  name_io[op->type]);
 #endif
-#if KAAPI_USE_PERFCOUNTER
-          op->inst.k_io.t2 = kaapi_get_elapsedtime();
-#endif
-          ios->ok_p = curr+1;
-          return 0;
-        }
-        break;
 
       case KAAPI_IO_END:
       case KAAPI_IO_BARRIER:
       case KAAPI_IO_NOP:
-        if (curr == ios->ok_p) 
-        {
-          ++ios->ok_p;
-          goto redo;
-        }
+        ++ios_okp;
         break;
 
       default:
-        fprintf(stderr, "%i:: bad instruction type at pos:%li\n", device->ld->idx, ios->ok_p);
+        fprintf(stderr, "%i:: bad instruction type at pos:%li\n", device->ld->idx, ios_okp);
         kaapi_assert(0);
         break;
     }
-    if (curr == ios->ok_p) break;
-    --curr;
   }
-  goto redo;
-  return 0;
-#endif
+  /* all events have been tested, test the prev_iosokp has been incremented */
+  ios_okp = ios->ok_p;
+  if (prev_iosokp != ios_okp-1) 
+  {
+    ios->ok_p = prev_iosokp+1;
+    return 0;
+  }
+  return EINPROGRESS;
+
 #elif CONFIG_SYNCHRONOUS_COPY && CONFIG_SYNCHRONOUS_KERNEL
   /* if synchronous call then advance automatically at the end of the operation */ 
   ;
@@ -1572,93 +1509,86 @@ static int cuda_stream_process_pending(
 {
   kaapi_cuda_io_stream_t* cios = (kaapi_cuda_io_stream_t*)ios;
 
-#if KAAPI_HAVE_IO_THREADS
-  /* only make progression by the calling thread if type is KERNEL type */
-  if (ios->type == KAAPI_IO_STREAM_KERN)
-#endif
+  do {
     cuda_stream_advance_pending(device, ios, blocking );
 
-  KAAPI_PLUGIN_TRACE_IN
+    KAAPI_PLUGIN_TRACE_IN
 
-  kaapi_io_status_t status = {0,0};
+    kaapi_io_status_t status = {0,0};
 
-  /* call callback functions */
-  for (uint64_t pos = ios->pos_rp; pos<ios->ok_p; ++pos)
-  {
-    int idx = pos % ios->count;
-    kaapi_io_instruction_t* op = &ios->pending[idx];
-    switch (op->type)
+    /* call callback functions */
+    for (uint64_t pos = ios->pos_rp; pos<ios->ok_p; ++pos)
     {
-      case KAAPI_IO_KERN:
-      case KAAPI_IO_COPY_H2H:
-      case KAAPI_IO_COPY_H2D:
-      case KAAPI_IO_COPY_D2H:
-      case KAAPI_IO_COPY_D2D:
-      case KAAPI_IO_END:
-      case KAAPI_IO_BARRIER:
+      int idx = pos % ios->count;
+      kaapi_io_instruction_t* op = &ios->pending[idx];
+      switch (op->type)
       {
+        case KAAPI_IO_KERN:
+        case KAAPI_IO_COPY_H2H:
+        case KAAPI_IO_COPY_H2D:
+        case KAAPI_IO_COPY_D2H:
+        case KAAPI_IO_COPY_D2D:
+        case KAAPI_IO_END:
+        case KAAPI_IO_BARRIER:
+        {
 #if KAAPI_USE_PERFCOUNTER
-        CUresult res;
+          CUresult res;
 #if KAAPI_DEBUG
-        CUresult res_dbg;
-        res_dbg = cuEventQuery( cios->start_events[idx] );
-        if (res_dbg != CUDA_SUCCESS)
-          printf("   invalid start_event state at: %lu \n", idx );
+          CUresult res_dbg;
+          res_dbg = cuEventQuery( cios->start_events[idx] );
+          if (res_dbg != CUDA_SUCCESS)
+            printf("   invalid start_event state at: %lu \n", idx );
 #endif
-        res = cuEventElapsedTime ( &status.gpu_delay, cios->start_events[idx], cios->end_events[idx] );
-        if (res != CUDA_SUCCESS) {
-          printf("   invalid Cuda event state at: %lu non fifo order ?\n", idx );
-          status.gpu_delay = 0;
-          kaapi_assert(0);
-        }
-        status.gpu_delay *= 1e-3;
-        status.cpu_delay = op->t2-op->t1; 
+          res = cuEventElapsedTime ( &status.gpu_delay, cios->start_events[idx], cios->end_events[idx] );
+          if (res != CUDA_SUCCESS) {
+            printf("   invalid Cuda event state at: %lu non fifo order ?\n", idx );
+            status.gpu_delay = 0;
+            kaapi_assert(0);
+          }
+          status.gpu_delay *= 1e-3;
+          status.cpu_delay = op->t2-op->t1; 
 #endif
-        if (op->inst.cbk.fnc)
-        {
-#if LOG_DBG
-          printf("Cbk on : %i  ->%s\n", pos, name_io[op->type] );
-#endif
-          op->inst.cbk.fnc(status, ios, op->inst.cbk.arg[0], op->inst.cbk.arg[1], op->inst.cbk.arg[2]);
-        }
+          if (op->inst.cbk.fnc)
+            op->inst.cbk.fnc(status, ios, op->inst.cbk.arg[0], op->inst.cbk.arg[1], op->inst.cbk.arg[2]);
+  
 #if KAAPI_USE_PERFCOUNTER
-        if (op->inst.cbk.fnc) op->t3 = kaapi_get_elapsedtime();
-        else op->t3 = op->t2;
-        if (op->type == KAAPI_IO_KERN)
-        {
-#if 0
-printf("Kernel: GPU time: %4.2f, CPU time: %4.2f\n", status.gpu_delay, status.cpu_delay);
+          if (op->inst.cbk.fnc) op->t3 = kaapi_get_elapsedtime();
+          else op->t3 = op->t2;
+          if (op->type == KAAPI_IO_KERN)
+          {
+            kaapi_context_t* ctxt = device->ctxt;
+            kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_WORK_OVERHEAD_CPU]
+                += (op->t1-op->t0)+(op->t3-op->t2);
+          }
 #endif
-          kaapi_context_t* ctxt = device->ctxt;
-          kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_WORK_OVERHEAD_CPU]
-              += (op->t1-op->t0)+(op->t3-op->t2);
+          op->type = KAAPI_IO_NOP;
         }
-#endif
-        op->type = KAAPI_IO_NOP;
+  
+        case KAAPI_IO_NOP:
+          /* commit index for the next event */
+          ++ios->pos_rp;
+          //return 0;
+          break;
+  
+        default:
+          fprintf(stderr, "%i:: bad instruction type at pos:%li\n", device->ld->idx, pos);
+          kaapi_assert(0);
+          break;
       }
-
-
-      case KAAPI_IO_NOP:
-        /* commit index for the next event */
-        ++ios->pos_rp;
-        break;
-
-      default:
-        fprintf(stderr, "%i:: bad instruction type at pos:%li\n", device->ld->idx, pos);
-        kaapi_assert(0);
-        break;
     }
-  }
+  } while (0); 
   KAAPI_PLUGIN_TRACE_OUT
   return 0;
 }
 
 
-/* */
+/* Return the source device to send data to device in the destination memory 'dev'.
+ */
 static uint16_t cuda_get_source(
-  kaapi_memory_device_t* dev,
-  uint16_t lid0,
-  KAAPI_MEMORY_VALUE_TYPE valid_bit, KAAPI_MEMORY_VALUE_TYPE xfer_bit
+    kaapi_memory_device_t* dev,
+    uint16_t lid0,
+    KAAPI_MEMORY_VALUE_TYPE valid_bit,
+    KAAPI_MEMORY_VALUE_TYPE xfer_bit
 )
 {
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev->device;
@@ -1667,12 +1597,16 @@ static uint16_t cuda_get_source(
   uint16_t lid_src;
   kaapi_assert_debug((valid_bit !=0) || (xfer_bit !=0));
 
+  /* return the device with the higher affinity rank with lid_dest
+     - does not consider the last performance rank
+   */
+#if 1 // original
   for (int rank = 0; rank < cuda_count_perfrank-1; ++rank)
   {
     if (valid_bit !=0)
-      lid_src = KAAPI_MEMORY_FFS( valid_bit & device->affinity[rank] );
+      lid_src = KAAPI_MEMORY_FFS( valid_bit &device->affinity[rank] );
     else /* xfer !=0: pre-cond of the function */
-      lid_src = KAAPI_MEMORY_FFS( xfer_bit & device->affinity[rank]);
+      lid_src = KAAPI_MEMORY_FFS( xfer_bit &device->affinity[rank]);
     if (lid_src !=0)
     {
       --lid_src;
@@ -1680,6 +1614,32 @@ static uint16_t cuda_get_source(
       return lid_src;
     }
   }
+#else /* first return a valid data, else an xfer data */
+  if (valid_bit !=0)
+    for (int rank = 0; rank < cuda_count_perfrank-1; ++rank)
+    {
+      lid_src = KAAPI_MEMORY_FFS( valid_bit &device->affinity[rank] );
+      if (lid_src !=0)
+      {
+        --lid_src;
+        kaapi_assert_debug(lid_src < KAAPI_MEMORY_MAX_NODES);
+        return lid_src;
+      }
+    }
+
+  if (xfer_bit !=0)
+    for (int rank = 0; rank < cuda_count_perfrank-1; ++rank)
+    {
+      lid_src = KAAPI_MEMORY_FFS( xfer_bit &device->affinity[rank]);
+      if (lid_src !=0)
+      {
+        --lid_src;
+        kaapi_assert_debug(lid_src < KAAPI_MEMORY_MAX_NODES);
+        return lid_src;
+      }
+    }
+#endif
+
   return (uint16_t)-1;
 }
 

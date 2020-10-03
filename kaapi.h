@@ -300,9 +300,7 @@ enum  {
   KAAPI_TASK_FLAG_NOLINK        = KAAPI_TASK_FLAG(8), /* do not link task in readylist */
   KAAPI_TASK_FLAG_OUTCOM        = KAAPI_TASK_FLAG(9), /* task that may generates outcom */
   KAAPI_TASK_FLAG_INCOM         = KAAPI_TASK_FLAG(10),/* task that may generates incom */
-#if KAAPI_DEBUG
   KAAPI_TASK_FLAG_EXEC          = KAAPI_TASK_FLAG(11),/* mark task executed */
-#endif
   KAAPI_TASK_PERFCNT            = KAAPI_TASK_FLAG(12),/* task will register perfcounter */
 };
 
@@ -884,6 +882,9 @@ enum kaapi_counter_name {
   KAAPI_TIME_OS_PIN,
   KAAPI_TIME_OS_UNPIN,
   KAAPI_TIME_OVERHEAD_PIN,
+  KAAPI_CNT_REORDER_HIT,
+  KAAPI_CNT_REORDER_MISS,
+  KAAPI_CNT_REORDER_MISS_LEN,
   KAAPI_CNT_MAX
 };
 
@@ -1096,15 +1097,15 @@ kaapi_task_t* kaapi_task_init(
 {
   task->body      = body;
   task->flags     = KAAPI_TASK_FLAG_DEFAULT;
-  KAAPI_ATOMIC_WRITE(&task->wc, 65535); // (1U<<16)-1U;
+  KAAPI_ATOMIC_WRITE(&task->wc, 1); 
   return task;
 }
 
 
-
+/*
+ */
 extern int32_t kaapi_thread_push(
     kaapi_thread_t* thread,
-    kaapi_frame_t* frame,
     kaapi_task_t* task
 );
 

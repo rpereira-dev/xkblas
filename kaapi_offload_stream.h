@@ -129,7 +129,6 @@ struct kaapi_io_kernel {
   void*                        arg[3];
   kaapi_task_body_t            body;
   kaapi_task_t*                task;
-  kaapi_frame_t*               frame;
 };
 
 
@@ -203,6 +202,9 @@ typedef struct kaapi_io_stream {
   kaapi_io_stream_type_t       type;
   kaapi_lock_t                 mutex;     /*  lock */
   uint64_t                     count;     /* the size of array instr and pending */
+  uint64_t                     smax;      /* maximal occupency of the stream */
+  uint64_t                     smax_p;    /* maximal occupency of pending requests in the stream */
+  uint64_t                     max_p;     /* ok_p..max_p should have been directly notified */
   uint64_t                     pos_r;	  /* first instruction to process */
   uint64_t                     pos_w;	  /* next position for writing instructions */
   volatile uint64_t            pos_rp;	  /* first pending instruction into the bloc */
@@ -435,7 +437,6 @@ static inline void kaapi_stream_insert_io_task_inst(
     kaapi_offload_stream_t* stream,
     kaapi_io_stream_type_t  stype,
     kaapi_task_t*           task,
-    kaapi_frame_t*          frame,
     kaapi_io_cbk_fnc_t      fnc,
     void*                   arg0,
     void*                   arg1,
@@ -448,8 +449,7 @@ static inline void kaapi_stream_insert_io_task_inst(
   double t0 = kaapi_get_elapsedtime();
 #endif
   kaapi_io_stream_t* ios;
-  kaapi_io_instruction_t* inst
-    = kaapi_offload_stream_push( stream, stype, &ios );
+  kaapi_io_instruction_t* inst = kaapi_offload_stream_push( stream, stype, &ios );
 
 #if KAAPI_DEBUG
   kaapi_assert_debug( ios != 0 );
@@ -463,7 +463,6 @@ static inline void kaapi_stream_insert_io_task_inst(
   inst->inst.l_io.arg[1]= arg1;
   inst->inst.l_io.arg[2]= arg2;
   inst->inst.k_io.task  = task;
-  inst->inst.k_io.frame = frame;
 #if KAAPI_USE_PERFCOUNTER
   inst->t0 = t0;
   inst->t1 =0;

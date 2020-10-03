@@ -44,7 +44,7 @@
 #define NAME(x) NAME2(x,zsyr2k)
 #define PNAME(x) zsyr2k##_##x
 #define NPARAM 3
-#define MODE_PARAM {KAAPI_ACCESS_MODE_R, KAAPI_ACCESS_MODE_R, KAAPI_ACCESS_MODE_RW }
+#define MODE_PARAM {KAAPI_ACCESS_MODE_R, KAAPI_ACCESS_MODE_R, arg->beta == 0.0 ? KAAPI_ACCESS_MODE_W : KAAPI_ACCESS_MODE_RW }
 #define ADDR_PARAM {&arg->A, &arg->B, &arg->C}
 #define VIEW_PARAM {\
     {ROWDIM(arg->trans, &arg->n, &arg->k), COLDIM(arg->trans, &arg->n, &arg->k), &arg->lda}, \
@@ -105,10 +105,10 @@ void INSERT_TASK_zsyr2k(
     taskarg->lda = lda;
     taskarg->beta = beta;
     kaapi_update_dependencies(thread, &taskarg->B, task,
-        KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Bh, Bm, Bn));
+        KAAPI_ACCESS_MODE_R, xkblas_get_handle(Bh, Bm, Bn));
     taskarg->ldb = ldb;
     kaapi_update_dependencies(thread, &taskarg->C, task,
-        KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Ch, Cm, Cn));
+        beta == 0.0 ? KAAPI_ACCESS_MODE_W : KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Ch, Cm, Cn));
     taskarg->ldc = ldc;
     taskarg->mm = xkblas_get_modemath();
     kaapi_task_set_ld(task, 0, xkblas_get_ld(Ch, Cm, Cn));
