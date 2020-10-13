@@ -611,7 +611,7 @@ static int cuda_copy(
 )
 {
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev->device;
-  kaapi_assert_debug( &device->inherited == kaapi_offload_self_device() );
+  //kaapi_assert_debug( &device->inherited == kaapi_offload_self_device() );
 
 #if _PLUGIN_DEBUG
   fprintf(stdout, "cuda:%s: device %d init\n", __FUNCTION__, device->inherited.device_id);

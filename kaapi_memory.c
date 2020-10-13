@@ -1757,7 +1757,7 @@ int kaapi_memory_copy_async(
 #else
   kaapi_memory_device_t* dest_dev = kaapi_memory_device_get( dest.asid );
   kaapi_memory_device_t* src_dev = kaapi_memory_device_get( src.asid );
-  kaapi_assert_debug( (dest_dev !=0) && (src_dev !=0) );
+  //kaapi_assert_debug( (dest_dev !=0) && (src_dev !=0) );
   memdev= (
      (dest_dev ==0) || (kaapi_memory_asid_get_arch(dest_dev->asid) == KAAPI_PROC_TYPE_HOST) ?
        src_dev : dest_dev
