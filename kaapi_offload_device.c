@@ -722,6 +722,7 @@ int kaapi_sched_idle_offload(
 #endif
 #if 0//STEAL
 {
+//13/10: this is the best for syrk. But deadlock at the end: thread is waiting for some thing...
         if (task ==0)
         {
          /* Affinity: compute the best (=ldid with at least a write of the task, see IPDPS2013.
@@ -733,16 +734,17 @@ int kaapi_sched_idle_offload(
   	       3- a task with inputs on the machine. 
           */
           kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_NUMA, 0);
-          task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device);
+          //task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device);
 #define LOG_AFF 0
-#if LOG_AFF
+#if 1//LOG_AFF
           if (task) printf("%p: (3) ld:%i steal task %p from ld: %i\n", pthread_self(), device->ld->ldid, task, ld->ldid);
 #endif
-#if 0
+#if 1
           if (task ==0) 
           {
             kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand_r(&device->ctxt->seed) % kaapi_localitydomain_count(KAAPI_LD_GPU) );
             task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device);
+            //task = kaapi_fifo_queue_pop(ld->queue);
             //task = kaapi_fifo_queue_pop(ld->queue);
             //if (task != 0) printf("Steal task !\n");
           }

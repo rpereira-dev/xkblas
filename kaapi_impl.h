@@ -69,7 +69,7 @@
 /* use pipeline to order task insertions, communications and kernel launchs
    else the only the number of inserted task + pending task in the stream is limited
 */
-#define KAAPI_PIPELINE_GPUTASK 1
+#define KAAPI_PIPELINE_GPUTASK 0
 
 #if KAAPI_PIPELINE_GPUTASK
 /* reorder stream execution on GPU */

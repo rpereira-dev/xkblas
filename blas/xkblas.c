@@ -1857,7 +1857,7 @@ printf("Mat size: %i tilesize: %i\n",(int)M, NB);
       }
       else if (kernel == KERN_SYMM)
       {
-        fact = 2;
+        fact = 4;
         NB = M / (fact*ngpu);
         if (NB >3000) NB = M / (2*fact*ngpu);
       } 
