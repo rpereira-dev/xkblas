@@ -222,10 +222,12 @@ typedef struct __attribute__((aligned(KAAPI_CACHE_LINE))) kaapi_threadinfo {
 */
 struct kaapi_localitydomain {
   kaapi_ld_type_t         type;
-  kaapi_ldid_t            ldid;
-  kaapi_device_t*         device;
-  unsigned int            idx;         /* in kaapi_all_lddomains[type]->ld */
-  kaapi_fifo_queue_t*     queue;  /* same data structure as a queue, but managed to be FIFO */
+  kaapi_ldid_t            ldid;     /* global id */
+  kaapi_device_t*         device;   /* attached device */
+  unsigned int            idx;      /* in kaapi_all_lddomains[type]->ld */
+  kaapi_fifo_queue_t*     queue;    /* same data structure as a queue, but managed to be FIFO */
+  uint64_t                perfrank; /* inspired from perfrank in cuda: number of affinity group with ~ same characteristic in communication performance */
+  uint64_t*               affinity; /* of size perfrank -1, if affinity[perf] has bit i set to 1, then localitydomain i has affinity with it */
   kaapi_localitydomain_t* parent;
   unsigned int            subldcount;
   kaapi_localitydomain_t**subld;

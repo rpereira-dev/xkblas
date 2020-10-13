@@ -103,6 +103,7 @@ struct kaapi_device {
     uint64_t                    exec_count;    /* number of tasks completed */
     int volatile                finalize;      /* true iff driver stop device */
     int                         is_initialized;/* True if driver is initialized */
+  
     kaapi_offload_perfcounter_t perfcnt; /* */
     const char*                 name;          /* Device name */
     void*                       handle;        /* device handle, e.g. cublas handle for GPU*/

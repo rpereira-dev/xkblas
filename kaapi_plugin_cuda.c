@@ -2185,9 +2185,16 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_commit)(kaapi_device_t
   kaapi_assert(res == CUDA_SUCCESS);
 
   /* similar to cuda_perf_device but with ldid index in place of cuda device number */
+  kaapi_localitydomain_t* ld = device->inherited.ld;
+  kaapi_assert(ld !=0);
+  ld->perfrank = cuda_count_perfrank-1;
+  ld->affinity = (uint64_t*)malloc( sizeof(uint64_t)* ld->perfrank);
   device->affinity = (uint64_t*)malloc( sizeof(uint64_t)* cuda_count_perfrank-1);
   for (int i=0; i<cuda_count_perfrank-1; ++i)
+  {
+    ld->affinity[i] = 0;
     device->affinity[i] = 0;
+  }
 
   for (int j=0; j<kaapi_device_count; j++)
   {
@@ -2207,11 +2214,15 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_commit)(kaapi_device_t
       int rank = cuda_perf_topo[device1*cuda_device_count+device2];
       kaapi_assert_debug(rank !=0);
       if (cuda_perf_device[ device1*cuda_count_perfrank+ rank] & (1<<device2))
+      {
         device->affinity[rank-1] |= (1UL<<kaapi_memory_asid_get_lid(kaapi_device_list[j]->inherited.memdev.asid));
+        ld->affinity[rank-1] |= (1UL<<kaapi_memory_asid_get_lid(kaapi_device_list[j]->inherited.memdev.asid));
+      }
     }
     else
     { /* add device with itself */
       device->affinity[0] |= (1UL<<kaapi_memory_asid_get_lid(kaapi_device_list[j]->inherited.memdev.asid));
+      ld->affinity[0] |= (1UL<<kaapi_memory_asid_get_lid(kaapi_device_list[j]->inherited.memdev.asid));
     }
   }
   CUcontext ctx;

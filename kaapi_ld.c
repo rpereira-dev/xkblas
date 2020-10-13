@@ -101,6 +101,8 @@ int kaapi_localitydomain_init( kaapi_localitydomain_t* ld, kaapi_device_t* devic
   ld->subldcount = 0;
   ld->subld      = 0;
   ld->parent     = 0;
+  ld->perfrank   = 0;
+  ld->affinity   = 0;
   return 0;
 }
 
@@ -115,6 +117,7 @@ int kaapi_localitydomain_destroy( kaapi_localitydomain_t* ld )
   free(ld->queue->data);
   free(ld->queue);
   if (ld->subld) free(ld->subld);
+  if (ld->perfrank) free(ld->affinity);
   return 0;
 }
 
