@@ -720,7 +720,7 @@ int kaapi_sched_idle_offload(
         if (task ==0) task = kaapi_fifo_queue_pop(device->ld->queue);
         //if (task) printf("(1)pop from:%p, device->ld:%p\n", device->ld->queue, device->ld);
 #endif
-#if 0//STEAL
+#if 1//STEAL
 {
 //13/10: this is the best for syrk. But deadlock at the end: thread is waiting for some thing...
         if (task ==0)
@@ -736,7 +736,7 @@ int kaapi_sched_idle_offload(
           kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_NUMA, 0);
           //task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device);
 #define LOG_AFF 0
-#if 1//LOG_AFF
+#if 0//LOG_AFF
           if (task) printf("%p: (3) ld:%i steal task %p from ld: %i\n", pthread_self(), device->ld->ldid, task, ld->ldid);
 #endif
 #if 1
@@ -839,7 +839,7 @@ out_device_writeback:
 
         case KAAPI_DEVICEOP_MEMSYNC:
         {
-          LOGDEBUG(printf("DEVICEOP_MEMSYNC, device: %p\n",device));
+          //printf("DEVICEOP_MEMSYNC, device: %p\n",device);
 
           /* synchronize all streams : order is important*/
           err = kaapi_offload_stream_process_instruction( &device->stream, KAAPI_IO_STREAM_H2D );
@@ -872,9 +872,11 @@ out_device_writeback:
             ++device->spawn_count;
           if (task !=0) goto prepare_execute;
 
+#if 0
           /* wait more task */
           if (device->exec_count < device->spawn_count + device->ld->queue->push_count)
             break;
+#endif
 
           /* non empty stream */
           if (kaapi_offload_stream_size( &device->stream, KAAPI_IO_STREAM_ALL ) != 0)
@@ -1303,25 +1305,6 @@ int kaapi_offload_synchronize_device(kaapi_device_t* device)
 int kaapi_offload_synchronize(void)
 {
 //printf("BEGIN Memory synchronize\n");
-#if 0
-  for (unsigned int i=0; i<kaapi_offload_get_num_devices(); ++i)
-  {
-    kaapi_device_t* device = kaapi_offload_device(i);
-    int err = 0;
-    if (device->memdev.asid != kaapi_local_asid)
-      err = kaapi_offload_request2device( device, KAAPI_DEVICEOP_MEMSYNC );
-    if (err !=0) return err;
-  }
-
-  for (unsigned int i=0; i<kaapi_offload_get_num_devices(); ++i)
-  {
-    kaapi_device_t* device = kaapi_offload_device(i);
-    int err = 0;
-    if (device->memdev.asid != kaapi_local_asid)
-      err = kaapi_offload_request2device( device, KAAPI_DEVICEOP_WRITEBACK );
-    if (err !=0) return err;
-  }
-#endif
   kaapi_atomic64_t sync_counter = {0};
 
   for (unsigned int i=0; i<kaapi_offload_get_num_devices(); ++i)
@@ -1333,7 +1316,7 @@ int kaapi_offload_synchronize(void)
       /* preincrement per device the counter in order to ensure that callback will not prematurely 
          signal the client 
       */
-//printf("[XKAAPI: add & KAAPI_DEVICEOP_MEMSYNC request\n");
+//printf("[XKAAPI: add & KAAPI_DEVICEOP_MEMSYNC request, device:%p\n", device);
       KAAPI_ATOMIC_ADD64(&sync_counter, (1ULL<<32ULL));
       device->request.counter = &sync_counter;
 #if 0
@@ -1348,7 +1331,10 @@ printf("Send memsync device:%i counter: %lu\n", kaapi_memory_asid_get_lid(device
     kaapi_device_t* device = kaapi_offload_device(i);
     int err = 0;
     if (device->memdev.asid != kaapi_local_asid)
+    {
+//printf("[XKAAPI: wait for MEMSYNC request, device: %p\n", device);
       err = kaapi_offload_requestwait( device );
+    }
     if (err !=0) return err;
   }
 //printf("END Memory synchronize\n");
