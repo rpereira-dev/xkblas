@@ -69,7 +69,7 @@
 /* use pipeline to order task insertions, communications and kernel launchs
    else the only the number of inserted task + pending task in the stream is limited
 */
-#define KAAPI_PIPELINE_GPUTASK 0
+#define KAAPI_PIPELINE_GPUTASK 1
 
 #if KAAPI_PIPELINE_GPUTASK
 /* reorder stream execution on GPU */
@@ -577,7 +577,8 @@ extern kaapi_task_t* kaapi_fifo_queue_pop(
 */
 extern kaapi_task_t* kaapi_fifo_queue_steal_with_affinity(
     kaapi_fifo_queue_t* ld,
-    kaapi_device_t* device
+    kaapi_device_t* device,
+    int level
 );
 
 /*

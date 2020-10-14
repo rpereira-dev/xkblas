@@ -454,7 +454,8 @@ static inline int is_maxscore(size_t* score_a, size_t* score_b)
 */
 kaapi_task_t* kaapi_fifo_queue_steal_with_affinity(
     kaapi_fifo_queue_t* rd,
-    kaapi_device_t* device
+    kaapi_device_t* device,
+    int level
 )
 {
   kaapi_task_t* task = 0;
@@ -484,7 +485,7 @@ kaapi_task_t* kaapi_fifo_queue_steal_with_affinity(
     --i;
     int32_t idx = i%size;
     if (rd->data[idx] ==0) continue;
-    int r = kaapi_compute_affinity_score( ldid_target, rd->data[idx], score[nscore], 3);
+    int r = kaapi_compute_affinity_score( ldid_target, rd->data[idx], score[nscore], level);
     if (r)
     {
       if (is_maxscore(score[nscore], score_max))

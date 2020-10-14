@@ -716,13 +716,13 @@ int kaapi_sched_idle_offload(
 #if 0  // origin
         task = kaapi_fifo_queue_pop(device->ld->queue);
 #else
-        task = kaapi_fifo_queue_steal_with_affinity(device->ld->queue, device);
+        task = kaapi_fifo_queue_steal_with_affinity(device->ld->queue, device, 3);
         if (task ==0) task = kaapi_fifo_queue_pop(device->ld->queue);
         //if (task) printf("(1)pop from:%p, device->ld:%p\n", device->ld->queue, device->ld);
 #endif
 #if 1//STEAL
 {
-//13/10: this is the best for syrk. But deadlock at the end: thread is waiting for some thing...
+//13/10: this is the best for syrk
         if (task ==0)
         {
          /* Affinity: compute the best (=ldid with at least a write of the task, see IPDPS2013.
@@ -734,7 +734,7 @@ int kaapi_sched_idle_offload(
   	       3- a task with inputs on the machine. 
           */
           kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_NUMA, 0);
-          //task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device);
+          //task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
 #define LOG_AFF 0
 #if 0//LOG_AFF
           if (task) printf("%p: (3) ld:%i steal task %p from ld: %i\n", pthread_self(), device->ld->ldid, task, ld->ldid);
@@ -743,10 +743,44 @@ int kaapi_sched_idle_offload(
           if (task ==0) 
           {
             kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand_r(&device->ctxt->seed) % kaapi_localitydomain_count(KAAPI_LD_GPU) );
-            task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device);
+            task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
+            //task = kaapi_fifo_queue_pop(ld->queue);
+           if (task != 0) printf("Steal task !\n");
+          }
+#endif
+#if 0
+          if (task ==0) 
+          {
+            int rank;
+            for (rank=1; rank<device->ld->perfrank; ++rank)
+            {
+              uint64_t affinity = device->ld->affinity[rank];
+              int nb = __builtin_popcount(affinity);
+              if (nb >0)
+              {
+                int victim = rand_r(&device->ctxt->seed) % nb;
+                int ldid = 0;
+                ldid = __builtin_ffsll(affinity);
+                for (int i=0; i<victim; ++i)
+                {
+                  ldid = __builtin_ffsll(affinity);
+                  kaapi_assert( ldid != 0);
+                  ldid;
+                  affinity &= ~(1UL << ldid);
+                }
+                kaapi_localitydomain_t* ld = kaapi_localitydomain_get(ldid);
+                task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, rank);
+              }
+              if (task !=0) break;
+            }
+            if (task ==0)
+            {
+              kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand_r(&device->ctxt->seed) % kaapi_localitydomain_count(KAAPI_LD_GPU) );
+              task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
+            }
             //task = kaapi_fifo_queue_pop(ld->queue);
             //task = kaapi_fifo_queue_pop(ld->queue);
-            //if (task != 0) printf("Steal task !\n");
+            //if (task != 0) printf("Steal task !, on rank:%i\n",rank);
           }
 #endif
         }
