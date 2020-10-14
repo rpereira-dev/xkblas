@@ -586,6 +586,14 @@ extern kaapi_task_t* kaapi_fifo_queue_steal(
     kaapi_fifo_queue_t* ld
 );
 
+/* owner_push/pop: LIFO
+*/
+extern kaapi_task_t* kaapi_fifo_queue_pop_with_affinity(
+    kaapi_fifo_queue_t* ld,
+    kaapi_device_t* device,
+    int level
+);
+
 /* steal/push: lifo, steal/owner_push: fifo
 */
 extern kaapi_task_t* kaapi_fifo_queue_steal_with_affinity(

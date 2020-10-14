@@ -358,6 +358,8 @@ static void kaapi_fifo_queue_alloc(
     memset(data, 0, size*sizeof(kaapi_task_t*));
     rd->size = size;
     rd->data = data;
+    rd->T = size/2;
+    rd->H = size/2;
   }
 }
 
@@ -393,7 +395,7 @@ int32_t kaapi_fifo_queue_push(
 
   if (rd->cbk_fnc)
   {
-    printf("Call call back\n");
+    //printf("Call call back\n");
     rd->cbk_fnc(rd->cbk_arg);
   }
 
@@ -433,7 +435,7 @@ int32_t kaapi_fifo_queue_owner_push(
 
   if (rd->cbk_fnc)
   {
-    printf("Call call back\n");
+    //printf("Call call back\n");
     rd->cbk_fnc(rd->cbk_arg);
   }
 
@@ -533,6 +535,104 @@ kaapi_task_t* kaapi_fifo_queue_steal(
   return task;
 }
 
+
+/*
+*/
+#define MAX_HISTORY 16
+
+static int _kaapi_update_score(
+     kaapi_task_t* task,
+     kaapi_ldid_t ldid_target, 
+     int level,
+     int nscore,
+     size_t score[][4],   
+     size_t score_max[4]
+)
+{
+  int r = kaapi_compute_affinity_score( ldid_target, task, score[nscore], level);
+  if (r)
+  {
+    if (is_maxscore(score[nscore], score_max))
+    {
+      score_max[0] = score[nscore][0];
+      score_max[1] = score[nscore][1];
+      score_max[2] = score[nscore][2];
+      score_max[3] = score[nscore][3];
+      return 1;
+    }
+  }
+  return 0;
+}
+
+
+/*
+*/
+kaapi_task_t* kaapi_fifo_queue_pop_with_affinity(
+    kaapi_fifo_queue_t* rd,
+    kaapi_device_t* device,
+    int level
+)
+{
+  kaapi_task_t* task = 0;
+  size_t score[MAX_HISTORY][4];
+  size_t score_max[4]={0,0,0,0};
+  int nscore = 0;
+#if LOG_AFF
+  int nsbest =0;
+#endif
+  
+  kaapi_ldid_t ldid_target = device->ld->ldid;
+  if (rd->T <= rd->H) return 0;
+
+  pthread_mutex_lock(&rd->lock);
+  int32_t size = rd->size;
+  if (size ==0) 
+  {
+    pthread_mutex_unlock(&rd->lock);
+    return 0;
+  }
+  int ibest = rd->H;
+
+  /* iterate from T-1 to H */
+  for (int32_t i = rd->H; i < rd->T; ++i )
+  {
+    int32_t idx = i%size;
+    kaapi_task_t* task = rd->data[idx];
+    if (task ==0) 
+      continue;
+
+    if (_kaapi_update_score(task, ldid_target, level, nscore, score, score_max)) 
+    {
+#if LOG_AFF
+        nsbest = nscore;
+#endif
+        ibest = i;
+        ++nscore;
+        if (nscore==1) break;
+    }
+  }
+
+  int32_t idx = ibest%size;
+  task = rd->data[idx];
+  rd->data[idx] = 0;
+  ++rd->pop_count;
+  if (ibest == rd->H)
+  {
+    /* because we leave 0 where the task was picked, we assume the device making a pop with achieve */
+    ++rd->H;
+    if (rd->waiter_push)
+      pthread_cond_signal(&rd->cond_push);
+  }
+#if LOG_AFF
+  if (task !=0)
+    printf("%p: task %p stolen to %i queue size:%i, score=[%lu, %lu, %lu, %lu]\n", pthread_self(), task, ldid_target, kaapi_fifo_queue_size(rd), score[nsbest][0], score[nsbest][1], score[nsbest][2], score[nsbest][3]);
+#endif
+    
+  pthread_mutex_unlock(&rd->lock);
+  return task;
+}
+
+
 /*
 */
 kaapi_task_t* kaapi_fifo_queue_steal_with_affinity(
@@ -542,15 +642,14 @@ kaapi_task_t* kaapi_fifo_queue_steal_with_affinity(
 )
 {
   kaapi_task_t* task = 0;
-#define MAX_HISTORY 8
   size_t score[MAX_HISTORY][4];
   size_t score_max[4]={0,0,0,0};
   int nscore = 0;
+#if LOG_AFF
   int nsbest =0;
+#endif
   int ibest =0;
   
-  //if (kaapi_fifo_queue_size(rd) <16) return 0;
-
   kaapi_ldid_t ldid_target = device->ld->ldid;
   if (rd->T <= rd->H) return 0;
 
@@ -567,24 +666,19 @@ kaapi_task_t* kaapi_fifo_queue_steal_with_affinity(
   {
     --i;
     int32_t idx = i%size;
-    if ((rd->data[idx] ==0) 
-     || (kaapi_taskflag_get(rd->data[idx], KAAPI_TASK_FLAG_UNSTEALABLE))
-    ) 
+    kaapi_task_t* task = rd->data[idx];
+    if ((task ==0) 
+     ||  kaapi_taskflag_get(task, KAAPI_TASK_FLAG_UNSTEALABLE))
       continue;
-    int r = kaapi_compute_affinity_score( ldid_target, rd->data[idx], score[nscore], level);
-    if (r)
+
+    if (_kaapi_update_score(task, ldid_target, level, nscore, score, score_max)) 
     {
-      if (is_maxscore(score[nscore], score_max))
-      {
-        score_max[0] = score[nscore][0];
-        score_max[1] = score[nscore][1];
-        score_max[2] = score[nscore][2];
-        score_max[3] = score[nscore][3];
+#if LOG_AFF
         nsbest = nscore;
+#endif
         ibest = i;
-      }
-      ++nscore;
-      if (nscore==MAX_HISTORY) break;
+        ++nscore;
+        if (nscore==MAX_HISTORY) break;
     }
   }
   if (nscore >0)
