@@ -39,6 +39,8 @@
 #define _OFFLOAD_DEBUG  0
 #define KAAPI_STREAM_CAPACITY 512
 
+#include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include "kaapi_impl.h"
 #include "kaapi_offload.h"
@@ -138,6 +140,10 @@ static void callback_epilogue(
   );
 
 #if KAAPI_USE_PERFCOUNTER
+if (0){
+  const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
+  printf("Task: %s CPU: %f, GPU: %f\n", fmt->name, status.cpu_delay, status.gpu_delay);
+}
   ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_TASK_EXEC];
   kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_WORK]     += status.gpu_delay;
   kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_WORK_CPU] += status.cpu_delay;
@@ -668,6 +674,46 @@ static void callback_replyrequest_memsync(
     kaapi_offload_requestreply( device, 0 );
 }
 
+
+/*
+*/
+static void _kaapi_compute_load_device(int* pmin, int* pmax, float* pavrg, float* pdelta, int* pimax, int* pload)
+{
+  int ngpu= kaapi_localitydomain_count(KAAPI_LD_GPU);
+  int load[ngpu];
+  int max = 0;
+  int min = INT_MAX;
+  float sum = 0.0;
+  int imax = 0;
+  for (int i=0; i<ngpu; ++i)
+  {
+    kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU,i);
+    //load[i] = kaapi_fifo_queue_size( ld->queue );
+    load[i] = ld->device->p_ready -  ld->device->p_finish;
+    sum += (float)load[i];
+    if (load[i] > max) {
+      max = load[i];
+      imax = i;
+    }
+    if (load[i] < min) 
+      min = load[i];
+  }
+  float minmax = max-min;
+  float avrg = sum/ngpu;
+  float delta = 0.0;
+  for (int i=0; i<ngpu; ++i)
+  {
+    delta += fabs(load[i] - avrg);
+    if (pload) pload[i] = load[i];
+  }
+  *pimax = imax;
+  *pmin = min;
+  *pmax = max;
+  *pavrg = avrg;
+  *pdelta = delta;
+}
+
+
 /* Barrier and execution of task.
 */
 int kaapi_sched_idle_offload(
@@ -681,6 +727,7 @@ int kaapi_sched_idle_offload(
   kaapi_task_t* task;
 
   uint64_t send_msg = 0;
+  uint64_t tidle_start = 0;
 
   /* */
   kaapi_offload_set_current_device(device);
@@ -708,21 +755,19 @@ int kaapi_sched_idle_offload(
     task = 0;
     if ((task ==0) && kaapi_offload_device_accept_new_task(device))
     {
+       
       /* pop on local queue */
-      task = kaapi_queue_pop(device->ctxt, device->ctxt->queue, 0);
+    //  task = kaapi_queue_pop(device->ctxt, device->ctxt->queue, 0);
       /* else pop on device specific queue (~ mailbox) */
       if (task ==0)
       {
-#if 1  // origin
         task = kaapi_fifo_queue_pop(device->ld->queue);
-#else
-        task = kaapi_fifo_queue_steal_with_affinity(device->ld->queue, device, 3);
-        if (task ==0) task = kaapi_fifo_queue_pop(device->ld->queue);
-        //if (task) printf("(1)pop from:%p, device->ld:%p\n", device->ld->queue, device->ld);
-#endif
-#if 0//STEAL
+if (device->p_write - device->p_ready ==0)
 {
-//13/10: this is the best for syrk
+   /* How to choice this delay ? */
+   if (tidle_start ==0) tidle_start = kaapi_get_elapsedns();
+   else if (1e-9*(kaapi_get_elapsedns() - tidle_start) > 0.0001)
+   {
         if (task ==0)
         {
          /* Affinity: compute the best (=ldid with at least a write of the task, see IPDPS2013.
@@ -739,13 +784,13 @@ int kaapi_sched_idle_offload(
 #if 0//LOG_AFF
           if (task) printf("%p: (3) ld:%i steal task %p from ld: %i\n", pthread_self(), device->ld->ldid, task, ld->ldid);
 #endif
-#if 1
+#if 0
           if (task ==0) 
           {
             kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand_r(&device->ctxt->seed) % kaapi_localitydomain_count(KAAPI_LD_GPU) );
             task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
             //task = kaapi_fifo_queue_pop(ld->queue);
-#if 0
+#if 1
            if (task != 0) 
            {
              const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
@@ -753,8 +798,42 @@ int kaapi_sched_idle_offload(
            }
 #endif
           }
-#endif
+#elif 1
+          if (task ==0) 
+          {
+            int ngpu= kaapi_localitydomain_count(KAAPI_LD_GPU);
+            int load[ngpu]; 
+            int imax; 
+            int max;
+            int min; 
+            float avrg;
+            float delta;
+            _kaapi_compute_load_device(&min, &max, &avrg, &delta, &imax, load);
+            float minmax = max-min;
+            if ((avrg> kaapi_default_param.cuda_conc_kernel / 2.0) && (delta >2*kaapi_default_param.cuda_conc_kernel))
+            {
+              kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, imax );
+              task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
 #if 0
+              if (task != 0) 
+              {
+                char buffer[128];
+                char* b = buffer;
+                ssize_t sz = 0;
+                sz = sprintf(b, "%02i:: Load: Avrg=%10f, Delta=%10f, MinMax=%10f  ::", device->ld->ldid, avrg, delta, minmax );
+                b += sz;
+                for (int i=0; i<ngpu; ++i)
+                {
+                  sz = sprintf(b, " %02i", load[i] );
+                  b += sz;
+                } 
+                printf("%s\n",buffer);
+              }
+#endif
+            }
+          }
+
+#elif 0
           if (task ==0) 
           {
             int rank;
@@ -790,8 +869,8 @@ int kaapi_sched_idle_offload(
           }
 #endif
         }
+    }
 }
-#endif // STEAL
       }
       else
       {
@@ -953,6 +1032,8 @@ out_ic:
     else
     {
 prepare_execute:
+//printf("Tidle time: %f\n", 1e-9*(double)(kaapi_get_elapsedns() - tidle_start));
+      tidle_start = 0;
       LOGDEBUG(
         printf("%i:: device pop task:%p %s prio:%i runing queue:%p\n",
           (int)ctxt->kid, (void*)task,
