@@ -559,7 +559,7 @@ static inline uint64_t kaapi_fifo_queue_size(
   return 0;
 }
 
-/*
+/*  push/pop: fifo order
 */
 extern int32_t kaapi_fifo_queue_push(
     kaapi_fifo_queue_t* ld,
@@ -567,13 +567,26 @@ extern int32_t kaapi_fifo_queue_push(
 );
 
 
+/*  owner_push/pop: LIFO order
+*/
+extern int32_t kaapi_fifo_queue_owner_push(
+    kaapi_fifo_queue_t* ld,
+    kaapi_task_t* task
+);
+
 /*
 */
 extern kaapi_task_t* kaapi_fifo_queue_pop(
     kaapi_fifo_queue_t* ld
 );
 
-/*
+/* steal/push: lifo, steal/owner_push: fifo
+*/
+extern kaapi_task_t* kaapi_fifo_queue_steal(
+    kaapi_fifo_queue_t* ld
+);
+
+/* steal/push: lifo, steal/owner_push: fifo
 */
 extern kaapi_task_t* kaapi_fifo_queue_steal_with_affinity(
     kaapi_fifo_queue_t* ld,
