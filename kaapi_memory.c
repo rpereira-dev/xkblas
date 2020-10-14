@@ -1748,7 +1748,7 @@ int kaapi_memory_copy_async(
 #endif
 
   kaapi_memory_device_t* memdev;
-#if 0
+#if 1 // force to have memcpy request post by the current device thread on its own stream
   /* get the self device to manage the communication, else testing completion is a non local operation*/
   kaapi_device_t* dev = kaapi_offload_self_device();
   kaapi_assert_debug(dev !=0);

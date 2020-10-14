@@ -1971,12 +1971,12 @@ printf("%s\n",buffer);
       );
       break;
 #endif
+    case KERN_SYR2K:
     case KERN_SYMM:
     case KERN_GEMM:
     case KERN_SYRK:
     case KERN_TRMM:
     case KERN_GEMMT:
-    case KERN_SYR2K:
     case KERN_TRSM:
     case KERN_HEMM:
     case KERN_HERK:

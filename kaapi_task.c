@@ -451,10 +451,12 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
   else
     ld = kaapi_localitydomain_get(ldid);
 
+#if 0
   if (ld == ctxt->ld)
     return
       kaapi_queue_push(ctxt, task );
   else
+#endif
     return 
       kaapi_fifo_queue_push(
           ld->queue,
