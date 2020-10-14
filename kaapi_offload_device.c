@@ -755,127 +755,103 @@ int kaapi_sched_idle_offload(
     task = 0;
     if ((task ==0) && kaapi_offload_device_accept_new_task(device))
     {
-       
       /* pop on local queue */
-    //  task = kaapi_queue_pop(device->ctxt, device->ctxt->queue, 0);
-      /* else pop on device specific queue (~ mailbox) */
       if (task ==0)
-      {
         task = kaapi_fifo_queue_pop(device->ld->queue);
-if (device->p_write - device->p_ready ==0)
-{
-   /* How to choice this delay ? */
-   if (tidle_start ==0) tidle_start = kaapi_get_elapsedns();
-   else if (1e-9*(kaapi_get_elapsedns() - tidle_start) > 0.0001)
-   {
-        if (task ==0)
-        {
-         /* Affinity: compute the best (=ldid with at least a write of the task, see IPDPS2013.
-            It remains to transfer the affinity during the steal operations where device
-            may has the capacity to select the best task or at least:
-  	       0- a task with most of its input on the device.
-  	       1- a task with inputs on the device close to the target device.
-  	       2- a task with inputs on the device. 
-  	       3- a task with inputs on the machine. 
-          */
-          kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_NUMA, 0);
-          //task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
-#define LOG_AFF 0
-#if 0//LOG_AFF
-          if (task) printf("%p: (3) ld:%i steal task %p from ld: %i\n", pthread_self(), device->ld->ldid, task, ld->ldid);
-#endif
-#if 0
-          if (task ==0) 
-          {
-            kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand_r(&device->ctxt->seed) % kaapi_localitydomain_count(KAAPI_LD_GPU) );
-            task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
-            //task = kaapi_fifo_queue_pop(ld->queue);
-#if 1
-           if (task != 0) 
-           {
-             const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
-             printf("Steal task %s!\n",fmt->name);
-           }
-#endif
-          }
-#elif 1
-          if (task ==0) 
-          {
-            int ngpu= kaapi_localitydomain_count(KAAPI_LD_GPU);
-            int load[ngpu]; 
-            int imax; 
-            int max;
-            int min; 
-            float avrg;
-            float delta;
-            _kaapi_compute_load_device(&min, &max, &avrg, &delta, &imax, load);
-            float minmax = max-min;
-            if ((avrg> kaapi_default_param.cuda_conc_kernel / 2.0) && (delta >2*kaapi_default_param.cuda_conc_kernel))
-            {
-              kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, imax );
-              task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
-#if 0
-              if (task != 0) 
-              {
-                char buffer[128];
-                char* b = buffer;
-                ssize_t sz = 0;
-                sz = sprintf(b, "%02i:: Load: Avrg=%10f, Delta=%10f, MinMax=%10f  ::", device->ld->ldid, avrg, delta, minmax );
-                b += sz;
-                for (int i=0; i<ngpu; ++i)
-                {
-                  sz = sprintf(b, " %02i", load[i] );
-                  b += sz;
-                } 
-                printf("%s\n",buffer);
-              }
-#endif
-            }
-          }
 
-#elif 0
-          if (task ==0) 
+      /* no task ? try to steal */
+      if ((task ==0) && (device->p_write - device->p_ready ==0))
+      {
+        /* How to choice this delay ? */
+        if (tidle_start ==0) tidle_start = kaapi_get_elapsedns();
+        else if (1e-9*(kaapi_get_elapsedns() - tidle_start) > 0.0001)
+        {
+          if (task ==0)
           {
-            int rank;
-            for (rank=1; rank<device->ld->perfrank; ++rank)
+           /* Affinity: compute the best (=ldid with at least a write of the task, see IPDPS2013.
+              It remains to transfer the affinity during the steal operations where device
+              may has the capacity to select the best task or at least:
+    	       0- a task with most of its input on the device.
+    	       1- a task with inputs on the device close to the target device.
+    	       2- a task with inputs on the device. 
+    	       3- a task with inputs on the machine. 
+            */
+            kaapi_localitydomain_t* ld;
+#if 0
+            if (task ==0) 
             {
-              uint64_t affinity = device->ld->affinity[rank];
-              int nb = __builtin_popcount(affinity);
-              if (nb >0)
-              {
-                int victim = rand_r(&device->ctxt->seed) % nb;
-                int ldid = 0;
-                ldid = __builtin_ffsll(affinity);
-                for (int i=0; i<victim; ++i)
-                {
-                  ldid = __builtin_ffsll(affinity);
-                  kaapi_assert( ldid != 0);
-                  ldid;
-                  affinity &= ~(1UL << ldid);
-                }
-                kaapi_localitydomain_t* ld = kaapi_localitydomain_get(ldid);
-                task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, rank);
-              }
-              if (task !=0) break;
-            }
-            if (task ==0)
-            {
-              kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand_r(&device->ctxt->seed) % kaapi_localitydomain_count(KAAPI_LD_GPU) );
+              ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand_r(&device->ctxt->seed) % kaapi_localitydomain_count(KAAPI_LD_GPU) );
               task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
             }
-            //task = kaapi_fifo_queue_pop(ld->queue);
-            //task = kaapi_fifo_queue_pop(ld->queue);
-            //if (task != 0) printf("Steal task !, on rank:%i\n",rank);
-          }
+#elif 1
+            if (task ==0) 
+            {
+              int ngpu= kaapi_localitydomain_count(KAAPI_LD_GPU);
+              int load[ngpu]; 
+              int imax; 
+              int max;
+              int min; 
+              float avrg;
+              float delta;
+              _kaapi_compute_load_device(&min, &max, &avrg, &delta, &imax, load);
+              float minmax = max-min;
+              if ((avrg> kaapi_default_param.cuda_conc_kernel / 2.0) && (delta >2*kaapi_default_param.cuda_conc_kernel))
+              {
+                kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, imax );
+                task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
+#if 0
+                if (task != 0) 
+                {
+                  char buffer[128];
+                  char* b = buffer;
+                  ssize_t sz = 0;
+                  sz = sprintf(b, "%02i:: Load: Avrg=%10f, Delta=%10f, MinMax=%10f  ::", device->ld->ldid, avrg, delta, minmax );
+                  b += sz;
+                  for (int i=0; i<ngpu; ++i)
+                  {
+                    sz = sprintf(b, " %02i", load[i] );
+                    b += sz;
+                  } 
+                  printf("%s\n",buffer);
+                }
 #endif
+              }
+            }
+  
+#elif 0
+            if (task ==0) 
+            {
+              int rank;
+              for (rank=1; rank<device->ld->perfrank; ++rank)
+              {
+                uint64_t affinity = device->ld->affinity[rank];
+                int nb = __builtin_popcount(affinity);
+                if (nb >0)
+                {
+                  int victim = rand_r(&device->ctxt->seed) % nb;
+                  int ldid = 0;
+                  ldid = __builtin_ffsll(affinity);
+                  for (int i=0; i<victim; ++i)
+                  {
+                    ldid = __builtin_ffsll(affinity);
+                    kaapi_assert( ldid != 0);
+                    ldid;
+                    affinity &= ~(1UL << ldid);
+                  }
+                  kaapi_localitydomain_t* ld = kaapi_localitydomain_get(ldid);
+                  task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, rank);
+                }
+                if (task !=0) break;
+              }
+              if (task ==0)
+              {
+                ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand_r(&device->ctxt->seed) % kaapi_localitydomain_count(KAAPI_LD_GPU) );
+                task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
+              }
+            }
+#endif
+          }
         }
-    }
-}
-      }
-      else
-      {
-        /* spawn_count counts the number of task locally created, not from the mailbox */
-        ++device->spawn_count;
       }
     }
 
@@ -984,11 +960,8 @@ out_device_writeback:
           if (err) goto out_device_memsync;
 
           /* initiate write back only if streams are empty and there are no more tasks to execute */
-          task = kaapi_queue_pop(device->ctxt, device->ctxt->queue, 0);
           if (task ==0)
             task = kaapi_fifo_queue_pop(device->ld->queue);
-          else
-            ++device->spawn_count;
           if (task !=0) goto prepare_execute;
 
 #if 0
