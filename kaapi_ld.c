@@ -412,6 +412,8 @@ kaapi_task_t* kaapi_fifo_queue_pop(
 {
   kaapi_task_t* task = 0;
 
+  if (rd->H >= rd->T)
+    return 0;
   pthread_mutex_lock(&rd->lock);
   if (rd->H < rd->T)
   {
@@ -484,7 +486,10 @@ kaapi_task_t* kaapi_fifo_queue_steal_with_affinity(
   {
     --i;
     int32_t idx = i%size;
-    if (rd->data[idx] ==0) continue;
+    if ((rd->data[idx] ==0) 
+     || (kaapi_taskflag_get(rd->data[idx], KAAPI_TASK_FLAG_UNSTEALABLE))
+    ) 
+      continue;
     int r = kaapi_compute_affinity_score( ldid_target, rd->data[idx], score[nscore], level);
     if (r)
     {

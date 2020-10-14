@@ -440,18 +440,53 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
 
 #if 1//ROUND_ROBIN_BASIC if no locality
   /* this restricted version for xkblas where only GPU tasks are defined */
-  kaapi_localitydomain_t* ld;
+  kaapi_localitydomain_t* ld = 0;
   kaapi_ldid_t ldid = kaapi_task_get_ld(task);
-  if (ldid == (kaapi_ldid_t)-1)
+  if (ldid != (kaapi_ldid_t)-1) 
+  {
+    if ((KAAPI_TASK_LD_MASK_PARAM & ldid) !=0)
+    {
+      /* bound to a parameter */
+      ldid &= ~KAAPI_TASK_LD_MASK_PARAM;
+      const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
+      unsigned int count_params = kaapi_format_get_count_params(fmt, kaapi_task_getargs(task));
+      if (ldid < count_params) 
+      {
+        kaapi_access_t* access = kaapi_format_get_access_param(fmt, (unsigned int)ldid, kaapi_task_getargs(task));
+        kaapi_metadata_info_t* mdi = access->mdi;
+        if (mdi ==0)
+        {
+          mdi = kaapi_dsm_findaccess_on_node(
+            &kaapi_the_dsm,
+            kaapi_local_asid,
+            0,
+            access,
+            0
+          );
+        }
+        kaapi_assert(mdi != 0);
+        KAAPI_MEMORY_VALUE_TYPE valid_bit = KAAPI_ATOMIC_READ(&mdi->valid);
+        valid_bit &= ~(1<< kaapi_memory_asid_get_lid(kaapi_local_asid));
+        ldid = KAAPI_MEMORY_FFS( valid_bit );
+        --ldid;
+        ld = kaapi_localitydomain_get(ldid);
+printf("Push %s to ldid:%i\n", fmt->name, ldid );
+      } 
+else
+printf("Task with bad OCR %s / index ldid:%i\n", fmt->name, ldid );
+    }
+    else 
+      ld = kaapi_localitydomain_get(ldid);
+  }
+
+  if (ld ==0) 
   {
     ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, ctxt->last_ldid++);
     int count = kaapi_localitydomain_count(KAAPI_LD_GPU);
     if (ctxt->last_ldid >= count) ctxt->last_ldid = 0;
   }
-  else
-    ld = kaapi_localitydomain_get(ldid);
 
-#if 0
+#if 1
   if (ld == ctxt->ld)
     return
       kaapi_queue_push(ctxt, task );

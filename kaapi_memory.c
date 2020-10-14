@@ -2048,7 +2048,7 @@ kaapi_metadata_info_t* kaapi_dsm_findaccess_on_node(
     goto return_value;
   }
   kaapi_assert_debug(
-    kaapi_memory_view_size(view) == kaapi_memory_view_size(&mdi->replicas[lid0]->view)
+    (view ==0) || (kaapi_memory_view_size(view) == kaapi_memory_view_size(&mdi->replicas[lid0]->view))
   );
 
   //
@@ -2084,13 +2084,13 @@ kaapi_metadata_info_t* kaapi_dsm_findaccess_on_node(
 
     /* make sure view correspond */
     kaapi_assert_debug(
-      kaapi_memory_view_size(view) == kaapi_memory_view_size(&mdi->replicas[lid0]->view)
+      (view ==0) || (kaapi_memory_view_size(view) == kaapi_memory_view_size(&mdi->replicas[lid0]->view))
     );
 #if KAAPI_DEBUG
     if ((entry==0) && createflag)
       mdi->replicas[lid0]->view = *view;
     else
-      kaapi_assert( kaapi_memory_view_size(view) == kaapi_memory_view_size(&mdi->replicas[lid0]->view) );
+      kaapi_assert( (view ==0)|| (kaapi_memory_view_size(view) == kaapi_memory_view_size(&mdi->replicas[lid0]->view)) );
 #endif
 
       //kaapi_assert_debug(kaapi_memory_view_size(view) <= TILE_SIZE);
@@ -2105,7 +2105,6 @@ return_value:
   a->mdi = mdi;
   /* allocate replica but not the memory block */
   if (createflag && !kaapi_memory_replica_is_allocated(mdi,lid))
-  //if (createflag) // && (mdi->replicas[lid] ==0))
   {
     mdi->replicas[lid] = _kaapi_new_replica( mdi, mdi->replicas[lid], asid, view);
   }
@@ -2512,7 +2511,10 @@ static int kaapi_dsm_fetch_on(
      data is under transfer to lid_src.
   */
   uint16_t selected_dest;
+  /* force serialisation to have the most recent update information ? */
+  kaapi_atomic_lock(&mdi->replicas[0]->lock);
   uint16_t lid_src = _kaapi_get_source_lid(dsm, mdi, asid, &selected_dest);
+  kaapi_atomic_unlock(&mdi->replicas[0]->lock);
 
   /* emit the communication between lid_src to lid */
   kaapi_data_replica_t* src_replica  = mdi->replicas[lid_src];

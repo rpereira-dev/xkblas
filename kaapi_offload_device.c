@@ -713,14 +713,14 @@ int kaapi_sched_idle_offload(
       /* else pop on device specific queue (~ mailbox) */
       if (task ==0)
       {
-#if 0  // origin
+#if 1  // origin
         task = kaapi_fifo_queue_pop(device->ld->queue);
 #else
         task = kaapi_fifo_queue_steal_with_affinity(device->ld->queue, device, 3);
         if (task ==0) task = kaapi_fifo_queue_pop(device->ld->queue);
         //if (task) printf("(1)pop from:%p, device->ld:%p\n", device->ld->queue, device->ld);
 #endif
-#if 1//STEAL
+#if 0//STEAL
 {
 //13/10: this is the best for syrk
         if (task ==0)
@@ -745,7 +745,13 @@ int kaapi_sched_idle_offload(
             kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand_r(&device->ctxt->seed) % kaapi_localitydomain_count(KAAPI_LD_GPU) );
             task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
             //task = kaapi_fifo_queue_pop(ld->queue);
-           if (task != 0) printf("Steal task !\n");
+#if 0
+           if (task != 0) 
+           {
+             const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
+             printf("Steal task %s!\n",fmt->name);
+           }
+#endif
           }
 #endif
 #if 0
