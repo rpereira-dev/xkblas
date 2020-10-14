@@ -885,6 +885,7 @@ static void xkblas_create_taskwriteback(
       KAAPI_ACCESS_MODE_R, xkblas_get_handle(Ah,m,n));
   kaapi_assert_debug( taskarg->a.mdi==0 );
   //Deadlock if steal is activated ? kaapi_taskflag_set(task, KAAPI_TASK_FLAG_INCOM|KAAPI_TASK_FLAG_UNSTEALABLE);
+  //kaapi_taskflag_set(task, KAAPI_TASK_FLAG_INCOM|KAAPI_TASK_FLAG_UNSTEALABLE);
   kaapi_taskflag_set(task, KAAPI_TASK_FLAG_INCOM);
   kaapi_task_set_ld(task, 1, 0);
 #if KAAPI_DEBUG

@@ -775,6 +775,41 @@ static size_t cuda_get_free_mem(kaapi_memory_device_t* dev)
 }
 
 
+/* TG NOTE: here if perfcounter is enable, then 2 events per communication may be inserted:
+   the first that inserted just before the communication, the second just after.
+   Using such insertions, it is able to compute (online) the bandwidth of communication.
+   + enable timing
+*/
+static void _kaapi_cuda_create_event( kaapi_cuda_io_stream_t* cios, int k )
+{
+  CUresult res;
+#if KAAPI_USE_PERFCOUNTER
+  res = cuEventCreate(&cios->end_events[k], CU_EVENT_DEFAULT);
+  CudaCheckError(res);
+  res = cuEventCreate(&cios->start_events[k], CU_EVENT_DEFAULT);
+  CudaCheckError(res);
+#else
+  res = cuEventCreate(&cios->end_events[k], CU_EVENT_DISABLE_TIMING);
+  CudaCheckError(res);
+#endif
+}
+
+static void _kaapi_cuda_destroy_event( kaapi_cuda_io_stream_t* cios, int k )
+{
+  CUresult res;
+#if KAAPI_USE_PERFCOUNTER
+  res = cuEventDestroy(cios->end_events[k]);
+  CudaCheckError(res);
+  res = cuEventDestroy(cios->start_events[k]);
+  CudaCheckError(res);
+#else
+  res = cuEventDestroy(cios->end_events[k]);
+  CudaCheckError(res);
+#endif
+}
+
+
+
 /*
 */
 static void kaapi_cuda_init_cuda_stream(
@@ -788,22 +823,7 @@ static void kaapi_cuda_init_cuda_stream(
 #if CONFIG_USE_EVENT
   /* */
   for (int k=0; k<capacity; ++k)
-  {
-    /* TG NOTE: here if perfcounter is enable, then 2 events per communication may be inserted:
-       the first that inserted just before the communication, the second just after.
-       Using such insertions, it is able to compute (online) the bandwidth of communication.
-       + enable timing
-     */
-#if KAAPI_USE_PERFCOUNTER
-    res = cuEventCreate(&cios->end_events[k], CU_EVENT_DEFAULT);
-    CudaCheckError(res);
-    res = cuEventCreate(&cios->start_events[k], CU_EVENT_DEFAULT);
-    CudaCheckError(res);
-#else
-    res = cuEventCreate(&cios->end_events[k], CU_EVENT_DISABLE_TIMING);
-    CudaCheckError(res);
-#endif
-  }
+    _kaapi_cuda_create_event(cios, k);
 #endif
   
 
@@ -1146,6 +1166,8 @@ static int cuda_stream_decode_ioinstruction(
       instr->t1 = kaapi_get_elapsedtime();
       res = cuEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
       kaapi_assert(res == CUDA_SUCCESS);
+      res = cuEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
+      kaapi_assert(res == CUDA_SUCCESS);
       //printf("Start event recorded for IO %s at pos: %i\n", name_io[instr->type], ios->pos_wp );
 #endif
 
@@ -1420,7 +1442,7 @@ static int cuda_stream_advance_pending(
       case KAAPI_IO_COPY_H2D:
       case KAAPI_IO_COPY_D2H:
       case KAAPI_IO_COPY_D2D:
-        for (int cnt=0; cnt<5; ++cnt)
+        for (int cnt=0; cnt<1; ++cnt)
         {
           res = cuEventQuery( cios->end_events[idx] );
           kaapi_assert_debug((res == CUDA_ERROR_NOT_READY)  || (res == CUDA_SUCCESS));
@@ -1545,6 +1567,7 @@ static int cuda_stream_process_pending(
             status.gpu_delay = 0;
             kaapi_assert(0);
           }
+
           status.gpu_delay *= 1e-3;
           status.cpu_delay = op->t2-op->t1; 
 #endif

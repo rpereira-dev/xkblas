@@ -438,7 +438,6 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
   kaapi_context_t* ctxt = kaapi_thread2context(thread);
   kaapi_assert(ctxt->ld !=0);
 
-#if 1//ROUND_ROBIN_BASIC if no locality
   /* this restricted version for xkblas where only GPU tasks are defined */
   kaapi_localitydomain_t* ld = 0;
   kaapi_ldid_t ldid = kaapi_task_get_ld(task);
@@ -469,11 +468,8 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
         valid_bit &= ~(1<< kaapi_memory_asid_get_lid(kaapi_local_asid));
         ldid = KAAPI_MEMORY_FFS( valid_bit );
         --ldid;
-        ld = kaapi_localitydomain_get(ldid);
-printf("Push %s to ldid:%i\n", fmt->name, ldid );
+        ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, ldid-1);
       } 
-else
-printf("Task with bad OCR %s / index ldid:%i\n", fmt->name, ldid );
     }
     else 
       ld = kaapi_localitydomain_get(ldid);
@@ -489,79 +485,11 @@ printf("Task with bad OCR %s / index ldid:%i\n", fmt->name, ldid );
   if (ld == ctxt->ld)
     return
       kaapi_fifo_queue_owner_push(ld->queue, task );
-  else
-    return
-      kaapi_fifo_queue_push(
-          ld->queue,
-          task
-      );
-#else
-{
-  kaapi_ldid_t ldid = (kaapi_ldid_t)-1;
-
-  if (ctxt->ld->ldid !=1) 
-  {
-    ldid = kaapi_task_get_ld(task);
-#if AFFINITY
-    if (ldid == (kaapi_ldid_t)-1)
-      ldid = kaapi_compute_best_ld(task);
-#endif
-#if LOG_AFF
-    printf("%p/ld %i: task %p best ld: %i\n", pthread_self(), ctxt->ld->ldid, task, ldid);
-#endif
-  
-    if ((ldid != (kaapi_ldid_t)-1) && (ctxt->ld->ldid != ldid))
-    {
-      kaapi_localitydomain_t* ld = kaapi_localitydomain_get(ldid);
-      kaapi_assert(ld !=0);
-      //if (task) printf("(1)push to:%p\n", ld->queue);
-#if LOG_AFF
-      printf("%p: (1) push task %p to ld: %i\n", pthread_self(), task, ldid);
-#endif
-      return kaapi_fifo_queue_push(
-          ld->queue,
-          task
-      );
-    }
-    else
-      return kaapi_queue_push(ctxt, task);
-  }
-
-  kaapi_assert(ctxt->ld->ldid ==1);
-#if 1
-  ldid = kaapi_task_get_ld(task);
-  if (ldid != (kaapi_ldid_t)-1)
-  {   
-    kaapi_localitydomain_t* ld = kaapi_localitydomain_get(ldid);
-    kaapi_assert(ld !=0);
-    return kaapi_fifo_queue_push(
+  return
+    kaapi_fifo_queue_push(
         ld->queue,
         task
     );
-  }
-#elif 0
-  {
-    static int id_gpu = 0;
-    int count = kaapi_localitydomain_count(KAAPI_LD_GPU);
-    //kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand() % count);
-    kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, id_gpu );
-kaapi_assert(ld !=0 );
-    ++id_gpu;
-    if (id_gpu >= count) id_gpu = 0;
-    return kaapi_fifo_queue_push(ld->queue, frame, task);
-  }
-#endif
- 
-  /* no locality domain: push in local work queue */
-  //if (task) printf("(2)push to:%p\n", ctxt->ld->queue);
-  kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_NUMA, 0);
-#if LOG_AFF
-  printf("%p: (2) push task %p to ld: %i\n", pthread_self(), task, ld->ldid);
-#endif
-  return kaapi_queue_push(ctxt, task);
-  //return kaapi_fifo_queue_push(ld->queue, task);
-}
-#endif
 }
 
 
