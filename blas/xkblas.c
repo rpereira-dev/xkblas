@@ -1788,9 +1788,11 @@ redo_syr2k:
         fact = 1;
         NB = M / (fact*ngpu);
         if (M >ngpu)
-          if (NB<2048) NB=2048;
+        {
+          if ((M> 16384)&&(NB<2048)) NB=2048;
+        }
         if (NB >4096) NB = M / (2*fact*ngpu);
-        if (NB <1024) NB = 1024;
+        if (NB <512) NB = 512;
         NB = (NB + 63) & ~63UL;
       }
       break;
