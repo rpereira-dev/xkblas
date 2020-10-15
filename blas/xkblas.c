@@ -1724,174 +1724,90 @@ size_t xkblas_auto_tilesize(
   xkblas_kernel_t kernel, size_t M, size_t N, size_t K
 )
 {
+  /* get default tile size and initialize internal descriptor if not yet */
+  size_t NB = xkblas_get_param();
+  if (NB !=0) return NB;
+  size_t ngpu = xkblas_get_ngpus();
+  size_t fact = 1;
+
   switch (kernel)
   {
-    case KERN_SYRK:
-    case KERN_SYR2K:
-    case KERN_HEMM:
     case KERN_HERK:
+    case KERN_SYRK:
+      {
+        fact = 2;
+redo_syrk:
+        NB = M / (fact*ngpu);
+        if (NB >= 2048)
+          NB= NB & ~2047UL;
+        if ((NB <= 1024) && (fact==2)) 
+        { fact=1; goto redo_syrk;} 
+        if (NB >4096) NB = M / (2*fact*ngpu);
+        if (NB <512) NB = 512;
+      }
+      break;
+
     case KERN_HER2K:
+    case KERN_SYR2K:
+      {
+        fact = 4;
+redo_syr2k:
+        NB = M / (fact*ngpu);
+        NB= (NB +63UL)& ~63UL;
+        if ((NB <= 2048) && (fact>2))
+        { --fact; goto redo_syr2k;}
+        if (NB >4096) NB = M / (2*fact*ngpu);
+        if (NB <512) NB = 512;
+      }
+      break;
+
+    case KERN_HEMM:
+    case KERN_SYMM:
+      {
+        fact = 4;
+        NB = M / (fact*ngpu);
+        NB= NB & ~1023UL;
+        if (NB >4096) NB = M / (2*fact*ngpu);
+        if (NB <1024) NB = 1024;
+      } 
+      break;
+
+    case KERN_TRMM:
     case KERN_TRSM:
+      {
+        fact = 2;
+        NB = M / (fact*ngpu);
+        if (NB <1024) NB = 1024;
+        NB = (NB + 63) & ~63UL;
+      }
+      break;
+
     case KERN_GEMMT:
     case KERN_GEMM:
-    case KERN_TRMM:
-    case KERN_SYMM:
-    {
-      /* get default tile size and initialize internal descriptor if not yet */
-      size_t NB = xkblas_get_param();
-      if (NB !=0) return NB;
+      { 
+        fact = 1;
+        NB = M / (fact*ngpu);
+        if (M >ngpu)
+          if (NB<2048) NB=2048;
+        if (NB >4096) NB = M / (2*fact*ngpu);
+        if (NB <1024) NB = 1024;
+        NB = (NB + 63) & ~63UL;
+      }
+      break;
 
-    #define FACTOR 2
-#if 0
-      size_t ngpu = xkblas_get_ngpus();
-      double tNB = ((double)M*(double)N) / (double)(ngpu * FACTOR);
-      tNB =  sqrt(tNB);
-      NB = (size_t)tNB;
-      if (NB ==0)
-      {
-        NB = N / ngpu;
-        if (NB ==0) NB = 512;
-      }
-      //TG: TEST BEFORE making it permanent
-      if (NB <128) NB = 128;
-      return NB;
-#elif 0 // heuristic 4,2 or 4,3,2,1
-      size_t ngpu = xkblas_get_ngpus();
-      if (M<N) N =M;
-      for (int fact = FACTOR; fact>0; fact-=2)
-      k     
-        double tNB = ((double)N) / (double)(ngpu * fact);
-        NB = ceil(tNB);
-        if (NB >=1024) break;
-      }
-      //TG: TEST BEFORE making it permanent
-      if (NB <1024) NB = 1024;
-      NB = (NB + 127) & ~127UL;
-      return NB;
-#elif 0 /* 2020-05-10: last function */
-      size_t ngpu = xkblas_get_ngpus();
-      if (M<N) N =M;
-      for (int fact = FACTOR; fact>0; --fact)
-      {
-        double tNB = ((double)N) / (double)(ngpu * fact);
-        NB = ceil(tNB);
-        if (NB >=1024) break;
-      }
-      NB = (NB + 127) & ~127UL;
-      if (NB <1024) NB = 1024;
-      //if (NB <896) NB = 896;
-//printf("Tilesize: %i\n",NB);
-      return NB;
-#elif 0 // all bench ipdps
-      size_t ngpu = xkblas_get_ngpus();
-      size_t fact = ngpu/2;
-      if (fact ==0) fact = 1;
-      if (M<N) N =M;
-      size_t tNB = ((double)N) / (double)fact;
-      size_t k =  tNB / (8192/fact);
-      if (k ==0) NB = N / fact;
-      else NB = N / (k * fact);
-      NB = (NB + 255) & ~255UL;
-      if (NB <512) NB = 512;
-      //if (NB <896) NB = 896;
-printf("Mat size: %i tilesize: %i\n",(int)M, NB);
-      return NB;
-#elif 0 // job-12 
-      size_t ngpu = xkblas_get_ngpus();
-      double tNB = M / (ngpu);
-      NB = (size_t)tNB;
-      if (NB >=3000) NB = M / (2*ngpu);
-      if (NB <512) NB = 512;
-      NB = (NB + 63) & ~63UL;
-printf("Mat size: %i tilesize: %i\n",(int)M, NB);
-      return NB;
-#elif 0
-      size_t ngpu = xkblas_get_ngpus();
-      size_t fact = 1;
-      if (M<=23*1024)
-        fact = 2;
-      else if ((kernel != KERN_SYMM)||(kernel != KERN_SYRK)||(kernel != KERN_SYR2K))
-        fact = 4;
-      double tNB = M / (fact*ngpu);
-      NB = (size_t)tNB;
-      //if ((kernel != KERN_SYMM)||(kernel != KERN_SYRK)||(kernel != KERN_SYR2K))
-      //{
-      if (NB >=4096) NB = M / (2*fact*ngpu);
-      //}
-      if (NB <512) NB = 512;
-      NB = (NB + 63) & ~63UL;
-printf("Mat size: %i tilesize: %i\n",(int)M, NB);
-      return NB;
-#elif 0
-      size_t ngpu = xkblas_get_ngpus();
-      size_t fact = 1;
-      if (M<=23*1024)
-        fact = 2;
-      double tNB = M / (fact*ngpu);
-      NB = (size_t)tNB;
-      if ((kernel == KERN_SYMM)||(kernel == KERN_SYR2K)||(kernel == KERN_TRSM)||(kernel == KERN_TRMM))
-      {
-        if (NB >=2800) NB = M / (4*fact*ngpu);
-      } 
-      else
-      {
-        if (NB >=4096) NB = M / (2*fact*ngpu);
-      } 
-      if (NB <1024) NB = 1024;
-      NB = (NB + 63) & ~63UL;
-printf("Mat size: %i tilesize: %i\n",(int)M, NB);
-      return NB;
-#elif 1 // FINAL IPDPS ???
-      size_t ngpu = xkblas_get_ngpus();
-      size_t fact = 2;
-      if (kernel == KERN_SYRK)
-      {
-        fact = 4;
-        NB = M / (fact*ngpu);
-        if (NB >3000) NB = M / (2*fact*ngpu);
-      }
-      else if (kernel == KERN_SYR2K)
-      {
-        fact = 4;
-        NB = M / (fact*ngpu);
-        if (NB >3000) NB = M / (2*fact*ngpu);
-      }
-      else if (kernel == KERN_SYMM)
-      {
-        fact = 4;
-        NB = M / (fact*ngpu);
-        if (NB >3000) NB = M / (2*fact*ngpu);
-      } 
-      else if ((kernel == KERN_TRSM)||(kernel == KERN_TRMM))
-      {
-        fact = 2;
-        NB = M / (fact*ngpu);
-      }
-      else  
+    default:
+      { 
+        fact = 1;
         NB = M / (fact*ngpu);
         if (NB >=4096) NB = M / (2*fact*ngpu);
-      if (NB <1024) NB = 1024;
-      NB = (NB + 63) & ~63UL;
-printf("Mat size: %i tilesize: %i\n",(int)M, NB);
-      return NB;
-#elif 0
-      long ALIGN=64;
-      double Rfit = floor((N* 0.0003637428 +3)/4)*4;
-      double BSfit = floor((N/Rfit+ALIGN-1)/ALIGN)*ALIGN;
-      if (BSfit > 2560) 
-      {
-  	Rfit = Rfit +4;
-        BSfit = floor((N/Rfit+ALIGN-1)/ALIGN)*ALIGN;
+        if (NB <1024) NB = 1024;
+        NB = (NB + 63) & ~63UL;
       }
-printf("DSMat size: %i tilesize: %i\n",(int)N, (int)BSfit);
-      return BSfit;
-#endif
-    };
-
-    case KERN_VOID:
       break;
   }
-  return 0;
+
+printf("Mat size: %i tilesize: %i\n",(int)M, NB);
+  return NB;
 }
 
 
