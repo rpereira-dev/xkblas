@@ -88,7 +88,7 @@
 #define KAAPI_USE_D2D_ROUTE 0
 
 /* to use specific stream for D2D operation. */
-#define KAAPI_USE_STREAM_D2D 0
+#define KAAPI_USE_STREAM_D2D 1
 
 /* Mark that we compile source of the library.
    Only used to avoid to include public definitition of some types.

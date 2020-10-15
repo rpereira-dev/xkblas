@@ -169,11 +169,11 @@ kaapi_rtparam_t kaapi_default_param = {
   .ngpus                 = (uint8_t)-1,
   .gpu_set               = ~0,
   .cuda_stream_capacity  = 64,
-  .cuda_conc_d2h         = 1,   /* output: D2H */
+  .cuda_conc_d2h         = 2,   /* output: D2H */
   .cuda_conc_stream_kernel = 4,
-  .cuda_conc_kernel      = 2,
-  .cuda_conc_h2d         = 1,   /* output: H2D */
-  .cuda_conc_d2d         = 1,   /* output: D2D */
+  .cuda_conc_kernel      = 8,
+  .cuda_conc_h2d         = 2,   /* output: H2D */
+  .cuda_conc_d2d         = 2,   /* output: D2D */
   .cuda_cache_limit      = 0.98
 };
 
@@ -345,11 +345,11 @@ int kaapi_init(void)
   kaapi_default_param.ngpus                 = (uint8_t)-1;
   kaapi_default_param.gpu_set               = ~0;
   kaapi_default_param.cuda_stream_capacity  = 64;
-  kaapi_default_param.cuda_conc_d2h         = 1;
+  kaapi_default_param.cuda_conc_d2h         = 2;
   kaapi_default_param.cuda_conc_stream_kernel= 4;
-  kaapi_default_param.cuda_conc_kernel      = 2;
-  kaapi_default_param.cuda_conc_h2d         = 1;
-  kaapi_default_param.cuda_conc_d2d         = 1;
+  kaapi_default_param.cuda_conc_kernel      = 8;
+  kaapi_default_param.cuda_conc_h2d         = 2;
+  kaapi_default_param.cuda_conc_d2d         = 2;
   kaapi_default_param.cuda_cache_limit      = 0.98;
 
   /* set up runtime parameters */
