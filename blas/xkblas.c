@@ -562,35 +562,15 @@ int xkblas_map_2Dblock_cyclic(
       if ((ldid ==0) || force)
       {
         int r = ( ((i/Bp)%Gp)*Gq + (j/Bq)%Gq ) %count;
-        xkblas_set_ldid(Ah, i, j, ldid = 1+kaapi_localitydomain_get_num(type, r));
-#if 0
-        const char* name = kaapi_dbg_get_name(A);
-        printf("SET: %s @: %p -> (%i,%i) = %i\n",
-            (name ? name : ""),
-            addr,
-            ((i/Bp)%Gp),
-            (j/Bq)%Gq,
-            ldid-1
+        kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(type,r);
+        xkblas_set_ldid(Ah, i, j, ldid = 1+ld->ldid);
+        kaapi_dsm_whish_distribution(
+              &kaapi_the_dsm,
+              ld->device->memdev.asid,
+              xkblas_get_handle(Ah, i, j)
         );
-#endif
       }
-#if 0
-      const char* name = kaapi_dbg_get_name(A);
-      if (name)
-        printf("%s=%i  ",
-          (name ? name : ""),
-          ldid-1
-        );
-      else
-        printf("(%i,%i)=%i  ",
-          i,j,
-          ldid-1
-        );
-#endif
     }
-#if 0
-    printf("\n");
-#endif
   }
   return 0;
 }
@@ -1821,44 +1801,6 @@ int xkblas_auto_map(
   xkblas_matrix_descr_t* Ah
 )
 {
-#if KAAPI_USE_PERFCOUNTER && KAAPI_ADVANCED_VERSION
-static pthread_mutex_t lock_update = PTHREAD_MUTEX_INITIALIZER;
-    double sum = 0.0;
-    int cnt = 0;
-    for (int i=0; i<KAAPI_MAX_THREAD_COUNT; ++i)
-    {
-      sum += kaapi_perthread_stat[i].dcounter[KAAPI_FLOPS_TASK_PENDING];
-      if (kaapi_perthread_stat[i].dcounter[KAAPI_FLOPS_TASK_PENDING] >0)
-        ++cnt;
-    }
-pthread_mutex_lock(&lock_update);
-    if (sum >0)
-    {
-      ++kaapi_perthread_stat[0].counter[KAAPI_LOAD_COLLISION_COUNT];
-      kaapi_perthread_stat[0].dcounter[KAAPI_LOAD_COLLISION_GPU] += (double)cnt;
-    }
-    else
-      ++kaapi_perthread_stat[0].counter[KAAPI_LOAD_NOCOLLISION_COUNT];
-pthread_mutex_unlock(&lock_update);
-#endif
-
-#if 0
-int size = kaapi_offload_get_num_devices();
-#define SIZE_THIS_BUFFER 256
-char buffer[SIZE_THIS_BUFFER];
-char* wpos = buffer;
-wpos += snprintf(wpos, SIZE_THIS_BUFFER-(wpos-buffer),"LOAD:%15.6f,", kaapi_get_elapsedtime());
-for (int i=0; i<size; ++i)
-{
-  kaapi_device_t* device = kaapi_offload_device(i);
-  if (device->driver != kaapi_offload_driver_bytype(KAAPI_PROC_TYPE_CUDA)) 
-    continue;
-  kaapi_context_t* ctxt = device->ctxt;
-  wpos += snprintf(wpos,SIZE_THIS_BUFFER-(wpos-buffer),"%7.2e,", kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_FLOPS_TASK_PENDING]);
-}
-wpos += snprintf(wpos,SIZE_THIS_BUFFER-(wpos-buffer),"%x",pthread_self());
-printf("%s\n",buffer);
-#endif
   switch (kernel)
   {
 #if 0
