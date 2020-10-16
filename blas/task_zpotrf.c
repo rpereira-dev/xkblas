@@ -85,7 +85,9 @@ void INSERT_TASK_zpotrf(
         KAAPI_ACCESS_MODE_R, xkblas_get_handle(Ah, Am, An));
     taskarg->lda = lda;
     taskarg->mm = xkblas_get_modemath();
-    kaapi_task_set_ld(task, 0, xkblas_get_ld(Ah, Am, An ));
+    //kaapi_task_set_ld(task, 0, xkblas_get_ld(Ah, Am, An ));
+    /* OCR on the first parameter */
+    kaapi_task_set_ld(task, 1, 0);
     kaapi_task_commit( thread, task );
 }
 

@@ -111,7 +111,9 @@ void INSERT_TASK_zsyr2k(
         beta == 0.0 ? KAAPI_ACCESS_MODE_W : KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Ch, Cm, Cn));
     taskarg->ldc = ldc;
     taskarg->mm = xkblas_get_modemath();
-    kaapi_task_set_ld(task, 0, xkblas_get_ld(Ch, Cm, Cn));
+    //kaapi_task_set_ld(task, 0, xkblas_get_ld(Ch, Cm, Cn));
+    /* OCR on the third parameter */
+    kaapi_task_set_ld(task, 1, 2);
     kaapi_taskflag_set(task, KAAPI_TASK_PERFCNT);
     kaapi_task_commit( thread, task );
 }

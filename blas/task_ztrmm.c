@@ -118,7 +118,9 @@ void INSERT_TASK_ztrmm(
         KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Bh, Bm, Bn));
     taskarg->ldb = ldb;
     taskarg->mm = xkblas_get_modemath();
-    kaapi_task_set_ld(task, 0, xkblas_get_ld(Bh, Bm, Bn ));
+    //kaapi_task_set_ld(task, 0, xkblas_get_ld(Bh, Bm, Bn ));
+    /* OCR on the second parameter */
+    kaapi_task_set_ld(task, 1, 1);
     kaapi_taskflag_set(task, KAAPI_TASK_PERFCNT);
     kaapi_task_commit( thread, task );
 }
