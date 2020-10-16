@@ -446,7 +446,7 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
   {
     if ((KAAPI_TASK_LD_MASK_PARAM & ldid) !=0)
     {
-      /* bound to a parameter */
+      /* OCR parameter : locality is given by the locality of an effective parameter */
       ldid &= ~KAAPI_TASK_LD_MASK_PARAM;
       const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
       unsigned int count_params = kaapi_format_get_count_params(fmt, kaapi_task_getargs(task));
@@ -464,12 +464,30 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
             0
           );
         }
-        kaapi_assert(mdi != 0);
-        KAAPI_MEMORY_VALUE_TYPE valid_bit = KAAPI_ATOMIC_READ(&mdi->valid);
-        valid_bit &= ~(1<< kaapi_memory_asid_get_lid(kaapi_local_asid));
-        ldid = KAAPI_MEMORY_FFS( valid_bit );
-        --ldid;
-        ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, ldid-1);
+        /* if unable to detect meta data information (absence of dsm_whish distribute or absence of previous task running
+           with the parameter */
+        if (mdi != 0) 
+        {
+          KAAPI_MEMORY_VALUE_TYPE valid_bit = KAAPI_ATOMIC_READ(&mdi->valid);
+          valid_bit &= ~(1<< kaapi_memory_asid_get_lid(kaapi_local_asid));
+          /* is valid bit previously defined ? */
+          if (valid_bit !=0) 
+          {  
+            ldid = KAAPI_MEMORY_FFS( valid_bit );
+            --ldid;
+            ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, ldid-1);
+          }
+          /* else use the whish */
+          else {
+            KAAPI_MEMORY_VALUE_TYPE whish_bit = KAAPI_ATOMIC_READ(&mdi->whish);
+            if (whish_bit !=0) 
+            {  
+              ldid = KAAPI_MEMORY_FFS( whish_bit );
+              --ldid;
+              ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, ldid-1);
+            }  
+          } /* in any previous case, leave ld ==0  */
+        } // mdi !=0
       } 
     }
     else 
@@ -524,7 +542,6 @@ int32_t kaapi_queue_push(
   rd->T[p] = T;
   return T-1 /* [debug] */;
 }
-
 
 /* pop from T: THE
    Return the task popped if popped has index bigger than T0

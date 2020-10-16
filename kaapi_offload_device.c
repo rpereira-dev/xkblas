@@ -434,8 +434,8 @@ static int kaapi_offload_device_prepare_execute_task(
 
   unsigned int ith;
   kaapi_memory_view_t view;
-  kaapi_access_t* access;
-  kaapi_metadata_info_t* mdi;
+  kaapi_access_t* access = 0;
+  kaapi_metadata_info_t* mdi = 0;
   unsigned int count_params = kaapi_format_get_count_params(fmt, kaapi_task_getargs(task));
 
   /* use task->wc as counter for asynchronous callback to detect
