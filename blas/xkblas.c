@@ -564,11 +564,13 @@ int xkblas_map_2Dblock_cyclic(
         int r = ( ((i/Bp)%Gp)*Gq + (j/Bq)%Gq ) %count;
         kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(type,r);
         xkblas_set_ldid(Ah, i, j, ldid = 1+ld->ldid);
+#if 0
         kaapi_dsm_whish_distribution(
               &kaapi_the_dsm,
               ld->device->memdev.asid,
               xkblas_get_handle(Ah, i, j)
         );
+#endif
       }
     }
   }

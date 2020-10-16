@@ -2024,7 +2024,7 @@ abort();
     - mdi and the replica for device lid are allocated
     - replica for host node points to the memory passed in a.
 */
-#define KAAPI_DSM_CREATE_MASK  (KAAPI_DSM_CREATE_DATA||KAAPI_DSM_CREATE_MDI)
+#define KAAPI_DSM_CREATE_MASK  (KAAPI_DSM_CREATE_DATA | KAAPI_DSM_CREATE_MDI)
 kaapi_metadata_info_t* kaapi_dsm_findaccess_on_node(
       kaapi_dsm_t* dsm,
       kaapi_address_space_id_t asid,
@@ -2039,8 +2039,8 @@ kaapi_metadata_info_t* kaapi_dsm_findaccess_on_node(
   kaapi_assert_debug(lid0 < KAAPI_MEMORY_MAX_NODES);
 
   /* avoid extra bit */
-  createflag &= ~KAAPI_DSM_CREATE_MASK;
-  kaapi_assert( ((createflag & KAAPI_DSM_CREATE_DATA) ==0) || ((createflag & KAAPI_DSM_CREATE_MDI) ==1) );
+  createflag &= KAAPI_DSM_CREATE_MASK;
+  kaapi_assert( ((createflag & KAAPI_DSM_CREATE_DATA) ==0) || ((createflag & KAAPI_DSM_CREATE_MDI) !=0) );
   
   kaapi_metadata_info_t* mdi = 0;
   kaapi_hashentries_t* entry;
@@ -2073,7 +2073,10 @@ kaapi_metadata_info_t* kaapi_dsm_findaccess_on_node(
     mdi = KAAPI_HASHENTRIES_GET(entry, kaapi_metadata_info_t*);
     if (mdi ==0)
     {
-      mdi = _kaapi_new_mdi( 0, a->data, view );
+      if (createflag & KAAPI_DSM_CREATE_DATA)
+        mdi = _kaapi_new_mdi( 0, a->data, view );
+      else
+        mdi = _kaapi_new_mdi( 0, 0, 0 );
       KAAPI_HASHENTRIES_SET(entry, mdi, kaapi_metadata_info_t*);
 #if KAAPI_DEBUG
       mdi->owner = a->creator;
@@ -2158,7 +2161,7 @@ return_value:
   /* */
   a->mdi = mdi;
   /* allocate replica but not the memory block */
-  if (createflag && !kaapi_memory_replica_is_allocated(mdi,lid))
+  if ((createflag &KAAPI_DSM_CREATE_DATA) && !kaapi_memory_replica_is_allocated(mdi,lid))
   {
     mdi->replicas[lid] = _kaapi_new_replica( mdi, mdi->replicas[lid], asid, view);
   }
