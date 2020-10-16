@@ -271,7 +271,7 @@ int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* 
       mdi = kaapi_dsm_findaccess_on_node(
           &kaapi_the_dsm,
           kaapi_local_asid,
-          0, /* do not create*/
+          KAAPI_DSM_NOCREATE, /* do not create*/
           access,
           &view
       );
@@ -325,7 +325,7 @@ int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* 
    may has the capacity to select the best task or at least:
 	- a task with most of its input on the device
 	- a task with inputs on the device close to the target device.
- */
+*/
 static kaapi_ldid_t kaapi_compute_best_ld( kaapi_task_t* task)
 {
   kaapi_ldid_t ldid = (kaapi_ldid_t)-1;
@@ -368,7 +368,7 @@ static kaapi_ldid_t kaapi_compute_best_ld( kaapi_task_t* task)
       mdi = kaapi_dsm_findaccess_on_node(
           &kaapi_the_dsm,
           kaapi_local_asid,
-          0, /* do not create*/
+          KAAPI_DSM_NOCREATE, /* do not create*/
           access,
           &view
       );
@@ -459,7 +459,7 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
           mdi = kaapi_dsm_findaccess_on_node(
             &kaapi_the_dsm,
             kaapi_local_asid,
-            0,
+            KAAPI_DSM_NOCREATE,
             access,
             0
           );

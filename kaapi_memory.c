@@ -336,6 +336,35 @@ static inline void kaapi_memory_replica_unset_pinned(
   KAAPI_ATOMIC_WRITE(&mdi->replicas[lid]->pinned, 0);
 }
 
+static inline bool kaapi_memory_replica_has_whish(
+    kaapi_metadata_info_t*   mdi,
+    uint16_t lid
+)
+{
+  kaapi_assert_debug(mdi != 0);
+  return  (KAAPI_ATOMIC_READ(&mdi->valid) & (1UL<<lid))!=0;
+}
+
+static inline void kaapi_memory_replica_set_which(
+    kaapi_metadata_info_t*   mdi,
+    uint16_t lid
+)
+{
+  kaapi_assert_debug(mdi != 0);
+  kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
+  KAAPI_ATOMIC_OR(&mdi->whish, (1UL<<lid));
+}
+
+static inline void kaapi_memory_replica_unset_whish(
+    kaapi_metadata_info_t*   mdi,
+    uint16_t lid
+)
+{
+  kaapi_assert_debug(mdi != 0);
+  kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
+  KAAPI_ATOMIC_AND(&mdi->whish, ~(uint16_t)(1UL<<lid));
+}
+
 /* -------------------------------------------------------------------------- */
 static void bit2str( char* buffer, int bitmap )
 {
@@ -1904,6 +1933,7 @@ static inline kaapi_data_replica_t* _kaapi_new_replica(
 /* Allocate a new meta data information with replica on the host node.
    Host ptr is used as the referent pointer - valid bit is set as well as alloc bit.
    The host replica is always marked as pined to avoid unallocation.
+   Note: ptr may be 0 (as well as view).
 */
 static kaapi_metadata_info_t* _kaapi_new_mdi(
     kaapi_metadata_info_t* mdi,
@@ -1919,22 +1949,31 @@ static kaapi_metadata_info_t* _kaapi_new_mdi(
     mdi = (kaapi_metadata_info_t*)malloc(sizeof(kaapi_metadata_info_t));
     memset( &mdi->replicas, 0, sizeof(mdi->replicas));
   }
-
-  /* allocate replica and entry for lid0 */
-  kaapi_data_replica_t* kdr = mdi->replicas[lid0];
-  kdr = _kaapi_new_replica( mdi, kdr, kaapi_local_asid, view );
-  mdi->replicas[lid0] =  kdr;
-  
-  kdr->ptr = kaapi_make_pointer(ptr, 0, kaapi_local_asid);
-  KAAPI_ATOMIC_WRITE(&kdr->pinned, 1);  /* one reference count to the application data */
-  KAAPI_ATOMIC_WRITE(&mdi->alloc,  1ULL<<lid0);
-  KAAPI_ATOMIC_WRITE(&mdi->valid,  1ULL<<lid0);
   KAAPI_ATOMIC_WRITE(&mdi->xfer,   0ULL);
   KAAPI_ATOMIC_WRITE(&mdi->xferb,  0ULL);
+  KAAPI_ATOMIC_WRITE(&mdi->whish,  0ULL);
 #if defined(KAAPI_DEBUG)
   mdi->debug_info = 0;
   mdi->owner = 0;
 #endif
+  
+  if (ptr !=0)
+  {
+    /* data is here, allocate replica and entry for lid0 */
+    kaapi_data_replica_t* kdr = mdi->replicas[lid0];
+    kdr = _kaapi_new_replica( mdi, kdr, kaapi_local_asid, view );
+    mdi->replicas[lid0] =  kdr;
+    KAAPI_ATOMIC_WRITE(&kdr->pinned, 1);  /* one reference count to the application data */
+
+    kdr->ptr = kaapi_make_pointer(ptr, 0, kaapi_local_asid);
+    KAAPI_ATOMIC_WRITE(&mdi->alloc,  1ULL<<lid0);
+    KAAPI_ATOMIC_WRITE(&mdi->valid,  1ULL<<lid0);
+  }
+  else
+  {
+    KAAPI_ATOMIC_WRITE(&mdi->alloc,  0ULL);
+    KAAPI_ATOMIC_WRITE(&mdi->valid,  0ULL);
+  }
   return mdi;
 }
 
@@ -1975,10 +2014,14 @@ abort();
 
 /* This function first look in the per device hashmap to retreive the data.
    If it does not exist, then it search in the global dsm hashmap.
+   We distinguish data creation and meta data creation in the flag:
+   - KAAPI_DSM_CREATE_DATA
+   - KAAPI_DSM_CREATE_MDI
    On return:
     - mdi and the replica for device lid are allocated
     - replica for host node points to the memory passed in a.
 */
+#define KAAPI_DSM_CREATE_MASK  (KAAPI_DSM_CREATE_DATA||KAAPI_DSM_CREATE_MDI)
 kaapi_metadata_info_t* kaapi_dsm_findaccess_on_node(
       kaapi_dsm_t* dsm,
       kaapi_address_space_id_t asid,
@@ -1992,6 +2035,9 @@ kaapi_metadata_info_t* kaapi_dsm_findaccess_on_node(
   uint16_t lid0 = kaapi_memory_asid_get_lid(kaapi_local_asid);
   kaapi_assert_debug(lid0 < KAAPI_MEMORY_MAX_NODES);
 
+  /* avoid extra bit */
+  createflag &= ~KAAPI_DSM_CREATE_MASK;
+  
   kaapi_metadata_info_t* mdi = 0;
   kaapi_hashentries_t* entry;
   if (lid == (uint16_t)-1) lid = lid0;
@@ -2016,7 +2062,7 @@ kaapi_metadata_info_t* kaapi_dsm_findaccess_on_node(
     return 0;
   }
 
-  if ((entry ==0) && createflag)
+  if ((entry ==0) && (createflag & KAAPI_DSM_CREATE_MDI))
   {
     /* not entry but required to create it */
     kaapi_assert_debug( view );
@@ -2032,8 +2078,13 @@ kaapi_metadata_info_t* kaapi_dsm_findaccess_on_node(
       goto return_value;
     }
   }
-  if (mdi ==0) 
+
+  if (mdi ==0)
     mdi = KAAPI_HASHENTRIES_GET(entry, kaapi_metadata_info_t*);
+
+  if ((createflag & KAAPI_DSM_CREATE_DATA) ==0)
+    return mdi;
+    
   //if (createflag && (mdi->replicas[0]->ptr.ptr !=0) && ((uintptr_t)a->data != (uintptr_t)mdi->replicas[0]->ptr.ptr))
   kaapi_assert( ((uintptr_t)mdi->replicas[0]->ptr.ptr ==0)
              || ((uintptr_t)a->data == (uintptr_t)mdi->replicas[0]->ptr.ptr) );
@@ -2111,6 +2162,31 @@ return_value:
 
   return mdi;
 }
+
+
+/*
+ */
+int kaapi_dsm_whish_distribution(
+      kaapi_dsm_t* dsm,
+      kaapi_address_space_id_t asid,
+      kaapi_handle_t* h
+)
+{
+  uint16_t lid = kaapi_memory_asid_get_lid(asid);
+  kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
+  kaapi_metadata_info_t* mdi;
+  mdi = kaapi_dsm_findaccess_on_node(
+    &kaapi_the_dsm,
+    kaapi_local_asid,
+    KAAPI_DSM_CREATE_MDI,
+    &h->sync0,
+    0
+  );
+  if (mdi ==0) return EINVAL;
+  kaapi_memory_replica_set_which(mdi, lid);
+  return 0;
+}
+
 
 
 /* Allocate a replica on lid:
@@ -2848,7 +2924,7 @@ int kaapi_memory_sync_data(kaapi_memgroup_t* grp, void* ptr)
   kaapi_metadata_info_t* mdi = kaapi_dsm_findaccess_on_node(
       &kaapi_the_dsm,
       kaapi_local_asid,
-      0, /* do not create if not existing */
+      KAAPI_DSM_NOCREATE, /* do not create if not existing */
       &a,
       0
   );

@@ -369,14 +369,14 @@ static void kaapi_do_prefetch_data(
         mdi = kaapi_dsm_findaccess_on_node(
             &kaapi_the_dsm,
             device->memdev.asid,
-            1,
+            KAAPI_DSM_CREATE_DATA|KAAPI_DSM_CREATE_MDI,
             access,
             &view
         );
 
       /* if already valid or under transfer do nothing */
       if (kaapi_memory_replica_is_valid(mdi, lid)
-        || kaapi_memory_replica_is_xfer(mdi, lid))
+       || kaapi_memory_replica_is_xfer(mdi, lid))
         continue;
 
       /* else : send prefetch request */
@@ -470,7 +470,7 @@ static int kaapi_offload_device_prepare_execute_task(
     mdi = kaapi_dsm_findaccess_on_node(
         &kaapi_the_dsm, 
         device->memdev.asid,
-        1, /* force creation */
+        KAAPI_DSM_CREATE_DATA|KAAPI_DSM_CREATE_MDI,
         access,
         &view
     );
