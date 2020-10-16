@@ -1959,6 +1959,7 @@ static kaapi_metadata_info_t* _kaapi_new_mdi(
   
   if (ptr !=0)
   {
+    kaapi_assert( view != 0 );
     /* data is here, allocate replica and entry for lid0 */
     kaapi_data_replica_t* kdr = mdi->replicas[lid0];
     kdr = _kaapi_new_replica( mdi, kdr, kaapi_local_asid, view );
@@ -2017,6 +2018,8 @@ abort();
    We distinguish data creation and meta data creation in the flag:
    - KAAPI_DSM_CREATE_DATA
    - KAAPI_DSM_CREATE_MDI
+   If KAAPI_DSM_CREATE_DATA is set then it assume that KAAPI_DSM_CREATE_MDI is
+   also set.
    On return:
     - mdi and the replica for device lid are allocated
     - replica for host node points to the memory passed in a.
@@ -2037,6 +2040,7 @@ kaapi_metadata_info_t* kaapi_dsm_findaccess_on_node(
 
   /* avoid extra bit */
   createflag &= ~KAAPI_DSM_CREATE_MASK;
+  kaapi_assert( ((createflag & KAAPI_DSM_CREATE_DATA) ==0) || ((createflag & KAAPI_DSM_CREATE_MDI) ==1) );
   
   kaapi_metadata_info_t* mdi = 0;
   kaapi_hashentries_t* entry;
@@ -2056,16 +2060,15 @@ kaapi_metadata_info_t* kaapi_dsm_findaccess_on_node(
   kaapi_atomic_unlock( &dsm->nodes[lid0]->lock );
 #endif
 
-  if ((entry ==0) && !createflag)
+  if ((entry ==0) && ((createflag & KAAPI_DSM_CREATE_MDI) ==0))
   {
     kaapi_atomic_unlock( &dsm->nodes[lid0]->lock );
     return 0;
   }
 
-  if ((entry ==0) && (createflag & KAAPI_DSM_CREATE_MDI))
+  if ((entry ==0) && ((createflag & KAAPI_DSM_CREATE_MDI) !=0))
   {
-    /* not entry but required to create it */
-    kaapi_assert_debug( view );
+    /* not entry but required to create meta data */
     entry = kaapi_hashmap_findinsert( &dsm->nodes[lid0]->ht, a->data );
     mdi = KAAPI_HASHENTRIES_GET(entry, kaapi_metadata_info_t*);
     if (mdi ==0)
