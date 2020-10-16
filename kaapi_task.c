@@ -220,8 +220,8 @@ int32_t _kaapi_task_commit(kaapi_thread_t* thread, kaapi_task_t* task)
 
 #define LOG_AFF 0
 
-#define KAAPI_USE_AFFINITY     0
-#define KAAPI_USE_OCR_AFFINITY 0
+#define KAAPI_USE_AFFINITY     1
+#define KAAPI_USE_OCR_AFFINITY 1
 /* Affinity: compute the score of executing the task on the ressource ldid
   The algorithm returns a score for 4 criteria:
   0: size of data store in the ressource ldid
@@ -232,7 +232,7 @@ int32_t _kaapi_task_commit(kaapi_thread_t* thread, kaapi_task_t* task)
 */
 int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* score, int level)
 {
-#if 1//KAAPI_USE_AFFINITY
+#if KAAPI_USE_AFFINITY
   int s = 0;
   /* look if task as affinity with one of the ressource */
   uint16_t lid0 = kaapi_memory_asid_get_lid(kaapi_local_asid);
@@ -432,7 +432,8 @@ static kaapi_ldid_t kaapi_compute_best_ld( kaapi_task_t* task)
 }
 
 
-/* */
+/* 
+*/
 int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
 {
   kaapi_context_t* ctxt = kaapi_thread2context(thread);

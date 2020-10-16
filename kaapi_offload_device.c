@@ -689,7 +689,11 @@ static void _kaapi_compute_load_device(int* pmin, int* pmax, float* pavrg, float
   {
     kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU,i);
     //load[i] = kaapi_fifo_queue_size( ld->queue );
+#if KAAPI_PIPELINE_GPUTASK
     load[i] = ld->device->p_ready -  ld->device->p_finish;
+#else
+    load[i] = KAAPI_ATOMIC_READ(&ld->device->cnt_ready);
+#endif
     sum += (float)load[i];
     if (load[i] > max) {
       max = load[i];
@@ -759,8 +763,19 @@ int kaapi_sched_idle_offload(
       if (task ==0)
         task = kaapi_fifo_queue_pop(device->ld->queue);
 
+#if KAAPI_WS_GPUTASK
       /* no task ? try to steal */
-      if ((task ==0) && (device->p_write - device->p_ready ==0))
+      if ((task ==0) 
+#if 1
+      && kaapi_offload_device_accept_new_task(device)
+#else
+#  if KAAPI_PIPELINE_GPUTASK
+       && (device->p_write - device->p_ready ==0)
+#  else
+       && (KAAPI_ATOMIC_READ(&device->cnt_pending)==0)
+#  endif
+#endif
+      )
       {
         /* How to choice this delay ? */
         if (tidle_start ==0) tidle_start = kaapi_get_elapsedns();
@@ -853,6 +868,7 @@ int kaapi_sched_idle_offload(
           }
         }
       }
+#endif // KAAPI_WS_GPUTASK
     }
 
     if (task ==0)
