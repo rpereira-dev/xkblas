@@ -1623,13 +1623,15 @@ static uint16_t cuda_get_source(
   /* return the device with the higher affinity rank with lid_dest
      - does not consider the last performance rank
    */
-#if 1 // original
+#if KAAPI_USE_TOPO_D2D
   for (int rank = 0; rank < cuda_count_perfrank-1; ++rank)
   {
     if (valid_bit !=0)
-      lid_src = KAAPI_MEMORY_FFS( valid_bit &device->affinity[rank] );
-    else /* xfer !=0: pre-cond of the function */
-      lid_src = KAAPI_MEMORY_FFS( xfer_bit &device->affinity[rank]);
+      lid_src = KAAPI_MEMORY_FFS( valid_bit & device->affinity[rank] );
+      //lid_src = _kaapi_get_random_bit1(valid_bit & device->affinity[rank], &device->inherited.ctxt->seed); 
+    else 
+      lid_src = KAAPI_MEMORY_FFS( xfer_bit & device->affinity[rank]);
+      //lid_src = _kaapi_get_random_bit1(xfer_bit & device->affinity[rank], &device->inherited.ctxt->seed); 
     if (lid_src !=0)
     {
       --lid_src;
@@ -1637,32 +1639,20 @@ static uint16_t cuda_get_source(
       return lid_src;
     }
   }
-#else /* first return a valid data, else an xfer data */
+#else /* first return a random valid data, else an xfer data */
   if (valid_bit !=0)
-    for (int rank = 0; rank < cuda_count_perfrank-1; ++rank)
-    {
-      lid_src = KAAPI_MEMORY_FFS( valid_bit &device->affinity[rank] );
-      if (lid_src !=0)
-      {
-        --lid_src;
-        kaapi_assert_debug(lid_src < KAAPI_MEMORY_MAX_NODES);
-        return lid_src;
-      }
-    }
-
+  {
+    uint16_t retval = _kaapi_get_random_bit1(valid_bit, &device->inherited.ctxt->seed)-1; 
+    //printf("RndBit(%i).1=%i\n", valid_bit, retval );
+    return retval;
+  }
   if (xfer_bit !=0)
-    for (int rank = 0; rank < cuda_count_perfrank-1; ++rank)
-    {
-      lid_src = KAAPI_MEMORY_FFS( xfer_bit &device->affinity[rank]);
-      if (lid_src !=0)
-      {
-        --lid_src;
-        kaapi_assert_debug(lid_src < KAAPI_MEMORY_MAX_NODES);
-        return lid_src;
-      }
-    }
+  {
+    uint16_t retval = _kaapi_get_random_bit1(xfer_bit, &device->inherited.ctxt->seed)-1; 
+    //printf("RndBiti(%i).2=%i\n", xfer_bit, retval );
+    return retval;
+  }
 #endif
-
   return (uint16_t)-1;
 }
 

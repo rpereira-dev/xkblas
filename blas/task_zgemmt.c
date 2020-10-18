@@ -113,10 +113,10 @@ void INSERT_TASK_zgemmt(
     taskarg->beta = beta;
     taskarg->ldc = ldc;
     taskarg->mm = xkblas_get_modemath();
-    //kaapi_ldid_t ldid = xkblas_get_ld(Ch, Cm, Cn );
-    //kaapi_task_set_ld(task, 0, ldid);
+    kaapi_ldid_t ldid = xkblas_get_ld(Ch, Cm, Cn );
+    kaapi_task_set_ld(task, 0, ldid);
     /* OCR on the third parameter */
-    kaapi_task_set_ld(task, 1, 2);
+    //kaapi_task_set_ld(task, 1, 2);
     kaapi_taskflag_set(task, KAAPI_TASK_PERFCNT);
     kaapi_task_commit( thread, task );
 

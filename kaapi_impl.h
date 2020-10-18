@@ -73,7 +73,7 @@
 /* use pipeline to order task insertions, communications and kernel launchs
    else the only the number of inserted task + pending task in the stream is limited
 */
-#define KAAPI_PIPELINE_GPUTASK 0
+#define KAAPI_PIPELINE_GPUTASK 1
 
 #if KAAPI_PIPELINE_GPUTASK
 /* reorder stream execution on GPU */
@@ -93,6 +93,9 @@
 
 /* to use specific stream for D2D operation. */
 #define KAAPI_USE_STREAM_D2D 1
+
+/* to use D2D topology and performance group */
+#define KAAPI_USE_TOPO_D2D 1
 
 /* Mark that we compile source of the library.
    Only used to avoid to include public definitition of some types.

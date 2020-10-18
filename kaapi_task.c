@@ -221,7 +221,7 @@ int32_t _kaapi_task_commit(kaapi_thread_t* thread, kaapi_task_t* task)
 #define LOG_AFF 0
 
 #define KAAPI_USE_AFFINITY     1
-#define KAAPI_USE_OCR_AFFINITY 1
+#define KAAPI_USE_OCR_AFFINITY 0
 /* Affinity: compute the score of executing the task on the ressource ldid
   The algorithm returns a score for 4 criteria:
   0: size of data store in the ressource ldid

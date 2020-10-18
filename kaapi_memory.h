@@ -148,6 +148,7 @@ typedef struct kaapi_data_replica {
 #define KAAPI_MEMORY_BITFIELD_TYPE kaapi_atomic16_t
 #define KAAPI_MEMORY_VALUE_TYPE uint16_t
 #define KAAPI_MEMORY_FFS __builtin_ffs
+#define KAAPI_MEMORY_POPCNT __builtin_popcount
 struct kaapi_metadata_info {
     kaapi_data_replica_t*      replicas[KAAPI_MEMORY_MAX_NODES];
     KAAPI_MEMORY_BITFIELD_TYPE alloc;
@@ -162,6 +163,20 @@ struct kaapi_metadata_info {
 #endif
 };
 
+/* utility: return 1+the index of random select bit set to 1*/
+static inline int _kaapi_get_random_bit1(KAAPI_MEMORY_VALUE_TYPE value, unsigned int* seed )
+{
+  int idx = 0;
+  if (value ==0) return 0;
+  int nb = KAAPI_MEMORY_POPCNT(value);
+  int k = rand_r(seed)%nb;
+  for (int i=0; i<=k; ++i) 
+  {
+    idx = KAAPI_MEMORY_FFS(value);
+    value &= ~(1UL << idx);
+  }
+  return idx;
+}
 
 
 /* ============================ Memory Node device ================================= */
