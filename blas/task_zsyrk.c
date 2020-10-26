@@ -44,7 +44,7 @@
 #define NAME(x) NAME2(x,zsyrk)
 #define PNAME(x) zsyrk##_##x
 #define NPARAM 2
-#define MODE_PARAM {KAAPI_ACCESS_MODE_R,KAAPI_ACCESS_MODE_RW }
+#define MODE_PARAM {KAAPI_ACCESS_MODE_R, arg->beta == 0.0 ? KAAPI_ACCESS_MODE_W : KAAPI_ACCESS_MODE_RW }
 #define ADDR_PARAM {&arg->A, &arg->B}
 #define VIEW_PARAM {\
     { ROWDIM(arg->trans, &arg->n, &arg->k), COLDIM(arg->trans, &arg->n, &arg->k), &arg->lda}, \
@@ -85,7 +85,6 @@ void INSERT_TASK_zsyrk(
     kaapi_task_t* task;
     xkblas_context_t* ctxt = xkblas_context_get();
     kaapi_thread_t* thread = ctxt->kthread;
-    kaapi_context_t* kctxt = kaapi_thread2context(thread);
     size_t tasksize = sizeof(NAME(Arg)) + sizeof(kaapi_task_withperfcnt_t);
     task = kaapi_task_alloc( thread, NAME(task_fmtid), tasksize );
     NAME(Arg)* taskarg = kaapi_task_getargst((kaapi_task_withperfcnt_t*)task,NAME(Arg));
@@ -100,12 +99,16 @@ void INSERT_TASK_zsyrk(
     taskarg->lda = lda;
     taskarg->beta = beta;
     kaapi_update_dependencies(thread, &taskarg->B, task,
-        KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Bh, Bm, Bn));
+        beta == 0.0 ? KAAPI_ACCESS_MODE_W : KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Bh, Bm, Bn));
     taskarg->ldb = ldb;
     taskarg->mm = xkblas_get_modemath();
-    kaapi_task_set_ld(task, 0, xkblas_get_ld(Bh, Bm, Bn));
-    /* OCR on the second parameter */
-    //kaapi_task_set_ld(task, 1, 1);
+#if KAAPI_USE_OCR
+    /* OCR on the third parameter */
+    kaapi_task_set_ld(task, KAAPI_TASK_OCR_PARAM, 1);
+#else
+    kaapi_ldid_t ldid = xkblas_get_ld(Bh, Bm, Bn);
+    kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);
+#endif
     kaapi_taskflag_set(task, KAAPI_TASK_PERFCNT);
     kaapi_task_commit( thread, task );
 }

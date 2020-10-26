@@ -90,7 +90,6 @@ void INSERT_TASK_zher2k(
     kaapi_task_t* task;
     xkblas_context_t* ctxt = xkblas_context_get();
     kaapi_thread_t* thread = ctxt->kthread;
-    kaapi_context_t* kctxt = kaapi_thread2context(thread);
     size_t tasksize = sizeof(NAME(Arg)) + sizeof(kaapi_task_withperfcnt_t);
     task = kaapi_task_alloc( thread, NAME(task_fmtid), tasksize );
     NAME(Arg)* taskarg = kaapi_task_getargst((kaapi_task_withperfcnt_t*)task,NAME(Arg));
@@ -111,9 +110,13 @@ void INSERT_TASK_zher2k(
         KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Ch, Cm, Cn));
     taskarg->ldc = ldc;
     taskarg->mm = xkblas_get_modemath();
-    kaapi_task_set_ld(task, 0, xkblas_get_ld(Ch, Cm, Cn));
+#if KAAPI_USE_OCR
     /* OCR on the third parameter */
-    //kaapi_task_set_ld(task, 1, 2);
+    kaapi_task_set_ld(task, KAAPI_TASK_OCR_PARAM, 2);
+#else
+    kaapi_ldid_t ldid = xkblas_get_ld(Ch, Cm, Cn);
+    kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);
+#endif
     kaapi_taskflag_set(task, KAAPI_TASK_PERFCNT);
     kaapi_task_commit( thread, task );
 }
@@ -128,15 +131,6 @@ static void NAME(task_body_cpu)( kaapi_task_t* task, kaapi_thread_t* thread )
       &arg->alpha, arg->A.data, arg->lda, arg->B.data, arg->ldb,
       &arg->beta,  arg->C.data, arg->ldc
   );
-#if 0
-  cblas_zher2k(
-      CblasColMajor,
-      arg->uplo, arg->trans,
-      arg->n, arg->k,
-      CBLAS_SADDR(arg->alpha), arg->A.data, arg->lda, arg->B.data, arg->ldb,
-                  arg->beta,   arg->C.data, arg->ldc
-  );
-#endif
 }
 
 #if KAAPI_USE_CUDA

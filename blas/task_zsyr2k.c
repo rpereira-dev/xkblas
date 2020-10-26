@@ -90,7 +90,6 @@ void INSERT_TASK_zsyr2k(
     kaapi_task_t* task;
     xkblas_context_t* ctxt = xkblas_context_get();
     kaapi_thread_t* thread = ctxt->kthread;
-    kaapi_context_t* kctxt = kaapi_thread2context(thread);
     size_t tasksize = sizeof(NAME(Arg)) + sizeof(kaapi_task_withperfcnt_t);
     task = kaapi_task_alloc( thread, NAME(task_fmtid), tasksize );
     NAME(Arg)* taskarg = kaapi_task_getargst((kaapi_task_withperfcnt_t*)task,NAME(Arg));
@@ -111,9 +110,13 @@ void INSERT_TASK_zsyr2k(
         beta == 0.0 ? KAAPI_ACCESS_MODE_W : KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Ch, Cm, Cn));
     taskarg->ldc = ldc;
     taskarg->mm = xkblas_get_modemath();
-    kaapi_task_set_ld(task, 0, xkblas_get_ld(Ch, Cm, Cn));
+#if KAAPI_USE_OCR
     /* OCR on the third parameter */
-    //kaapi_task_set_ld(task, 1, 2);
+    kaapi_task_set_ld(task, KAAPI_TASK_OCR_PARAM, 2);
+#else
+    kaapi_ldid_t ldid = xkblas_get_ld(Ch, Cm, Cn);
+    kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);
+#endif
     kaapi_taskflag_set(task, KAAPI_TASK_PERFCNT);
     kaapi_task_commit( thread, task );
 }

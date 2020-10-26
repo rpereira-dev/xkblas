@@ -564,12 +564,12 @@ int xkblas_map_2Dblock_cyclic(
         int r = ( ((i/Bp)%Gp)*Gq + (j/Bq)%Gq ) %count;
         kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(type,r);
         xkblas_set_ldid(Ah, i, j, ldid = 1+ld->ldid);
-#if 1
-        kaapi_dsm_whish_distribution(
+#if KAAPI_USE_OCR
+        kaapi_assert(0 == kaapi_dsm_whish_distribution(
               &kaapi_the_dsm,
               ld->device->memdev.asid,
               xkblas_get_handle(Ah, i, j)
-        );
+        ));
 #endif
       }
     }
@@ -869,7 +869,7 @@ static void xkblas_create_taskwriteback(
   //Deadlock if steal is activated ? kaapi_taskflag_set(task, KAAPI_TASK_FLAG_INCOM|KAAPI_TASK_FLAG_UNSTEALABLE);
   //kaapi_taskflag_set(task, KAAPI_TASK_FLAG_INCOM|KAAPI_TASK_FLAG_UNSTEALABLE);
   kaapi_taskflag_set(task, KAAPI_TASK_FLAG_INCOM);
-  kaapi_task_set_ld(task, 1, 0);
+  kaapi_task_set_ld(task, KAAPI_TASK_OCR_PARAM, 0);
 #if KAAPI_DEBUG
   KAAPI_ATOMIC_INCR(&spawn_writeback);
 #endif
@@ -958,7 +958,7 @@ static void xkblas_create_taskinvalidate(
       KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Ah,m,n));
   kaapi_ldid_t ldid = xkblas_get_ld(Ah, m, n);
   kaapi_taskflag_set(task, KAAPI_TASK_FLAG_INCOM);
-  kaapi_task_set_ld(task, 0, ldid);
+  kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);
   kaapi_task_commit( thread, task );
 }
 
@@ -1033,7 +1033,7 @@ static void xkblas_create_distribute(
   kaapi_update_dependencies(thread, &taskarg->a, task,
       KAAPI_ACCESS_MODE_R, xkblas_get_handle(Ah,m,n));
   kaapi_taskflag_set(task, KAAPI_TASK_FLAG_OUTCOM);
-  kaapi_task_set_ld(task, 0, ldid);
+  kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);
   kaapi_task_commit( thread, task );
 }
 
