@@ -551,8 +551,6 @@ int xkblas_map_2Dblock_cyclic(
 
   size_t Amt = Ah->mt;
   size_t Ant = Ah->nt;
-  char* ptr = (char*)A;
-  void* addr;
 
   for (size_t i=0; i<Amt; ++i)
   {
