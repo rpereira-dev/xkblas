@@ -121,18 +121,6 @@ static void NAME(task_body_cpu)( kaapi_task_t* task, kaapi_thread_t* thread )
       &arg->beta,
       (Complex64_t*)arg->C.data, arg->ldc
   );
-#if 0
-  cblas_zhemm(
-      CblasColMajor,
-      arg->side, arg->uplo,
-      arg->m, arg->n,
-      CBLAS_SADDR(arg->alpha),
-      (Complex64_t*)arg->A.data, arg->lda,
-      (Complex64_t*)arg->B.data, arg->ldb,
-      CBLAS_SADDR(arg->beta),
-      (Complex64_t*)arg->C.data, arg->ldc
-  );
-#endif
 }
 
 #if KAAPI_USE_CUDA

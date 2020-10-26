@@ -131,15 +131,6 @@ static void NAME(task_body_cpu)( kaapi_task_t* task, kaapi_thread_t* thread )
       &arg->alpha, arg->A.data, arg->lda, arg->B.data, arg->ldb,
       &arg->beta,  arg->C.data, arg->ldc
   );
-#if 0
-  cblas_zsyr2k(
-      CblasColMajor,
-      arg->uplo, arg->trans,
-      arg->n, arg->k,
-      CBLAS_SADDR(arg->alpha), arg->A.data, arg->lda, arg->B.data, arg->ldb,
-      CBLAS_SADDR(arg->beta), arg->C.data, arg->ldc
-  );
-#endif
 }
 
 #if KAAPI_USE_CUDA

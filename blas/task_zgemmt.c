@@ -153,32 +153,6 @@ static void NAME(task_body_cpu)( kaapi_task_t* task, kaapi_thread_t* thread )
       &arg->beta,
       arg->C.data, arg->ldc
   );
-#if 0
-#if defined(KAAPI_BLAS_USE_MKL)
-  cblas_zgemmt(
-      CblasColMajor,
-      arg->uplo,
-      arg->transA, arg->transB,
-      arg->n, arg->k,
-      CBLAS_SADDR(arg->alpha),
-      arg->A.data, arg->lda,
-      arg->B.data, arg->ldb,
-      CBLAS_SADDR(arg->beta),
-      arg->C.data, arg->ldc
-  );
-#else
-  cblas_zgemm(
-      CblasColMajor,
-      arg->transA, arg->transB,
-      arg->n, arg->n, arg->k,
-      CBLAS_SADDR(arg->alpha),
-      arg->A.data, arg->lda,
-      arg->B.data, arg->ldb,
-      CBLAS_SADDR(arg->beta),
-      arg->C.data, arg->ldc
-  );
-#endif
-#endif
 }
 
 #if KAAPI_USE_CUDA
