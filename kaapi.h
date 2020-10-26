@@ -1150,6 +1150,8 @@ kaapi_task_t* kaapi_task_alloc(
     \param thread INOUT a pointer to the kaapi_stack_t data structure.
     \retval EINVAL invalid argument: bad pointer or incompatible other flag (priority)
 */
+#define KAAPI_TASK_LD_BOUND  0
+#define KAAPI_TASK_OCR_PARAM 1
 static inline int kaapi_task_set_ld(
     kaapi_task_t* task,
     int subtype, /* 0: ld value, 1: index of parameter */

@@ -66,6 +66,10 @@
 #  define KAAPI_HEAP_STRATEGY KAAPI_HEAP_BEST_FIT
 #endif
 
+/* To activate use of OCR data management. Should be the default when ok.
+*/
+#define KAAPI_USE_OCR 1
+
 /* To activate or not the loadbalancing between GPUs
 */
 #define KAAPI_WS_GPUTASK 1
@@ -79,7 +83,6 @@
 /* reorder stream execution on GPU */
 #define KAAPI_REORDER_TASK_EXEC 1
 #endif
-
 
 /* do not use prefetch for successor task */
 #define KAAPI_USE_PREFETCH 0

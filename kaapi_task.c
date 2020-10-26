@@ -423,7 +423,7 @@ static kaapi_ldid_t kaapi_compute_best_ld( kaapi_task_t* task)
   else if (affinity_r[lidmax_r] !=0)
     ldid = lidmax_r+1;
   if (ldid != (kaapi_ldid_t)-1)
-    kaapi_task_set_ld(task, 0, ldid );
+    kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid );
 #if LOG_AFF
   printf(buff);
 #endif
@@ -432,7 +432,7 @@ static kaapi_ldid_t kaapi_compute_best_ld( kaapi_task_t* task)
 }
 
 
-/* 
+/* Entry point to push a ready task and dispatch it to queue
 */
 int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
 {
@@ -444,15 +444,15 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
   kaapi_ldid_t ldid = kaapi_task_get_ld(task);
   if (ldid != (kaapi_ldid_t)-1) 
   {
+    /* Is an OCR parameter? Locality is given by the locality of the i-th effective parameter */
     if ((KAAPI_TASK_LD_MASK_PARAM & ldid) !=0)
     {
-      /* OCR parameter : locality is given by the locality of an effective parameter */
-      ldid &= ~KAAPI_TASK_LD_MASK_PARAM;
+      int ith = (int)(ldid & ~KAAPI_TASK_LD_MASK_PARAM);
       const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
       unsigned int count_params = kaapi_format_get_count_params(fmt, kaapi_task_getargs(task));
-      if (ldid < count_params) 
+      if (ith < count_params)
       {
-        kaapi_access_t* access = kaapi_format_get_access_param(fmt, (unsigned int)ldid, kaapi_task_getargs(task));
+        kaapi_access_t* access = kaapi_format_get_access_param(fmt, (unsigned int)ith, kaapi_task_getargs(task));
         kaapi_metadata_info_t* mdi = access->mdi;
         if (mdi ==0)
         {

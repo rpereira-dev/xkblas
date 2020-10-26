@@ -345,7 +345,7 @@ static inline bool kaapi_memory_replica_has_whish(
   return  (KAAPI_ATOMIC_READ(&mdi->valid) & (1UL<<lid))!=0;
 }
 
-static inline void kaapi_memory_replica_set_which(
+static inline void kaapi_memory_replica_set_whish(
     kaapi_metadata_info_t*   mdi,
     uint16_t lid
 )
@@ -2288,7 +2288,7 @@ int kaapi_dsm_whish_distribution(
     0
   );
   if (mdi ==0) return EINVAL;
-  kaapi_memory_replica_set_which(mdi, lid);
+  kaapi_memory_replica_set_whish(mdi, lid);
   return 0;
 }
 
