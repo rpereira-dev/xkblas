@@ -452,7 +452,8 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
       unsigned int count_params = kaapi_format_get_count_params(fmt, kaapi_task_getargs(task));
       if (ith < count_params)
       {
-        kaapi_access_t* access = kaapi_format_get_access_param(fmt, (unsigned int)ith, kaapi_task_getargs(task));
+        kaapi_access_t* access = kaapi_format_get_access_param(fmt, (unsigned int)ith, 
+            kaapi_task_getargs(task));
         kaapi_metadata_info_t* mdi = access->mdi;
         if (mdi ==0)
         {
@@ -464,7 +465,7 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
             0
           );
         }
-        /* if unable to detect meta data information (absence of dsm_whish distribute or absence of previous task running
+        /* if unable to detect meta data information (absence of dsm_wish distribute or absence of previous task running
            with the parameter */
         if (mdi != 0) 
         {
@@ -477,18 +478,25 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
             --ldid;
             ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, ldid-1);
           }
-          /* else use the whish */
+          /* else use the wish */
           else {
-            KAAPI_MEMORY_VALUE_TYPE whish_bit = KAAPI_ATOMIC_READ(&mdi->whish);
-            if (whish_bit !=0) 
+            KAAPI_MEMORY_VALUE_TYPE wish_bit = KAAPI_ATOMIC_READ(&mdi->wish);
+            if (wish_bit !=0) 
             {  
-              ldid = KAAPI_MEMORY_FFS( whish_bit );
+              ldid = KAAPI_MEMORY_FFS( wish_bit );
               --ldid;
               ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, ldid-1);
             }  
           } /* in any previous case, leave ld ==0  */
         } // mdi !=0
+        else {
+printf("Bad MDI index\n");
+        }
+       
       } 
+      else {
+printf("Bad OCR index\n");
+      }
     }
     else 
       ld = kaapi_localitydomain_get(ldid);

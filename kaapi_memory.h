@@ -137,8 +137,8 @@ typedef struct kaapi_data_replica {
    - replicas[lid] == information about replica of data on address space lid (locality domain id)
    - alloc[lid] == 1 iff data allocated (and replica[lid].ptr != 0)
    - valid[lid] == 1 iff data in replica[lid] is the last recent write data
-   - whish[lid] == 1 iff data has interested to be on localitydomain lid. Used to implement distribution
-                     attribute before real distribution, i.e. may be whish !=0 with valid ==0 or xfer ==0.
+   - wish[lid] == 1 iff data has interested to be on localitydomain lid. Used to implement distribution
+                     attribute before real distribution, i.e. may be wish !=0 with valid ==0 or xfer ==0.
    - xfer[lid]  == 1 iff data in replica[lid] is going to be transfered to lid.
                       upon reception the state will be updated to valid and xfer unset.
    - xferb[lid bit] == 1 to be used for routing inside NVLink
@@ -154,7 +154,7 @@ struct kaapi_metadata_info {
     KAAPI_MEMORY_BITFIELD_TYPE alloc;
     KAAPI_MEMORY_BITFIELD_TYPE valid;
     KAAPI_MEMORY_BITFIELD_TYPE xfer;
-    KAAPI_MEMORY_BITFIELD_TYPE whish;
+    KAAPI_MEMORY_BITFIELD_TYPE wish;
     KAAPI_MEMORY_BITFIELD_TYPE xferb; /* used ??? */
 #if defined(KAAPI_DEBUG)
     const char*                debug_info;
@@ -348,14 +348,23 @@ extern int kaapi_dsm_is_valid_on(
 );
 
 
-/* Annote that data whish to be (initially) distributed on the address space.
+/* Annote that data wish to be (initially) distributed on the address space.
    The DSM will create the entry in the metadata that will be attached to 'a'
 */
-extern int kaapi_dsm_whish_distribution(
+extern int kaapi_dsm_wish_distribution(
       kaapi_dsm_t* dsm,
       kaapi_address_space_id_t asid,
       kaapi_handle_t* h
 );
+
+
+/* Return the first wish bit or -1 if not defined or not found
+*/
+extern kaapi_ldid_t kaapi_dsm_get_wish_distribution(
+      kaapi_dsm_t* dsm,
+      kaapi_handle_t* h
+);
+
 
 
 /* Acquire the data for the task with the access_mode mp.

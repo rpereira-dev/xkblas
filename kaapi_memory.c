@@ -336,7 +336,7 @@ static inline void kaapi_memory_replica_unset_pinned(
   KAAPI_ATOMIC_WRITE(&mdi->replicas[lid]->pinned, 0);
 }
 
-static inline bool kaapi_memory_replica_has_whish(
+static inline bool kaapi_memory_replica_has_wish(
     kaapi_metadata_info_t*   mdi,
     uint16_t lid
 )
@@ -345,24 +345,24 @@ static inline bool kaapi_memory_replica_has_whish(
   return  (KAAPI_ATOMIC_READ(&mdi->valid) & (1UL<<lid))!=0;
 }
 
-static inline void kaapi_memory_replica_set_whish(
+static inline void kaapi_memory_replica_set_wish(
     kaapi_metadata_info_t*   mdi,
     uint16_t lid
 )
 {
   kaapi_assert_debug(mdi != 0);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-  KAAPI_ATOMIC_OR(&mdi->whish, (1UL<<lid));
+  KAAPI_ATOMIC_OR(&mdi->wish, (1UL<<lid));
 }
 
-static inline void kaapi_memory_replica_unset_whish(
+static inline void kaapi_memory_replica_unset_wish(
     kaapi_metadata_info_t*   mdi,
     uint16_t lid
 )
 {
   kaapi_assert_debug(mdi != 0);
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-  KAAPI_ATOMIC_AND(&mdi->whish, ~(uint16_t)(1UL<<lid));
+  KAAPI_ATOMIC_AND(&mdi->wish, ~(uint16_t)(1UL<<lid));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1951,7 +1951,7 @@ static kaapi_metadata_info_t* _kaapi_new_mdi(
   }
   KAAPI_ATOMIC_WRITE(&mdi->xfer,   0ULL);
   KAAPI_ATOMIC_WRITE(&mdi->xferb,  0ULL);
-  KAAPI_ATOMIC_WRITE(&mdi->whish,  0ULL);
+  KAAPI_ATOMIC_WRITE(&mdi->wish,  0ULL);
 #if defined(KAAPI_DEBUG)
   mdi->debug_info = 0;
   mdi->owner = 0;
@@ -2271,7 +2271,7 @@ return_value:
 
 /*
  */
-int kaapi_dsm_whish_distribution(
+int kaapi_dsm_wish_distribution(
       kaapi_dsm_t* dsm,
       kaapi_address_space_id_t asid,
       kaapi_handle_t* h
@@ -2288,9 +2288,33 @@ int kaapi_dsm_whish_distribution(
     0
   );
   if (mdi ==0) return EINVAL;
-  kaapi_memory_replica_set_whish(mdi, lid);
+  kaapi_memory_replica_set_wish(mdi, lid);
   return 0;
 }
+
+/*
+ */
+kaapi_ldid_t kaapi_dsm_get_wish_distribution(
+      kaapi_dsm_t* dsm,
+      kaapi_handle_t* h
+)
+{
+  kaapi_metadata_info_t* mdi;
+  mdi = kaapi_dsm_findaccess_on_node(
+    &kaapi_the_dsm,
+    kaapi_local_asid,
+    KAAPI_DSM_NOCREATE,
+    &h->sync0,
+    0
+  );
+  if (mdi ==0) return (kaapi_ldid_t)-1;
+  KAAPI_MEMORY_VALUE_TYPE wish_bit = KAAPI_ATOMIC_READ(&mdi->wish);
+  if (wish_bit ==0) return (kaapi_ldid_t)-1;
+  kaapi_ldid_t ldid = KAAPI_MEMORY_FFS( wish_bit );
+  --ldid;
+  return ldid;
+}
+
 
 
 

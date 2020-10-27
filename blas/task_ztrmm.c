@@ -33,6 +33,7 @@
 #ifdef KAAPI_DEBUG
 #undef KAAPI_DEBUG
 #endif
+//#define KAAPI_DEBUG 1
 
 #define ROWDIM(v,m,n) ((v) == CblasLeft ? m : n)
 #define COLDIM(v,m,n) ((v) == CblasLeft ? n : m)
@@ -117,9 +118,18 @@ void INSERT_TASK_ztrmm(
         KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Bh, Bm, Bn));
     taskarg->ldb = ldb;
     taskarg->mm = xkblas_get_modemath();
-#if KAAPI_USE_OCR
+#if 1//KAAPI_USE_OCR
     /* OCR on the third parameter */
     kaapi_task_set_ld(task, KAAPI_TASK_OCR_PARAM, 1);
+
+#if 1//KAAPI_DEBUG
+    kaapi_ldid_t ldid0 = kaapi_dsm_get_wish_distribution(
+      &kaapi_the_dsm,
+      xkblas_get_handle(Bh, Bm, Bn));
+    kaapi_ldid_t ldid1 = xkblas_get_ld(Bh, Bm, Bn);
+    kaapi_assert( ldid0 == ldid1 );
+#endif
+
 #else
     kaapi_ldid_t ldid = xkblas_get_ld(Bh, Bm, Bn);
     kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);
@@ -151,7 +161,7 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
 {
   NAME(Arg)* arg = (NAME(Arg)*)kaapi_task_getargs(task);
 #if defined(KAAPI_DEBUG)
-  printf("%s: A(%i,%i) X = B(%i,%i)\n",__func__,
+  printf("%i::%s: A(%i,%i) X = B(%i,%i)\n",kaapi_offload_self_device()->device_id, __func__,
       arg->Am, arg->An, arg->Bm, arg->Bn
   );
 #endif
