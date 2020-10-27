@@ -3158,6 +3158,7 @@ int kaapi_dsm_register_device(
 
   kaapi_dsm_node_t* node = (kaapi_dsm_node_t*)malloc(sizeof(kaapi_dsm_node_t));
   if (node ==0) return ENOMEM;
+  kaapi_atomic_initlock(&node->lock);
   err = kaapi_hashmap_init(&node->ht, node->mapentries, KAAPI_SIZE_DSM_MAP, 0);
   if (err) return err;
   node->device = device;
@@ -3250,6 +3251,7 @@ int kaapi_dsm_init( void )
   memset(all_cbk, 0, sizeof(all_cbk));
 #endif
 
+#if 0 // done when host pluging register itself
   /* fill virtual node 0 as the host node */
   kaapi_dsm_node_t* node = (kaapi_dsm_node_t*)malloc(sizeof(kaapi_dsm_node_t));
   if (node ==0) return ENOMEM;
@@ -3259,6 +3261,7 @@ int kaapi_dsm_init( void )
   node->device = 0;
   node->cache = 0;
   kaapi_the_dsm.nodes[0] = node;
+#endif
   return err;
 }
 
