@@ -479,15 +479,18 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
           {  
             uint16_t lid = KAAPI_MEMORY_FFS( valid_bit );
             --lid;
+            /* shift by -1 because, GPU index begins at 1 in memory asid bit field */
             ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, lid-1);
           }
           /* else use the wish */
-          else {
+          else 
+          {
             KAAPI_MEMORY_VALUE_TYPE wish_bit = KAAPI_ATOMIC_READ(&mdi->wish);
             if (wish_bit !=0) 
             {  
               uint16_t lid = KAAPI_MEMORY_FFS( wish_bit );
               --lid;
+              /* shift by -1 because, GPU index begins at 1 in memory asid bit field */
               ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, lid-1);
             }  
           } /* in any previous case, leave ld ==0  */
