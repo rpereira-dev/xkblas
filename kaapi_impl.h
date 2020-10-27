@@ -232,7 +232,7 @@ typedef struct __attribute__((aligned(KAAPI_CACHE_LINE))) kaapi_threadinfo {
 */
 struct kaapi_localitydomain {
   kaapi_ld_type_t         type;
-  kaapi_ldid_t            ldid;     /* global id */
+  kaapi_ldid_t            ldid;     /* global id on 64 bits */
   kaapi_device_t*         device;   /* attached device */
   unsigned int            idx;      /* in kaapi_all_lddomains[type]->ld */
   kaapi_fifo_queue_t*     queue;    /* same data structure as a queue, but managed to be FIFO */
@@ -682,7 +682,8 @@ extern int kaapi_localitydomain_init( kaapi_localitydomain_t* ld, kaapi_device_t
 extern int kaapi_localitydomain_destroy( kaapi_localitydomain_t* ld );
 
 /* Attach a new locality domain.
-   Set its identifier.
+   Set its type, identifier and its parent if not null.
+   Register the locality domain to the corresponding tables.
    Return 0 iff no error
 */
 extern int kaapi_localitydomain_attach(

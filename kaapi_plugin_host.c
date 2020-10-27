@@ -548,8 +548,7 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* 
   kaapi_localitydomain_init(ld, &device->inherited);
   device->inherited.ld = ld;
   kaapi_localitydomain_attach( KAAPI_LD_NUMA, 0, ld );
-
-  kaapi_dsm_register_device(&kaapi_the_dsm, &dev->memdev, dev->driver->f_get_type() );
+  kaapi_dsm_register_device(&kaapi_the_dsm, &dev->memdev, dev->driver->f_get_type(), ld->ldid );
 
   KAAPI_OFFLOAD_TRACE_OUT
   return 0;

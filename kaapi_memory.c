@@ -3119,7 +3119,8 @@ int kaapi_memory_group_destroy( kaapi_memgroup_t* grp )
 int kaapi_dsm_register_device(
     kaapi_dsm_t* dsm,
     kaapi_memory_device_t* device,
-    int arch
+    int arch,
+    kaapi_ldid_t ldid
 )
 {
   int err;
@@ -3128,7 +3129,7 @@ int kaapi_dsm_register_device(
   else
     device->asid = kaapi_memory_create_asid(
       0, /* global id */
-      KAAPI_ATOMIC_INCR(&kaapi_dsm_asid_lid), /* lid */
+      ldid, /* before: KAAPI_ATOMIC_INCR(&kaapi_dsm_asid_lid), lid */
       arch
     );
 
@@ -3138,7 +3139,6 @@ int kaapi_dsm_register_device(
 #if KAAPI_USE_OWN_HEAP_ALLOCATOR
   device->free_chunk_list = 0;
   device->main_chunk = 0;
-//printf("%p do reset main chunk alloc on device: %p\n",pthread_self(), device);
 #endif
 
   uint16_t lid = kaapi_memory_asid_get_lid(device->asid);
@@ -3150,7 +3150,11 @@ int kaapi_dsm_register_device(
     return ENOMEM;
   }
   kaapi_assert_debug(lid < KAAPI_MEMORY_MAX_NODES);
-  if (dsm->nodes[lid] !=0) return 0; /* already initialized */
+  if (dsm->nodes[lid] !=0)  /* already initialized ? */
+  {
+    kaapi_assert( dsm->nodes[lid]->device == device );
+    return 0;
+  }
 
   kaapi_dsm_node_t* node = (kaapi_dsm_node_t*)malloc(sizeof(kaapi_dsm_node_t));
   if (node ==0) return ENOMEM;

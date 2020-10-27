@@ -47,7 +47,9 @@
 
 kaapi_localitydomain_type_t* kaapi_all_lddomains = 0;
 static kaapi_localitydomain_t** map_ldid2ld = 0;
-static kaapi_ldid_t kaapi_ldid = 1;
+static kaapi_ldid_t kaapi_ldid   = 0; /* warning in the current version we assume that ldid==0 == host device
+                                         Such as asid==0 == asid of for the host. See dsm registration.
+                                       */
 static kaapi_lock_t kaapi_ldlock = KAAPI_LOCK_INITIALIZER;
 
 /*
@@ -81,7 +83,7 @@ int kaapi_localitydomain_finalize(void)
 static int _kaapi_fifo_queue_init( kaapi_fifo_queue_t* rd );
 
 
-/*
+/* Initialize
 */
 int kaapi_localitydomain_init( kaapi_localitydomain_t* ld, kaapi_device_t* device )
 {
@@ -106,6 +108,7 @@ int kaapi_localitydomain_init( kaapi_localitydomain_t* ld, kaapi_device_t* devic
   return 0;
 }
 
+
 /*
 */
 int kaapi_localitydomain_destroy( kaapi_localitydomain_t* ld )
@@ -121,9 +124,8 @@ int kaapi_localitydomain_destroy( kaapi_localitydomain_t* ld )
   return 0;
 }
 
-/* Attach a new locality domain.
-   Set its identifier.
-   Return 0 iff no error
+
+/*
 */
 int kaapi_localitydomain_attach(
     kaapi_ld_type_t type,

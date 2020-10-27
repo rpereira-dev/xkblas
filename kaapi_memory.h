@@ -285,12 +285,20 @@ extern int kaapi_dsm_commit( void );
 extern int kaapi_dsm_finalize( void );
 
 /* Register a device to the dsm
-   Each device has distinc id used as the local identifier for the dsm object
+   Each device has distinc id used as the local identifier for the dsm object.
+   Warning: a device = a locality domain + memory device. The global id of the
+   locality domain serves as the local identifier to form the asid.
    Return values are:
    - 0 in case of success
    - EINPROGRESS if an device with same local identifier is already registered
 */
-extern int kaapi_dsm_register_device( kaapi_dsm_t* dsm, kaapi_memory_device_t* device, int arch );
+extern int kaapi_dsm_register_device(
+    kaapi_dsm_t* dsm,
+    kaapi_memory_device_t* device,
+    int arch,
+    kaapi_ldid_t ldid
+);
+
 
 /* Unregister a device to the dsm
    Unregister the device.

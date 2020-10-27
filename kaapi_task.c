@@ -452,8 +452,11 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
       unsigned int count_params = kaapi_format_get_count_params(fmt, kaapi_task_getargs(task));
       if (ith < count_params)
       {
-        kaapi_access_t* access = kaapi_format_get_access_param(fmt, (unsigned int)ith, 
-            kaapi_task_getargs(task));
+        kaapi_access_t* access = kaapi_format_get_access_param(
+            fmt,
+            (unsigned int)ith,
+            kaapi_task_getargs(task)
+        );
         kaapi_metadata_info_t* mdi = access->mdi;
         if (mdi ==0)
         {
@@ -468,24 +471,24 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
         /* if unable to detect meta data information (absence of dsm_wish distribute or absence of previous task running
            with the parameter */
         if (mdi != 0) 
-        {
+        { /* */
           KAAPI_MEMORY_VALUE_TYPE valid_bit = KAAPI_ATOMIC_READ(&mdi->valid);
           valid_bit &= ~(1<< kaapi_memory_asid_get_lid(kaapi_local_asid));
           /* is valid bit previously defined ? */
           if (valid_bit !=0) 
           {  
-            ldid = KAAPI_MEMORY_FFS( valid_bit );
-            --ldid;
-            ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, ldid-1);
+            uint16_t lid = KAAPI_MEMORY_FFS( valid_bit );
+            --lid;
+            ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, lid-1);
           }
           /* else use the wish */
           else {
             KAAPI_MEMORY_VALUE_TYPE wish_bit = KAAPI_ATOMIC_READ(&mdi->wish);
             if (wish_bit !=0) 
             {  
-              ldid = KAAPI_MEMORY_FFS( wish_bit );
-              --ldid;
-              ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, ldid-1);
+              uint16_t lid = KAAPI_MEMORY_FFS( wish_bit );
+              --lid;
+              ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, lid-1);
             }  
           } /* in any previous case, leave ld ==0  */
         } // mdi !=0
