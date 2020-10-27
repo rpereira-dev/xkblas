@@ -263,7 +263,7 @@ unsigned int kaapi_localitydomain_count(
 */
 kaapi_localitydomain_t* kaapi_localitydomain_get_bytype(
     kaapi_ld_type_t type,
-    kaapi_ldid_t ldid
+    unsigned int ith
 )
 {
   if (kaapi_all_lddomains ==0) return 0;
@@ -275,8 +275,8 @@ kaapi_localitydomain_t* kaapi_localitydomain_get_bytype(
   int idx = __builtin_ffs((unsigned int)type);
   kaapi_assert( idx != 0);
   --idx;
-  if (ldid >= kaapi_all_lddomains[idx].count) return 0;
-  return kaapi_all_lddomains[idx].ld[ldid];
+  if (ith >= kaapi_all_lddomains[idx].count) return 0;
+  return kaapi_all_lddomains[idx].ld[ith];
 }
 
 

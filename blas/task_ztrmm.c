@@ -126,12 +126,12 @@ void INSERT_TASK_ztrmm(
     kaapi_ldid_t ldid0 = kaapi_dsm_get_wish_distribution(
       &kaapi_the_dsm,
       xkblas_get_handle(Bh, Bm, Bn));
-    kaapi_ldid_t ldid1 = xkblas_get_ld(Bh, Bm, Bn);
+    uint16_t ldid1 = xkblas_get_ld(Bh, Bm, Bn);
     kaapi_assert( ldid0 == ldid1 );
 #endif
 
 #else
-    kaapi_ldid_t ldid = xkblas_get_ld(Bh, Bm, Bn);
+    uint16_t ldid = xkblas_get_ld(Bh, Bm, Bn);
     kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);
 #endif
     kaapi_taskflag_set(task, KAAPI_TASK_PERFCNT);

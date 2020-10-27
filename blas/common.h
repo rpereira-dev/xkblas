@@ -172,6 +172,7 @@ extern kaapi_handle_t* xkblas_get_handle(
   size_t n);
 
 /* Return ldid info for the tile A(i,j) i,j are tile indexes.
+   If ldid is not defined, return -1.
  */
 extern uint16_t xkblas_get_ld(
   xkblas_matrix_descr_t* Mh,

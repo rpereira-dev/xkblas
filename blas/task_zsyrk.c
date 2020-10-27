@@ -106,7 +106,7 @@ void INSERT_TASK_zsyrk(
     /* OCR on the third parameter */
     kaapi_task_set_ld(task, KAAPI_TASK_OCR_PARAM, 1);
 #else
-    kaapi_ldid_t ldid = xkblas_get_ld(Bh, Bm, Bn);
+    uint16_t ldid = xkblas_get_ld(Bh, Bm, Bn);
     kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);
 #endif
     kaapi_taskflag_set(task, KAAPI_TASK_PERFCNT);

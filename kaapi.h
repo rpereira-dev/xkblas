@@ -1154,12 +1154,12 @@ kaapi_task_t* kaapi_task_alloc(
 #define KAAPI_TASK_OCR_PARAM 1
 static inline int kaapi_task_set_ld(
     kaapi_task_t* task,
-    int subtype, /* 0: ld value, 1: index of parameter */
-    int ldid
+    int subtype,          /* 0: ld value, 1: index of parameter */
+    kaapi_ldid_t ldid     /* here is locality domain id */
 )
 {
   if (ldid >= KAAPI_TASK_LD_MAX) return EINVAL;
-  if ((subtype & ~0x1) || (ldid <0)) return EINVAL;
+  if ((subtype & ~0x1) || (ldid == (kaapi_ldid_t)-1)) return EINVAL;
   task->ld    = (unsigned int)ldid;
   if (subtype == 1)
     task->ld |= KAAPI_TASK_LD_MASK_PARAM;

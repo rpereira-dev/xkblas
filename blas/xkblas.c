@@ -283,7 +283,7 @@ printf("New handle (%i,%i) / %s\n",m,n, name == 0 ? "" : name );
       handle->sync0.sync = (kaapi_access_t*)ctxt->xkblas_list_sync0;
       ctxt->xkblas_list_sync0 = handle;
 #endif
-      Ah->ldid[m*Ah->nt+n] = 0;
+      Ah->ldid[m*Ah->nt+n] = (uint16_t)-1;
     }
 
   /* to debug... */
@@ -306,9 +306,8 @@ uint16_t xkblas_get_ld(
   kaapi_assert_debug( (i<Ah->mt) && (j<Ah->nt) );
   lid = Ah->ldid[ i*Ah->nt + j ];
 
-  if (lid != (uint16_t)0)
-    /* ->ldid store ld+1 if defined */
-    return lid-1;
+  if (lid != (uint16_t)-1)
+    return lid;
 
   unsigned int count = kaapi_localitydomain_count(KAAPI_LD_GPU);
   if (count ==0)
@@ -329,14 +328,12 @@ uint16_t xkblas_get_ld(
     {
       KAAPI_MEMORY_VALUE_TYPE lid = KAAPI_MEMORY_FFS(valid_bit);
       --lid;
-      /* here: a way to implement info of matrix mapping is to allocate meta data replica without valid bit...
-         thus we are first interesting to map task where 1/ it exists valid data and 2/ it exist replica, even if not valid
-         This would also suppress the management in blas of mapping information within the matrix descriptor.
-       */
       if (kaapi_memory_replica_is_valid(mdi, lid))
         idxvalid[count++] = lid;
       valid_bit &= ~(1<<lid);
     }
+//TG: to do here avoid to talk of ldid : locality domain id and lid: local id of the adress space. Should be ~ the same ?
+    kaapi_assert(0);
     if (count ==1)
       return 1+idxvalid[0];  
     else if (count >0)
@@ -345,7 +342,7 @@ uint16_t xkblas_get_ld(
   lid = (uint16_t)-1;
 
 retval:
-  Ah->ldid[ i*Ah->nt + j ] = lid+1;
+  Ah->ldid[ i*Ah->nt + j ] = lid;
   return lid;
 }
 
@@ -557,11 +554,11 @@ int xkblas_map_2Dblock_cyclic(
     for (size_t j=0; j<Ant; ++j)
     {
       uint16_t ldid = xkblas_get_ldid(Ah, i, j );
-      if ((ldid ==0) || force)
+      if ((ldid ==(uint16_t)-1) || force)
       {
         int r = ( ((i/Bp)%Gp)*Gq + (j/Bq)%Gq ) %count;
-        kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(type,r);
-        xkblas_set_ldid(Ah, i, j, ldid = 1+ld->ldid);
+        kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(type, r);
+        xkblas_set_ldid(Ah, i, j, ldid = ld->ldid);
 #if KAAPI_USE_OCR
         kaapi_assert(0 == kaapi_dsm_wish_distribution(
               &kaapi_the_dsm,
@@ -649,10 +646,10 @@ int xkblas_map_cyclic(
     for (size_t j=0; j<Ant; ++j)
     {
       uint16_t ldid = xkblas_get_ldid(Ah, i, j );
-      if ((ldid ==0) || force)
+      if ((ldid ==(uint16_t)-1) || force)
       {
         int r = (i*Ant+j)%count;
-        xkblas_set_ldid(Ah, i, j, ldid = 1+kaapi_localitydomain_get_num(type, r));
+        xkblas_set_ldid(Ah, i, j, ldid = kaapi_localitydomain_get_num(type, r));
       }
     }
   }
@@ -695,10 +692,10 @@ int xkblas_map_ij_cyclic(
     for (size_t j=0; j<Ant; ++j)
     {
       uint16_t ldid = xkblas_get_ldid(Ah, i, j );
-      if ((ldid ==0) || force)
+      if ((ldid ==(uint16_t)-1) || force)
       {
         int r = (i+j)%count;
-        xkblas_set_ldid(Ah, i, j, ldid = 1+kaapi_localitydomain_get_num(type, r));
+        xkblas_set_ldid(Ah, i, j, ldid = kaapi_localitydomain_get_num(type, r));
       }
     }
   }
@@ -740,8 +737,8 @@ int xkblas_map_test(
   {
     int r = i % count;
     uint16_t ldid = xkblas_get_ldid(Ah, i, i );
-    if ((ldid ==0) || force)
-      xkblas_set_ldid(Ah, i, i, ldid = 1+kaapi_localitydomain_get_num(type, r));
+    if ((ldid ==(uint16_t)-1) || force)
+      xkblas_set_ldid(Ah, i, i, ldid = kaapi_localitydomain_get_num(type, r));
 
     size_t c = i+1;
     for (size_t j=0; j<Ant; ++j)
@@ -750,8 +747,8 @@ int xkblas_map_test(
       int r = c % count;
       ++c;
       uint16_t ldid = xkblas_get_ldid(Ah, i, j );
-      if ((ldid ==0) || force)
-        xkblas_set_ldid(Ah, i, j, ldid = 1+kaapi_localitydomain_get_num(type, r));
+      if ((ldid ==(uint16_t)-1) || force)
+        xkblas_set_ldid(Ah, i, j, ldid = kaapi_localitydomain_get_num(type, r));
     }
   }
   return 0;
@@ -954,9 +951,10 @@ static void xkblas_create_taskinvalidate(
   taskarg->frame = ctxt->unlink;
   kaapi_update_dependencies(thread, &taskarg->a, task,
       KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Ah,m,n));
-  kaapi_ldid_t ldid = xkblas_get_ld(Ah, m, n);
+  uint16_t lid = xkblas_get_ld(Ah, m, n);
   kaapi_taskflag_set(task, KAAPI_TASK_FLAG_INCOM);
-  kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);
+  if (lid != (uint16_t)-1)
+    kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, lid);
   kaapi_task_commit( thread, task );
 }
 
@@ -1651,9 +1649,9 @@ int xkblas_distribute_2Dblock_cyclic_async(
 #if 0
 printf("%i ", r );
 #endif
-      uint16_t ldid = kaapi_localitydomain_get_num(type, r);
+      kaapi_ldid_t ldid = kaapi_localitydomain_get_num(type, r);
       xkblas_create_distribute( Ah, i, j, lda, eltsize, ldid );
-      xkblas_set_ldid(Ah, i, j, 1+ldid );
+      xkblas_set_ldid(Ah, i, j, ldid );
     }
 #if 0
 printf("\n");
@@ -1810,28 +1808,8 @@ int xkblas_auto_map(
         0
       );
       break;
-#elif 0// original version 1D. But seems to be best 2D on 8 GPUs
-      xkblas_map_1Dblock_cyclic(
-        1, CblasColMajor, 0,
-        Ah->M, Ah->N, Ah->addr, Ah->ld, Ah->eltsize,
-        1, xkblas_get_ngpus(), 0
-      );
-      break;
 #endif
-#if 0
-      xkblas_map_ij_cyclic(
-        1, CblasColMajor,
-        Ah->M, Ah->N, Ah->addr, Ah->ld, Ah->eltsize,
-        0
-      );
-      break;
-      xkblas_map_cyclic(
-        1, CblasColMajor,
-        Ah->M, Ah->N, Ah->addr, Ah->ld, Ah->eltsize,
-        0
-      );
-      break;
-#endif
+
     case KERN_SYR2K:
     case KERN_SYMM:
     case KERN_GEMM:

@@ -223,8 +223,8 @@ int xkblas_ztrmm_async( int side, int uplo,
                                 transA, CblasNoTrans,
                                 tempmm, tempnn, tempkn, 
                                 *alpha, A(m, k), ldam,
-                                       B(k, n), ldbk,
-                                zone,  B(m, n), ldbm);
+                                        B(k, n), ldbk,
+                                zone,   B(m, n), ldbm);
                         }
                     }
                 }

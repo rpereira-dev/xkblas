@@ -705,7 +705,7 @@ extern kaapi_localitydomain_t* kaapi_localitydomain_get(
 */
 extern kaapi_localitydomain_t* kaapi_localitydomain_get_bytype(
     kaapi_ld_type_t type,
-    kaapi_ldid_t ldid
+    unsigned int ith
 );
 
 
