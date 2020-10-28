@@ -792,8 +792,9 @@ int kaapi_sched_idle_offload(
       {
         if (tidle_start ==0) tidle_start = kaapi_get_elapsedns();
 #if KAAPI_USE_PERFCOUNTER
-        else if ((device->cnt_task==0) 
-              || ((1e-9*(kaapi_get_elapsedns() - tidle_start)) > 1.*(device->sum_cpudelay/device->cnt_task)) 
+        else if ((device->cnt_task!=0) 
+        //      && ((1e-9*(kaapi_get_elapsedns() - tidle_start)) > 0.009/kaapi_default_param.cuda_conc_stream_kernel)
+              && ((1e-9*(kaapi_get_elapsedns() - tidle_start)) > 1.*(device->sum_cpudelay/device->cnt_task)) 
         //      || (device->min_cpudelay == FLT_MAX))
         ) 
 #endif

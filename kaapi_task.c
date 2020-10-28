@@ -472,7 +472,7 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
            with the parameter */
         if (mdi != 0) 
         { /* */
-#if 1     // version where take random valid bit if several bit exists
+          // version where take random valid bit if several bit exists
           KAAPI_MEMORY_VALUE_TYPE bit = KAAPI_ATOMIC_READ(&mdi->valid);
           bit &= ~(1<< kaapi_memory_asid_get_lid(kaapi_local_asid));
           if (bit !=0)
@@ -492,35 +492,6 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
               ld = kaapi_localitydomain_get(lid);
             }
           }
-#else // if  1
-{
-#if 1
-          if (ld ==0)
-          {
-            KAAPI_MEMORY_VALUE_TYPE valid_bit = KAAPI_ATOMIC_READ(&mdi->valid);
-            valid_bit &= ~(1<< kaapi_memory_asid_get_lid(kaapi_local_asid));
-            /* is valid bit previously defined ? */
-            if (valid_bit !=0) 
-            {  
-              uint16_t lid = KAAPI_MEMORY_FFS( valid_bit );
-              --lid;
-              ld = kaapi_localitydomain_get(lid);
-            }
-          }
-          if (ld ==0)
-          {
-            KAAPI_MEMORY_VALUE_TYPE wish_bit = KAAPI_ATOMIC_READ(&mdi->wish);
-            if (wish_bit !=0) 
-            {  
-              uint16_t lid = KAAPI_MEMORY_FFS( wish_bit );
-              --lid;
-              ld = kaapi_localitydomain_get(lid);
-            }  
-          }
-
-#endif
-}
-#endif // OLD
         } // mdi !=0
         else {
 printf("Bad MDI index\n");
