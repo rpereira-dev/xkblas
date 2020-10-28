@@ -472,36 +472,65 @@ int32_t kaapi_thread_push( kaapi_thread_t* thread, kaapi_task_t* task)
            with the parameter */
         if (mdi != 0) 
         { /* */
-          KAAPI_MEMORY_VALUE_TYPE valid_bit = KAAPI_ATOMIC_READ(&mdi->valid);
-          valid_bit &= ~(1<< kaapi_memory_asid_get_lid(kaapi_local_asid));
-          /* is valid bit previously defined ? */
-          if (valid_bit !=0) 
-          {  
-            uint16_t lid = KAAPI_MEMORY_FFS( valid_bit );
+#if 1     // version where take random valid bit if several bit exists
+          KAAPI_MEMORY_VALUE_TYPE bit = KAAPI_ATOMIC_READ(&mdi->valid);
+          bit &= ~(1<< kaapi_memory_asid_get_lid(kaapi_local_asid));
+          if (bit !=0)
+          {
+            kaapi_context_t* ctxt = kaapi_thread2context(thread);
+            uint16_t lid = _kaapi_get_random_bit1(bit, &ctxt->seed ); 
             --lid;
-            /* shift by -1 because, GPU index begins at 1 in memory asid bit field */
-            ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, lid-1);
+            ld = kaapi_localitydomain_get(lid);
           }
-          /* else use the wish */
-          else 
+          if (ld ==0)
+          {
+            bit = KAAPI_ATOMIC_READ(&mdi->wish);
+            if (bit !=0)
+            {
+              uint16_t lid = KAAPI_MEMORY_FFS( bit );
+              --lid;
+              ld = kaapi_localitydomain_get(lid);
+            }
+          }
+#else // if  1
+{
+#if 1
+          if (ld ==0)
+          {
+            KAAPI_MEMORY_VALUE_TYPE valid_bit = KAAPI_ATOMIC_READ(&mdi->valid);
+            valid_bit &= ~(1<< kaapi_memory_asid_get_lid(kaapi_local_asid));
+            /* is valid bit previously defined ? */
+            if (valid_bit !=0) 
+            {  
+              uint16_t lid = KAAPI_MEMORY_FFS( valid_bit );
+              --lid;
+              ld = kaapi_localitydomain_get(lid);
+            }
+          }
+          if (ld ==0)
           {
             KAAPI_MEMORY_VALUE_TYPE wish_bit = KAAPI_ATOMIC_READ(&mdi->wish);
             if (wish_bit !=0) 
             {  
               uint16_t lid = KAAPI_MEMORY_FFS( wish_bit );
               --lid;
-              /* shift by -1 because, GPU index begins at 1 in memory asid bit field */
-              ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, lid-1);
+              ld = kaapi_localitydomain_get(lid);
             }  
-          } /* in any previous case, leave ld ==0  */
+          }
+
+#endif
+}
+#endif // OLD
         } // mdi !=0
         else {
 printf("Bad MDI index\n");
+kaapi_assert(0);
         }
        
       } 
       else {
 printf("Bad OCR index\n");
+kaapi_assert(0);
       }
     }
     else 
@@ -514,6 +543,11 @@ printf("Bad OCR index\n");
     int count = kaapi_localitydomain_count(KAAPI_LD_GPU);
     if (ctxt->last_ldid >= count) ctxt->last_ldid = 0;
   }
+
+#if 0
+const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
+printf("Push task: %p, name:%s on ldid: %i\n", task, fmt->name, ld->ldid );
+#endif
 
   if (ld == ctxt->ld)
     return
@@ -1410,6 +1444,7 @@ uint32_t kaapi_sched_activate_syncpoint(
   if (KAAPI_ATOMIC_DECR(&sync->wc) ==0)
   {
     a = sync->next;
+    kaapi_metadata_info_t* mdi = sync->mdi; 
     while (a != 0)
     {
       a->ready = 1;

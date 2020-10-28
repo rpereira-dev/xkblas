@@ -115,6 +115,14 @@ void INSERT_TASK_zgemm(
 #if KAAPI_USE_OCR
     /* OCR on the third parameter */
     kaapi_task_set_ld(task, KAAPI_TASK_OCR_PARAM, 2);
+#if KAAPI_DEBUG
+    kaapi_ldid_t ldid0 = kaapi_dsm_get_wish_distribution(
+      &kaapi_the_dsm,
+      xkblas_get_handle(Ch, Cm, Cn));
+    uint16_t ldid1 = xkblas_get_ld(Ch, Cm, Cn);
+    kaapi_assert( ldid0 == ldid1 );
+#endif
+
 #else
     uint16_t ldid = xkblas_get_ld(Ch, Cm, Cn);
     kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);

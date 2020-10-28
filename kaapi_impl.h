@@ -72,7 +72,7 @@
 
 /* To activate or not the loadbalancing between GPUs
 */
-#define KAAPI_WS_GPUTASK 0
+#define KAAPI_WS_GPUTASK 1
 
 /* use pipeline to order task insertions, communications and kernel launchs
    else the only the number of inserted task + pending task in the stream is limited
