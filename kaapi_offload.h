@@ -133,7 +133,7 @@ struct kaapi_device {
     float                       sum_cpudelay;
     float                       max_cpudelay;
     float                       min_cpudelay;
-#define KAAPI_LOG_DELAY 1
+#define KAAPI_LOG_DELAY 0 // to debug perf
 #if KAAPI_LOG_DELAY
     FILE*                       flog_delay;
 #endif

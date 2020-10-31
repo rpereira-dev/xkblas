@@ -261,6 +261,7 @@ int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* 
 #else
     /* else affinity == best size of any task parameter */
 #endif
+
     /* do bind ptr to the device->asid */
     access = kaapi_format_get_access_param(fmt, (unsigned int)ith, kaapi_task_getargs(task));
     kaapi_format_get_view_param(fmt, (unsigned int)ith, kaapi_task_getargs(task), &view);
@@ -294,6 +295,7 @@ int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* 
           {
             s =1;
             size_t sz = kaapi_memory_view_size(&mdi->replicas[lid]->view);
+            if (KAAPI_ACCESS_IS_READWRITE(mp)) sz*=2;
             if (ld ==ld_target)
               score[0] += sz;
             else if (ld->type == ld_target->type)
@@ -304,11 +306,13 @@ int kaapi_compute_affinity_score(kaapi_ldid_t ldid, kaapi_task_t* task, size_t* 
         }
       }
     }
+#if 0
     else 
     {
       size_t sz = kaapi_memory_view_size(&view);
       score[3] += sz;
     }
+#endif
   }
 
 #if LOG_AFF
@@ -1415,7 +1419,6 @@ uint32_t kaapi_sched_activate_syncpoint(
   if (KAAPI_ATOMIC_DECR(&sync->wc) ==0)
   {
     a = sync->next;
-    kaapi_metadata_info_t* mdi = sync->mdi; 
     while (a != 0)
     {
       a->ready = 1;

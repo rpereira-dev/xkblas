@@ -657,7 +657,7 @@ static int _kaapi_offload_waittest_stream(
     for (unsigned int i=0; i< stream->count[s]; ++i)
     {
       kaapi_io_stream_t* ios = stream->ios[s][i];
-      if (!kaapi_io_stream_emptypending(ios));
+      if (!kaapi_io_stream_emptypending(ios))
       {
         uint64_t s = ios->pos_wp - ios->pos_rp;
         if (s > ios->smax_p) ios->smax_p = s;

@@ -51,6 +51,13 @@
 #define LOGDEBUG(x)
 
 
+/* Used to compute the global_max cpu delay time 
+*/
+#define KAAPI_CPUDELAY_MAX_UPDATETIME 1000000000UL /* in ns */
+static pthread_mutex_t  truc_max = PTHREAD_MUTEX_INITIALIZER;
+static float global_max_cpudelay = 0;
+static uint64_t date_global_max  = 0;
+
 #if KAAPI_SLEEP_DEVICETHREAD //quick prototype but buggy
 /* same as wakeup without lock/unlock */
 static void kaapi_offload_device_wakeup_(kaapi_device_t* const device)
@@ -144,7 +151,20 @@ static void callback_epilogue(
   device->sum_cpudelay += status.cpu_delay;
   ++device->cnt_task;
   if (status.cpu_delay > device->max_cpudelay)
+  {
     device->max_cpudelay = status.cpu_delay;
+    uint64_t t0 = kaapi_get_elapsedns();
+    if ((device->max_cpudelay > global_max_cpudelay) || (t0-date_global_max>KAAPI_CPUDELAY_MAX_UPDATETIME))
+    {
+      pthread_mutex_lock(&truc_max);
+      if ((device->max_cpudelay > global_max_cpudelay) || (t0-date_global_max>KAAPI_CPUDELAY_MAX_UPDATETIME))
+      {
+        date_global_max = t0;
+        global_max_cpudelay = device->max_cpudelay;
+      }
+      pthread_mutex_unlock(&truc_max);
+    }
+  }
   if (status.cpu_delay < device->min_cpudelay)
     device->min_cpudelay = status.cpu_delay;
 #if KAAPI_LOG_DELAY
@@ -690,12 +710,14 @@ static void callback_replyrequest_memsync(
 
 /*
 */
-static void _kaapi_compute_load_device(
+#define KAAPI_IMAX 4
+static int _kaapi_compute_load_device(
+    kaapi_context_t* ctxt,
     int* pmin, 
     int* pmax, 
     float* pavrg, 
     float* pdelta, 
-    int* pimax, 
+    int* imax,  /* of size at least 4 */
     int* pload
 )
 {
@@ -704,38 +726,46 @@ static void _kaapi_compute_load_device(
   int max = 0;
   int min = INT_MAX;
   float sum = 0.0;
-  int imax = 0;
+  int iimax = 0;
   for (int i=0; i<ngpu; ++i)
   {
     kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU,i);
 #if KAAPI_PIPELINE_GPUTASK
     load[i] = ld->device->p_ready -  ld->device->p_finish;
-    //load[i] = ld->device->p_write -  ld->device->p_finish;
 #else
     load[i] = KAAPI_ATOMIC_READ(&ld->device->cnt_ready);
-    //load[i] = kaapi_fifo_queue_size( ld->queue );
 #endif
+    //load[i] = kaapi_fifo_queue_size( ld->queue );
     sum += (float)load[i];
-    if (load[i] > max) {
-      max = load[i];
-      imax = i;
+    int l = load[i];
+    if (l> max) {
+      max = l;
     }
-    if (load[i] < min) 
-      min = load[i];
+    if (l < min) 
+      min = l;
   }
   float minmax = max-min;
   float avrg = sum/ngpu;
   float delta = 0.0;
   for (int i=0; i<ngpu; ++i)
   {
-    delta += fabs(load[i] - avrg);
+    sum += load[i];
+    float d = load[i] - avrg;
+    delta += fabs(d);
     if (pload) pload[i] = load[i];
+
+    if (load[i] == max)
+    {
+      imax[iimax%KAAPI_IMAX]=i;
+      ++iimax;
+    }
   }
-  *pimax = imax;
+  
   *pmin = min;
   *pmax = max;
   *pavrg = avrg;
   *pdelta = delta;
+  return iimax;
 }
 
 
@@ -761,7 +791,7 @@ int kaapi_sched_idle_offload(
   {
 #if KAAPI_SLEEP_DEVICETHREAD
     while ((device->request.op == KAAPI_DEVICEOP_NOP)
-        && kaapi_queue_empty(device->ctxt->queue)
+        && kaapi_queue_empty(ctxt->queue)
         && (device->exec_count == device->spawn_count + device->ld->queue->push_count)
         && kaapi_offload_stream_isempty(&device->stream, KAAPI_IO_STREAM_ALL)
     )
@@ -778,7 +808,7 @@ int kaapi_sched_idle_offload(
          - new task to wait =iff= (device->exec_count < device->spawn_count + device->ld->queue->push_count)
     */
     task = 0;
-    if ((task ==0) && kaapi_offload_device_accept_new_task(device))
+    if (/*(task ==0) && */ kaapi_offload_device_accept_new_task(device))
     {
       /* pop on local queue */
       if (task ==0)
@@ -786,16 +816,12 @@ int kaapi_sched_idle_offload(
 
 #if KAAPI_WS_GPUTASK
       /* no task ? try to steal */
-      if ((task ==0) 
-        && kaapi_offload_device_accept_new_task(device)
-      )
+      if (task ==0)
       {
         if (tidle_start ==0) tidle_start = kaapi_get_elapsedns();
 #if KAAPI_USE_PERFCOUNTER
         else if ((device->cnt_task!=0) 
-        //      && ((1e-9*(kaapi_get_elapsedns() - tidle_start)) > 0.009/kaapi_default_param.cuda_conc_stream_kernel)
-              && ((1e-9*(kaapi_get_elapsedns() - tidle_start)) > 1.*(device->sum_cpudelay/device->cnt_task)) 
-        //      || (device->min_cpudelay == FLT_MAX))
+              && (1e-9*(kaapi_get_elapsedns() - tidle_start) > .9*global_max_cpudelay) ///kaapi_default_param.cuda_conc_stream_kernel)) 
         ) 
 #endif
         {
@@ -808,37 +834,46 @@ int kaapi_sched_idle_offload(
   	       3- a task with inputs on the machine. 
           */
           kaapi_localitydomain_t* ld;
-#if 0
-          if (task ==0) 
-          {
-            ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand_r(&device->ctxt->seed) % kaapi_localitydomain_count(KAAPI_LD_GPU) );
-            task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
-          }
-#elif 1
-          if (task ==0) 
-          {
-            int ngpu= kaapi_localitydomain_count(KAAPI_LD_GPU);
-            int load[ngpu]; 
-            int imax; 
-            int max;
-            int min; 
-            float avrg;
-            float delta;
-            _kaapi_compute_load_device(&min, &max, &avrg, &delta, &imax, load);
-            float minmax = max-min;
+#if 1
+          int ngpu= kaapi_localitydomain_count(KAAPI_LD_GPU);
+          int load[ngpu]; 
+          int imax[KAAPI_IMAX]; 
+          int max;
+          int min; 
+          float avrg;
+          float delta;
+          int iimax = _kaapi_compute_load_device(ctxt, &min, &max, &avrg, &delta, imax, load);
+          float minmax = max-min;
 
-            if ((avrg > kaapi_default_param.cuda_conc_kernel / 2.0) && (delta >2*kaapi_default_param.cuda_conc_kernel))
+          //if ((avrg > 2.0/ngpu) && (delta > 0)) 
+          //if ((avrg >= 1.0) && (delta >= 2.0*kaapi_default_param.cuda_conc_kernel))
+          if ((avrg >= kaapi_default_param.cuda_conc_kernel/2.0) && (delta > 1.0*kaapi_default_param.cuda_conc_kernel))
+          {
+            int d = rand_r(&ctxt->seed) % 100;
+            for (int i=d; i<d+iimax; ++i)
             {
-              kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, imax );
-              task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
+              kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, i % iimax );
+              task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 2);
+              if (task!=0) break;
             }
+            if (task ==0)
+              for (int i=d; i<d+iimax; ++i)
+              {
+                kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, i % iimax );
+                task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
+                if (task!=0) break;
+              }
 #if 0
+            task = kaapi_fifo_queue_steal(ld->queue);
+            if (task==0) task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 2);
+#endif
+#if 0 // OUTPUT
             if (task != 0) 
             {
               char buffer[128];
               char* b = buffer;
               ssize_t sz = 0;
-              sz = sprintf(b, "%02i:: Load: Avrg=%10f, Delta=%10f, MinMax=%10f  ::", device->ld->ldid, avrg, delta, minmax );
+              sz = sprintf(b, "%02i:: Load: Avrg=%10f, Delta=%10f, MinMax=%10f iimax:%i  ::", device->ld->ldid, avrg, delta, minmax, iimax );
               b += sz;
               for (int i=0; i<ngpu; ++i)
               {
@@ -850,43 +885,41 @@ int kaapi_sched_idle_offload(
 #endif
           }
 
-#elif 1
-          if (task ==0) 
+#elif 0
+        {
+          int rank;
+          for (rank=1; rank<device->ld->perfrank; ++rank)
           {
-            int rank;
-            for (rank=1; rank<device->ld->perfrank; ++rank)
+            uint64_t affinity = device->ld->affinity[rank];
+            int nb = __builtin_popcount(affinity);
+            if (nb >0)
             {
-              uint64_t affinity = device->ld->affinity[rank];
-              int nb = __builtin_popcount(affinity);
-              if (nb >0)
+              int victim = rand_r(&device->ctxt->seed) % nb;
+              int ldid = 0;
+              ldid = __builtin_ffsll(affinity);
+              for (int i=0; i<victim; ++i)
               {
-                int victim = rand_r(&device->ctxt->seed) % nb;
-                int ldid = 0;
                 ldid = __builtin_ffsll(affinity);
-                for (int i=0; i<victim; ++i)
-                {
-                  ldid = __builtin_ffsll(affinity);
-                  kaapi_assert( ldid != 0);
-                  ldid;
-                  affinity &= ~(1UL << ldid);
-                }
-                kaapi_localitydomain_t* ld = kaapi_localitydomain_get(ldid);
-                task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, rank);
+                kaapi_assert( ldid != 0);
+                ldid;
+                affinity &= ~(1UL << ldid);
               }
-              if (task !=0) break;
+              kaapi_localitydomain_t* ld = kaapi_localitydomain_get(ldid);
+              task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, rank);
             }
-            if (task ==0)
-            {
-              ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand_r(&device->ctxt->seed) % kaapi_localitydomain_count(KAAPI_LD_GPU) );
-              task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
-            }
+            if (task !=0) break;
           }
+          if (task ==0)
+          {
+            ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, rand_r(&device->ctxt->seed) % kaapi_localitydomain_count(KAAPI_LD_GPU) );
+            task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 3);
+          }
+        }
 #endif
         }
       }
 #endif // KAAPI_WS_GPUTASK
     }
-
     if (task ==0)
     {
       /* may be request */
