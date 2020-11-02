@@ -808,7 +808,11 @@ int kaapi_sched_idle_offload(
          - new task to wait =iff= (device->exec_count < device->spawn_count + device->ld->queue->push_count)
     */
     task = 0;
-    if (/*(task ==0) && */ kaapi_offload_device_accept_new_task(device))
+    if (
+      //  (device->p_ready - device->p_finish <1) 
+          (device->p_write - device->p_ready <1) 
+       && kaapi_offload_device_accept_new_task(device)
+    )
     {
       /* pop on local queue */
       if (task ==0)
@@ -819,9 +823,10 @@ int kaapi_sched_idle_offload(
       if (task ==0)
       {
         if (tidle_start ==0) tidle_start = kaapi_get_elapsedns();
-#if KAAPI_USE_PERFCOUNTER
+        else if (1e-9*(kaapi_get_elapsedns() - tidle_start) > 0.001)
+#if 0//KAAPI_USE_PERFCOUNTER
         else if ((device->cnt_task!=0) 
-              && (1e-9*(kaapi_get_elapsedns() - tidle_start) > .9*global_max_cpudelay) ///kaapi_default_param.cuda_conc_stream_kernel)) 
+              && (1e-9*(kaapi_get_elapsedns() - tidle_start) > global_max_cpudelay/kaapi_default_param.cuda_conc_kernel) ///kaapi_default_param.cuda_conc_stream_kernel)) 
         ) 
 #endif
         {
@@ -846,7 +851,7 @@ int kaapi_sched_idle_offload(
           float minmax = max-min;
 
           //if ((avrg > 2.0/ngpu) && (delta > 0)) 
-          //if ((avrg >= 1.0) && (delta >= 2.0*kaapi_default_param.cuda_conc_kernel))
+          //if ((avrg >= 1.0) && (delta >= 1.0*kaapi_default_param.cuda_conc_kernel))
           if ((avrg >= kaapi_default_param.cuda_conc_kernel/2.0) && (delta > 1.0*kaapi_default_param.cuda_conc_kernel))
           {
             int d = rand_r(&ctxt->seed) % 100;
