@@ -83,6 +83,16 @@ const char* get_kaapi_info(void)
             "  NSTREAMS : %i\n"
             "  NKERNELS : %i\n" 
             "  PREFETCH : %i\n" 
+#if KAAPI_USE_OCR
+            "  MAPPING  : OCR\n" 
+#else
+            "  MAPPING  : direct\n" 
+#endif
+#if KAAPI_WS_GPUTASK
+            "  LOAD.IMBL: WS\n" 
+#else
+            "  LOAD.IMBL: NO\n" 
+#endif
 #if KAAPI_PIPELINE_GPUTASK 
 # if KAAPI_REORDER_TASK_EXEC
             "  REORDER  : yes\n" 
