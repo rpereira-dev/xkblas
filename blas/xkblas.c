@@ -1684,7 +1684,7 @@ printf("\n");
    colrow = 1 -> row mapping
 */
 int xkblas_distribute_1Dblock_cyclic_async(
-  int hlevel, int storage, int uplo, int colrow, size_t NB, 
+  int hlevel, int storage, int colrow, int uplo, size_t NB, 
   size_t m, size_t n, const void* A, size_t lda, size_t eltsize,
   size_t B, size_t G    /* grid size */
 )
