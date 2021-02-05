@@ -862,10 +862,26 @@ static void xkblas_create_taskwriteback(
   kaapi_update_dependencies(thread, &taskarg->a, task,
       KAAPI_ACCESS_MODE_R, xkblas_get_handle(Ah,m,n));
   kaapi_assert_debug( taskarg->a.mdi==0 );
-  //Deadlock if steal is activated ? kaapi_taskflag_set(task, KAAPI_TASK_FLAG_INCOM|KAAPI_TASK_FLAG_UNSTEALABLE);
-  //kaapi_taskflag_set(task, KAAPI_TASK_FLAG_INCOM|KAAPI_TASK_FLAG_UNSTEALABLE);
   kaapi_taskflag_set(task, KAAPI_TASK_FLAG_INCOM);
+
+#if KAAPI_USE_OCR
+  /* OCR on the first parameter */
   kaapi_task_set_ld(task, KAAPI_TASK_OCR_PARAM, 0);
+
+#if KAAPI_DEBUG
+  kaapi_ldid_t ldid0 = kaapi_dsm_get_wish_distribution(
+      &kaapi_the_dsm,
+      xkblas_get_handle(Ah,m,n));
+  uint16_t ldid1 = xkblas_get_ld(Ah,m,n);
+  kaapi_assert( ldid0 == ldid1 );
+#endif
+
+#else
+  uint16_t ldid = xkblas_get_ld(Ah,m,n);
+  kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);
+#endif
+
+
 #if KAAPI_DEBUG
   KAAPI_ATOMIC_INCR(&spawn_writeback);
 #endif

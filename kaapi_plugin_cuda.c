@@ -1569,7 +1569,7 @@ static int cuda_stream_process_pending(
           }
 
           status.gpu_delay *= 1e-3;
-          status.cpu_delay = op->t2-op->t1; 
+          status.cpu_delay = op->t2 - op->t1; 
 #endif
           if (op->inst.cbk.fnc)
             op->inst.cbk.fnc(status, ios, op->inst.cbk.arg[0], op->inst.cbk.arg[1], op->inst.cbk.arg[2]);

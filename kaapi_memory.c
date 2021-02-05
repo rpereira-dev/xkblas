@@ -336,6 +336,14 @@ static inline void kaapi_memory_replica_unset_pinned(
   KAAPI_ATOMIC_WRITE(&mdi->replicas[lid]->pinned, 0);
 }
 
+static inline void kaapi_memory_replica_clear_wish(
+    kaapi_metadata_info_t*   mdi
+)
+{
+  kaapi_assert_debug(mdi != 0);
+  KAAPI_ATOMIC_WRITE(&mdi->wish, 0);
+}
+
 static inline bool kaapi_memory_replica_has_wish(
     kaapi_metadata_info_t*   mdi,
     uint16_t lid
@@ -1948,10 +1956,11 @@ static kaapi_metadata_info_t* _kaapi_new_mdi(
   {
     mdi = (kaapi_metadata_info_t*)malloc(sizeof(kaapi_metadata_info_t));
     memset( &mdi->replicas, 0, sizeof(mdi->replicas));
+    /* here reset wish only if mdi is first allocated */
+    KAAPI_ATOMIC_WRITE(&mdi->wish,  0ULL);
   }
-  KAAPI_ATOMIC_WRITE(&mdi->xfer,   0ULL);
-  KAAPI_ATOMIC_WRITE(&mdi->xferb,  0ULL);
-  KAAPI_ATOMIC_WRITE(&mdi->wish,  0ULL);
+  KAAPI_ATOMIC_WRITE(&mdi->xfer,  0ULL);
+  KAAPI_ATOMIC_WRITE(&mdi->xferb, 0ULL);
 #if defined(KAAPI_DEBUG)
   mdi->debug_info = 0;
   mdi->owner = 0;
@@ -2136,6 +2145,7 @@ return_value:
 
   /* */
   a->mdi = mdi;
+
   /* allocate replica but not the memory block */
   if (createflag && !kaapi_memory_replica_is_allocated(mdi,lid))
   {
@@ -2262,7 +2272,6 @@ return_value:
     if (!kaapi_memory_replica_is_allocated(mdi,lid))
       mdi->replicas[lid] = _kaapi_new_replica( mdi, mdi->replicas[lid], asid, view);
   }
-
   return mdi;
 }
 
@@ -2288,6 +2297,7 @@ int kaapi_dsm_wish_distribution(
     0
   );
   if (mdi ==0) return EINVAL;
+  kaapi_memory_replica_clear_wish(mdi);
   kaapi_memory_replica_set_wish(mdi, lid);
   return 0;
 }

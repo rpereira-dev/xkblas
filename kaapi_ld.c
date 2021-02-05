@@ -540,7 +540,7 @@ kaapi_task_t* kaapi_fifo_queue_steal(
 
 /*
 */
-#define MAX_HISTORY 8
+#define MAX_HISTORY 16
 
 static int _kaapi_update_score(
      kaapi_task_t* task,

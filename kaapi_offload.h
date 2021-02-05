@@ -45,7 +45,7 @@
 
 #ifndef _KAAPI_OFFLOAD_H_
 #define _KAAPI_OFFLOAD_H_
-
+#include <stdio.h>
 
 #define KAAPI_PLUGIN_PREFIX_NAME "KAAPI_PLUGIN_"
 #define KAAPI_PLUGIN_ENTRYPOINT_NAME( func_name ) KAAPI_PLUGIN_PREFIX_NAME #func_name
@@ -127,6 +127,16 @@ struct kaapi_device {
     uint64_t                    p_write;       /* next position in the pipeline to write a new task */
     uint64_t                    p_ready;       /* position of the first ready task submitted to stream but not yet tested finish */
     uint64_t                    p_finish;      /* position in the stream of the next task to finish */
+#endif
+#if KAAPI_USE_PERFCOUNTER
+    uint32_t                    cnt_task;
+    float                       sum_cpudelay;
+    float                       max_cpudelay;
+    float                       min_cpudelay;
+#define KAAPI_LOG_DELAY 0 // to debug perf
+#if KAAPI_LOG_DELAY
+    FILE*                       flog_delay;
+#endif
 #endif
   
     kaapi_atomic16_t            cnt_pending;   /* number of tasks waiting for data (not too much) */

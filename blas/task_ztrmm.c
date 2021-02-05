@@ -118,18 +118,9 @@ void INSERT_TASK_ztrmm(
         KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Bh, Bm, Bn));
     taskarg->ldb = ldb;
     taskarg->mm = xkblas_get_modemath();
-#if 1//KAAPI_USE_OCR
-    /* OCR on the third parameter */
+#if 0//KAAPI_USE_OCR 
+    /* OCR on the second parameter */
     kaapi_task_set_ld(task, KAAPI_TASK_OCR_PARAM, 1);
-
-#if 1//KAAPI_DEBUG
-    kaapi_ldid_t ldid0 = kaapi_dsm_get_wish_distribution(
-      &kaapi_the_dsm,
-      xkblas_get_handle(Bh, Bm, Bn));
-    uint16_t ldid1 = xkblas_get_ld(Bh, Bm, Bn);
-    kaapi_assert( ldid0 == ldid1 );
-#endif
-
 #else
     uint16_t ldid = xkblas_get_ld(Bh, Bm, Bn);
     kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);

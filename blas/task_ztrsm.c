@@ -118,7 +118,7 @@ void INSERT_TASK_ztrsm(
         KAAPI_ACCESS_MODE_RW, xkblas_get_handle(Bh, Bm, Bn));
     taskarg->ldb = ldb;
     taskarg->mm = xkblas_get_modemath();
-#if KAAPI_USE_OCR
+#if KAAPI_USE_OCR 
     /* OCR on the third parameter */
     kaapi_task_set_ld(task, KAAPI_TASK_OCR_PARAM, 1);
 #else

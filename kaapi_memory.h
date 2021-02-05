@@ -173,7 +173,7 @@ static inline int _kaapi_get_random_bit1(KAAPI_MEMORY_VALUE_TYPE value, unsigned
   for (int i=0; i<=k; ++i) 
   {
     idx = KAAPI_MEMORY_FFS(value);
-    value &= ~(1UL << idx);
+    value &= ~(1UL << (idx-1));
   }
   return idx;
 }
