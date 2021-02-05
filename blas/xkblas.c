@@ -560,6 +560,7 @@ int xkblas_map_2Dblock_cyclic(
         kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(type, r);
         xkblas_set_ldid(Ah, i, j, ldid = ld->ldid);
 #if KAAPI_USE_OCR
+        kaapi_assert( ldid == kaapi_memory_asid_get_lid(ld->device->memdev.asid) );
         kaapi_assert(0 == kaapi_dsm_wish_distribution(
               &kaapi_the_dsm,
               ld->device->memdev.asid,

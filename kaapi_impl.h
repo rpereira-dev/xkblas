@@ -68,7 +68,7 @@
 
 /* To activate use of OCR data management. Should be the default when ok.
 */
-#define KAAPI_USE_OCR 1
+#define KAAPI_USE_OCR 0
 
 /* To activate or not the loadbalancing between GPUs
 */
