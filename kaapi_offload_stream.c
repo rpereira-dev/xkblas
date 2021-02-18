@@ -513,7 +513,8 @@ kaapi_io_instruction_t* kaapi_offload_stream_commit(
   ++ios->pos_w;
 
 #if KAAPI_SLEEP_DEVICETHREAD
-#error "Here: wakeup the device thread responsible to process stream request"
+  /* wakupe the sleeping thread: an (other) thread has register a request to process */
+  kaapi_offload_device_wakeup( stream->device );
 #endif
 
   /* unlock mutex locked in stream_push */
