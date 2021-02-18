@@ -2337,7 +2337,10 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_start)(kaapi_device_t*
 #else
 #endif
 
-  err = pthread_create(&dev->tid, &attr, kaapi_offload_device_thread, dev);
+  // Commented to force creation of the thread using default CPUSET mask
+  //err = pthread_create(&dev->tid, &attr, kaapi_offload_device_thread, dev);
+  //
+  err = pthread_create(&dev->tid, 0, kaapi_offload_device_thread, dev);
   kaapi_assert(err ==0);
 #if KAAPI_HAVE_IO_THREADS
   printf("[kaapi]: plug cuda create helper threads H2D and D2H\n");

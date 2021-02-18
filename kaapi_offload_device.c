@@ -58,7 +58,7 @@ static pthread_mutex_t  truc_max = PTHREAD_MUTEX_INITIALIZER;
 static float global_max_cpudelay = 0;
 static uint64_t date_global_max  = 0;
 
-#if KAAPI_SLEEP_DEVICETHREAD //quick prototype but buggy
+#if KAAPI_SLEEP_DEVICETHREAD 
 /* same as wakeup without lock/unlock */
 static void kaapi_offload_device_wakeup_(kaapi_device_t* const device)
 {
@@ -793,6 +793,7 @@ int kaapi_sched_idle_offload(
     while ((device->request.op == KAAPI_DEVICEOP_NOP)
         && kaapi_queue_empty(ctxt->queue)
         && (device->exec_count == device->spawn_count + device->ld->queue->push_count)
+        && (device->ld->queue->push_count == device->ld->queue->pop_count)
         && kaapi_offload_stream_isempty(&device->stream, KAAPI_IO_STREAM_ALL)
     )
     {

@@ -38,7 +38,7 @@
 #ifndef _KAAPI_IMPL_H
 #define _KAAPI_IMPL_H 1
 
-#define KAAPI_ADVANCED_VERSION 0   /* to compile with mix code where next features are already present but not yet fully validated */
+#define KAAPI_ADVANCED_VERSION 0   /* to compile with mix code where next features are already present but not yet fully validated : NOT REALLY IN USE */
 
 #define KAAPI_HAVE_IO_THREADS 0    /* do not use IO threads [Experimental feature!!!!] */
 
@@ -51,7 +51,7 @@
 #define KAAPI_USE_HOST_PLUGIN 1
 #define KAAPI_USE_CUDA_PLUGIN 1
 
-#define KAAPI_USE_PERFCOUNTER 1    /* compile with some performance counters */
+#define KAAPI_USE_PERFCOUNTER 0    /* compile with some performance counters */
 
 /* 2^KAAPI_SIZE_DSM_MAP is the size of the hash map
 */
@@ -72,10 +72,10 @@
 
 /* To activate or not the loadbalancing between GPUs
 */
-#define KAAPI_WS_GPUTASK 0
+#define KAAPI_WS_GPUTASK 1
 
 /* use pipeline to order task insertions, communications and kernel launchs
-   else the only the number of inserted task + pending task in the stream is limited
+   else only the number of inserted tasks + pending tasks in the stream is limited
 */
 #define KAAPI_PIPELINE_GPUTASK 1
 
@@ -91,7 +91,7 @@
 /* to allow transfert between GPUi to GPUj if data is under xfer data to GPUi*/
 #define KAAPI_USE_FAVOR_D2D_1 1
 
-/* to allow to route data through NVlink is 2 GPUs is not interconnected */
+/* to allow to route data through NVlink if 2 GPUs is not interconnected */
 #define KAAPI_USE_D2D_ROUTE 0
 
 /* to use specific stream for D2D operation. */
