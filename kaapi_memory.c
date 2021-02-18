@@ -1929,7 +1929,7 @@ static inline kaapi_data_replica_t* _kaapi_new_replica(
     //kdr->view.ld = (kdr->view.ld+127) & (~127UL);
   }
 
-#if KAAPI_DEBUG
+#if 0 // KAAPI_DEBUG
   extern __thread kaapi_thread_t* _xkblas_self_thread;
   kdr->thread = _xkblas_self_thread;
 #endif
