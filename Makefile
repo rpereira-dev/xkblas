@@ -92,7 +92,7 @@ ifeq ($(KAAPI_USE_DYNLOADER),0)
   # merge FILE_PLUGIN in normal library
   UKAAPI_FILE_LIB+=$(UKAAPI_FILE_PLUGIN)
   UKAAPI_TARGET_PLUGIN=
-  UKAAPI_LDFLAGS=${LDFLAGS} -fopenmp
+  UKAAPI_LDFLAGS=${LDFLAGS} 
 else
   UKAAPI_LDFLAGS="-ldl"
   UKAAPI_TARGET_PLUGIN=libkaapi_plugin_host.so.1 ${CUDA_KAAPI_PLUGIN}
@@ -502,7 +502,7 @@ libkaapi_plugin_host.so.1: kaapi_plugin_host.o libkaapi.so
 	$(CC) -shared -o libkaapi_plugin_host.so.1 kaapi_plugin_host.o ${UKAAPI_LDFLAGS}
 
 libkaapi_plugin_cuda.so.1: kaapi_plugin_cuda.o libkaapi.so
-	$(CC) -shared -fopenmp -o libkaapi_plugin_cuda.so.1 kaapi_plugin_cuda.o ${UKAAPI_LDFLAGS} ${HWLOC_LIBS} ${CUDA_LIBS}
+	$(CC) -shared -o libkaapi_plugin_cuda.so.1 kaapi_plugin_cuda.o ${UKAAPI_LDFLAGS} ${HWLOC_LIBS} ${CUDA_LIBS}
 
 libxkblas.so: libkaapi.so .generated ${XKBLAS_ALL_GENFILES} ${XKBLAS_SRC:.c=.o} 
 	echo ${XKBLAS_SRC:.c=.o}
@@ -556,7 +556,7 @@ kaapi_plugin_host.o: ${FILE_LIB} kaapi_plugin_host.c kaapi_plugin.h  Makefile
 	$(CC) -c -fPIC ${CPPFLAGS} ${OPT} ./kaapi_plugin_host.c
 
 kaapi_plugin_cuda.o: ${FILE_LIB} kaapi_plugin_cuda.c kaapi_plugin.h  Makefile 
-	$(CC) -c -fPIC ${CPPFLAGS} -fopenmp ${OPT} ./kaapi_plugin_cuda.c
+	$(CC) -c -fPIC ${CPPFLAGS} ${OPT} ./kaapi_plugin_cuda.c
 
 $(patsubst %.c,%.o,$(filter %.c,$(FILE_OTHER))): %.o:	 %.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
 	$(CC) -fPIC ${XKBLAS_CPPFLAGS} ${OPT} -DXKBLAS_CFLAGS='"${XKBLAS_CPPFLAGS} ${OPT}"' -c $<  -o $@
@@ -579,7 +579,7 @@ kaapi_plugin_host_a.o: ${FILE_LIB} kaapi_plugin_host.c kaapi_plugin.h  Makefile
 	$(CC) -c ${CPPFLAGS} ${OPT} ./kaapi_plugin_host.c -o $@
 
 kaapi_plugin_cuda_a.o: ${FILE_LIB} kaapi_plugin_cuda.c kaapi_plugin.h  Makefile 
-	$(CC) -c ${CPPFLAGS} -fopenmp ${OPT} ./kaapi_plugin_cuda.c -o $@
+	$(CC) -c ${CPPFLAGS} ${OPT} ./kaapi_plugin_cuda.c -o $@
 
 $(patsubst %.c,%_a.o,$(filter %.c,$(FILE_OTHER))): %_a.o:	 %.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
 	$(CC) ${XKBLAS_CPPFLAGS} ${OPT} -DXKBLAS_CFLAGS='"${XKBLAS_CPPFLAGS} ${OPT}"' -c $<  -o $@ 
