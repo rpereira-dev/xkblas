@@ -2282,13 +2282,12 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_start)(kaapi_device_t*
 
   pthread_attr_t attr;
   pthread_attr_init(&attr);
-
-#if KAAPI_USE_HWLOC
-  hwloc_cpuset_t cpuset;
-  hwloc_obj_t obj;
   cpu_set_t save_schedset;
   cpu_set_t schedset;
   cpu_set_t schedset_map;
+#if KAAPI_USE_HWLOC
+  hwloc_cpuset_t cpuset;
+  hwloc_obj_t obj;
 
   CPU_ZERO(&schedset);
   cpuset = hwloc_bitmap_alloc();
@@ -2335,12 +2334,18 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_start)(kaapi_device_t*
     }
   }
 #else
+  CPU_ZERO(&schedset_map);
+  CPU_ZERO(&save_schedset);
+  pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &save_schedset);
+  CPU_OR(&schedset_map, &schedset_map, &save_schedset);
+  pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &schedset_map);
+  for (int i=0; i<10; ++i) sched_yield();
+  err = pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &schedset_map);
+  kaapi_assert(err == 0);
 #endif
 
-  // Commented to force creation of the thread using default CPUSET mask
   //err = pthread_create(&dev->tid, &attr, kaapi_offload_device_thread, dev);
-  //
-  err = pthread_create(&dev->tid, 0, kaapi_offload_device_thread, dev);
+  //err = pthread_create(&dev->tid, 0, kaapi_offload_device_thread, dev);
   kaapi_assert(err ==0);
 #if KAAPI_HAVE_IO_THREADS
   printf("[kaapi]: plug cuda create helper threads H2D and D2H\n");
@@ -2351,8 +2356,8 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_start)(kaapi_device_t*
 #endif
 #if KAAPI_USE_HWLOC
   hwloc_bitmap_free(cpuset);
-  pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &save_schedset);
 #endif
+  pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &save_schedset);
 
   KAAPI_OFFLOAD_TRACE_OUT
   return 0;
