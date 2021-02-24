@@ -1822,7 +1822,7 @@ redo_syr2k:
       break;
   }
 
-printf("Mat size: %i tilesize: %i\n",(int)M, NB);
+//printf("Mat size: %i tilesize: %i\n",(int)M, NB);
   return NB;
 }
 
