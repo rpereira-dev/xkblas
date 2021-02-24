@@ -648,6 +648,9 @@ static int kaapi_offload_request2device( kaapi_device_t* device, kaapi_device_op
   /* send op */
   device->request.arg = 0;
   device->request.op = op;
+#if KAAPI_SLEEP_DEVICETHREAD
+  kaapi_offload_device_wakeup_(device);
+#endif
   pthread_mutex_unlock(&device->lock);
   return res;
 }
