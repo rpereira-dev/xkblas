@@ -2344,7 +2344,7 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_start)(kaapi_device_t*
   kaapi_assert(err == 0);
 #endif
 
-  //err = pthread_create(&dev->tid, &attr, kaapi_offload_device_thread, dev);
+  err = pthread_create(&dev->tid, &attr, kaapi_offload_device_thread, dev);
   //err = pthread_create(&dev->tid, 0, kaapi_offload_device_thread, dev);
   kaapi_assert(err ==0);
 #if KAAPI_HAVE_IO_THREADS

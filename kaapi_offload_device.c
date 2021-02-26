@@ -813,9 +813,12 @@ int kaapi_sched_idle_offload(
     */
     task = 0;
     if (
+#if KAAPI_PIPELINE_GPUTASK
       //  (device->p_ready - device->p_finish <1) 
           (device->p_write - device->p_ready <1) 
-       && kaapi_offload_device_accept_new_task(device)
+       && 
+#endif
+          kaapi_offload_device_accept_new_task(device)
     )
     {
       /* pop on local queue */
