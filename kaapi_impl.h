@@ -68,16 +68,16 @@
 
 /* To activate use of OCR data management. Should be the default when ok.
 */
-#define KAAPI_USE_OCR 0
+#define KAAPI_USE_OCR 1
 
 /* To activate or not the loadbalancing between GPUs
 */
-#define KAAPI_WS_GPUTASK 0
+#define KAAPI_WS_GPUTASK 1
 
 /* use pipeline to order task insertions, communications and kernel launchs
    else only the number of inserted tasks + pending tasks in the stream is limited
 */
-#define KAAPI_PIPELINE_GPUTASK 1
+#define KAAPI_PIPELINE_GPUTASK 0
 
 #if KAAPI_PIPELINE_GPUTASK
 /* reorder stream execution on GPU */
