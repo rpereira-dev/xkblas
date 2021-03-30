@@ -91,7 +91,7 @@ const char* get_kaapi_info(void)
 #if KAAPI_WS_GPUTASK
             "  LOAD.IMBL: WS\n" 
 #else
-            "  LOAD.IMBL: NO\n" 
+            "  LOAD.IMBL: NO WS\n" 
 #endif
 #if KAAPI_PIPELINE_GPUTASK 
 # if KAAPI_REORDER_TASK_EXEC
