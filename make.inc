@@ -11,14 +11,14 @@ KAAPI_HOME=$(PWD)
 HWLOC_HOME=/usr
 
 # For MKL
-EXTRA=-DKAAPI_BLAS_USE_MKL
+BLAS_USE=-DKAAPI_BLAS_USE_MKL
 BLAS_LIBDIR=${MKLROOT}/lib
 BLAS_LIB_SO=${MKLROOT}/lib/intel64/libmkl_intel_ilp64.so
 BLAS_CPPFLAGS=-DMKL_ILP64 -m64 -I${MKLROOT}/include
 BLAS_LDFLAGS=-L${MKLROOT}/lib/intel64 -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
 
 # For OpenBLAS:
-#EXTRA=-DKAAPI_BLAS_USE_OPENBLAS
+#BLAS_USE=-DKAAPI_BLAS_USE_OPENBLAS
 #BLAS_LIBDIR=$(shell pkg-config --libs-only-L openblas|cut -c3-)
 #BLAS_LIB_SO=${BLAS_LIBDIR}/libopenblas.so
 #BLAS_CPPFLAGS=$(shell pkg-config --cflags openblas)
@@ -36,9 +36,9 @@ RANLIB=ranlib
 # Extra flags for XKBlas:
 # - KAAPI_USE_SLEEP=1 to activate the policy to make active threads sleeping more
 # Set to KAAPI_USE_SLEEP=0 if you want to unactivate the policy
-EXTRA=-DKAAPI_USE_SLEEP=1
+KAAPI_OPTIONFLAGS=-DKAAPI_USE_SLEEP=1 
 
-# Option
-OPT=-O3 -std=gnu99 -DKAAPI_DEBUG=0 ${EXTRA} -DNDEBUG
-#OPT=-O0 -g -std=gnu99 -DKAAPI_DEBUG=1 ${EXTRA}
+# FLAGS use for compiling the library
+OPT=-O3 -std=gnu99 -DKAAPI_DEBUG=0 ${EXTRA} -DNDEBUG ${BLAS_USE} ${KAAPI_OPTIONFLAGS}
+#OPT=-O0 -g -std=gnu99 -DKAAPI_DEBUG=1 ${EXTRA} ${BLAS_USE} ${KAAPI_OPTIONFLAGS}
 
