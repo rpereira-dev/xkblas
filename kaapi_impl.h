@@ -42,7 +42,11 @@
 
 #define KAAPI_HAVE_IO_THREADS 0    /* do not use IO threads [Experimental feature!!!!] */
 
-#define KAAPI_SLEEP_DEVICETHREAD 0 /* activate a sleeping state for device thread [Yet experimental feature] */
+#ifndef KAAPI_USE_SLEEP
+#define KAAPI_SLEEP_DEVICETHREAD 1 /* default: activate a sleeping state for device thread [Yet experimental feature] */
+#else
+#define KAAPI_SLEEP_DEVICETHREAD KAAPI_USE_SLEEP /* else take the value of KAAPI_USE_SLEEP
+#endif
 
 #ifndef KAAPI_USE_DYNLOADER
 #define KAAPI_USE_DYNLOADER   0    /* do not use dynamically loaded plugin */
@@ -77,7 +81,7 @@
 /* use pipeline to order task insertions, communications and kernel launchs
    else only the number of inserted tasks + pending tasks in the stream is limited
 */
-#define KAAPI_PIPELINE_GPUTASK 1
+#define KAAPI_PIPELINE_GPUTASK 0
 
 #if KAAPI_PIPELINE_GPUTASK
 /* reorder stream execution on GPU */
