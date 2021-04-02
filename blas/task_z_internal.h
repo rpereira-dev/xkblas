@@ -35,8 +35,8 @@
 ** knowledge of the CeCILL-C license and that you accept its terms.
 **/
 
-#ifndef _chameleon_task_z_internal
-#define _chameleon_task_z_internal
+#ifndef _xkblas_task_z_internal
+#define _xkblas_task_z_internal
 
 #define XKBLAS_NOREFADDR NOREFZVALUE
 

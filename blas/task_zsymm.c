@@ -31,6 +31,7 @@
 #define STRNAME  "zsymm"
 #define NAME(x) x##_##zsymm
 #define PNAME(x) zsymm##_##x
+#define SIZE_NPARAM 3
 #define NPARAM 3
 #define MODE_PARAM {KAAPI_ACCESS_MODE_R,KAAPI_ACCESS_MODE_R,arg->beta == 0.0 ? KAAPI_ACCESS_MODE_W : KAAPI_ACCESS_MODE_RW}
 #define ADDR_PARAM {&arg->A, &arg->B, &arg->C}

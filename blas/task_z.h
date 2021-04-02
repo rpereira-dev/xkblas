@@ -125,5 +125,12 @@ void INSERT_TASK_zhemm(
 );
 void register_format_zhemm(void);
 
+void INSERT_TASK_zswap(
+    size_t m, size_t ni, size_t nj, size_t i, size_t j,
+    xkblas_matrix_descr_t *A, size_t Am, size_t An, size_t ldA,
+    xkblas_matrix_descr_t *B, size_t Bm, size_t Bn, size_t ldB
+);
+void register_format_zswap(void);
+
 #endif
 

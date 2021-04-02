@@ -77,6 +77,7 @@ do
            zhemm.c task_zhemm.c \
            zherk.c task_zherk.c\
            zher2k.c task_zher2k.c\
+           zswap.c task_zswap.c\
            testing_zauxiliary.c testing_zauxiliary.h\
            testing_zgemm.c\
            testing_ztrsm.c\
@@ -207,6 +208,8 @@ echo "generate $f for precision $p"
         -e "s+ZHER2K+${pm}HER2K+g" \
         -e "s+zher2k+${p}her2k+g" \
         -e "s+Zher2k+${pm}her2k+g" \
+        -e "s+zswap+${p}swap+g" \
+        -e "s+Zswap+${pm}swap+g" \
         -e "s+ZPOTRF+${pm}POTRF+g" \
         -e "s+cuDoubleComplex+${cutype}+g" \
         -e "s+kaapi_dcplx_format+${ctype_format}+g" .tmp > .tmp2

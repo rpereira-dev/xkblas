@@ -762,6 +762,7 @@ int xkblas_map_test(
 #define STRNAME  "writeback"
 #define NAME(x) kaapi_##x##_writeback
 #define PNAME(x) kaapi_writeback_##x
+#define SIZE_NPARAM 1
 #define NPARAM 1
 #define MODE_PARAM {KAAPI_ACCESS_MODE_R}
 #define ADDR_PARAM {&arg->a}
@@ -896,6 +897,7 @@ static void xkblas_create_taskwriteback(
 #define STRNAME  "invalidate"
 #define NAME(x) kaapi_##x##_invalidate
 #define PNAME(x) kaapi_invalidate_##x
+#define SIZE_NPARAM 1
 #define NPARAM 1
 #define MODE_PARAM {KAAPI_ACCESS_MODE_RW}
 #define ADDR_PARAM {&arg->a}
@@ -983,6 +985,7 @@ static void xkblas_create_taskinvalidate(
 #define STRNAME  "distribute"
 #define NAME(x) kaapi_##x##_distribute
 #define PNAME(x) kaapi_distribute_##x
+#define SIZE_NPARAM 1
 #define NPARAM 1
 #define MODE_PARAM {KAAPI_ACCESS_MODE_RW}
 #define ADDR_PARAM {&arg->a}

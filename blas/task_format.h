@@ -62,6 +62,7 @@ PNAME(format_task_copy)(const kaapi_format_t* fmt, void* sp_dest, const void* sp
 static
 unsigned int PNAME(format_get_count_params)(const kaapi_format_t* fmt, const void* sp)
 {
+  NAME(Arg) *arg = (NAME(Arg) *)sp;
   return NPARAM;
 }
 
@@ -71,7 +72,7 @@ kaapi_access_mode_t PNAME(format_get_mode_param)(
 )
 {
   NAME(Arg) *arg = (NAME(Arg) *)sp;
-  kaapi_access_mode_t mode[NPARAM] = MODE_PARAM;
+  kaapi_access_mode_t mode[SIZE_NPARAM] = MODE_PARAM;
   return mode[i];
 }
 
@@ -81,7 +82,7 @@ void* PNAME(format_get_data_param)(
 )
 {
   NAME(Arg) *arg = (NAME(Arg) *)sp;
-  kaapi_access_t* addr[NPARAM] = ADDR_PARAM;
+  kaapi_access_t* addr[SIZE_NPARAM] = ADDR_PARAM;
   return addr[i]->data;
 }
 
@@ -91,7 +92,7 @@ kaapi_access_t* PNAME(format_get_access_param)(
 )
 {
   NAME(Arg) *arg = (NAME(Arg) *)sp;
-  kaapi_access_t* addr[NPARAM] = ADDR_PARAM;
+  kaapi_access_t* addr[SIZE_NPARAM] = ADDR_PARAM;
   return addr[i];
 }
 
@@ -101,7 +102,7 @@ void PNAME(format_set_access_param)(
 )
 {
   NAME(Arg) *arg = (NAME(Arg) *)sp;
-  kaapi_access_t* addr[NPARAM] = ADDR_PARAM;
+  kaapi_access_t* addr[SIZE_NPARAM] = ADDR_PARAM;
   *addr[i] = *a;
 }
 
@@ -120,7 +121,7 @@ void PNAME(format_get_view_param)(
 )
 {
   NAME(Arg) *arg = (NAME(Arg) *)sp;
-  struct { size_t* m; size_t* n; size_t* ld; } vp[NPARAM] = VIEW_PARAM;
+  struct { size_t* m; size_t* n; size_t* ld; } vp[SIZE_NPARAM] = VIEW_PARAM;
 
   kaapi_memory_view_make2d(view,
     0,
@@ -134,7 +135,7 @@ void PNAME(format_set_view_param)(
 )
 {
   NAME(Arg) *arg = (NAME(Arg) *)sp;
-  struct { size_t* m; size_t* n; size_t* ld; } vp[NPARAM] = VIEW_PARAM;
+  struct { size_t* m; size_t* n; size_t* ld; } vp[SIZE_NPARAM] = VIEW_PARAM;
   *vp[i].m = view->size[0];
   *vp[i].n = view->size[1];
   *vp[i].ld = view->ld;
@@ -225,6 +226,7 @@ void NAME(register_format)(void)
 #undef NAME
 #undef PNAME
 #undef NPARAM
+#undef SIZE_NPARAM
 #undef MODE_PARAM
 #undef ADDR_PARAM
 #undef VIEW_PARAM

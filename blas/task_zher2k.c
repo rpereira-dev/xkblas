@@ -43,6 +43,7 @@
 #define NAME2(x,s) x##_##s
 #define NAME(x) NAME2(x,zher2k)
 #define PNAME(x) zher2k##_##x
+#define SIZE_NPARAM 3
 #define NPARAM 3
 #define MODE_PARAM {KAAPI_ACCESS_MODE_R, KAAPI_ACCESS_MODE_R, KAAPI_ACCESS_MODE_RW }
 #define ADDR_PARAM {&arg->A, &arg->B, &arg->C}

@@ -147,3 +147,8 @@ extern int xkblas_zher2k_native(
   const Complex64_t* alpha, const Complex64_t *A, int LDA,
                             const Complex64_t *B, int LDB,
   const CFloat64_t* beta,   Complex64_t *C, int LDC);
+
+extern int xkblas_zswap_native(
+  int M, int Ni, int Nj, int i, int j,
+  Complex64_t *A, int LDA,
+  Complex64_t *B, int LDB);

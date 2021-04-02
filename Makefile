@@ -110,6 +110,7 @@ XKBLAS_BLAS_PRECISION_s=\
   blas/ssymm.c \
   blas/ssyrk.c \
   blas/ssyr2k.c \
+  blas/sswap.c \
   blas/xkblas_s.h\
   blas/xkblas_f77_s.h
 
@@ -121,6 +122,7 @@ XKBLAS_BLAS_PRECISION_d=\
   blas/dsymm.c\
   blas/dsyrk.c\
   blas/dsyr2k.c\
+  blas/dswap.c\
   blas/xkblas_d.h\
   blas/xkblas_f77_d.h
 
@@ -135,6 +137,7 @@ XKBLAS_BLAS_PRECISION_c=\
   blas/chemm.c \
   blas/cherk.c \
   blas/cher2k.c \
+  blas/cswap.c \
   blas/xkblas_c.h\
   blas/xkblas_f77_c.h
 
@@ -149,6 +152,7 @@ XKBLAS_BLAS_PRECISION_z=\
   blas/zhemm.c \
   blas/zherk.c \
   blas/zher2k.c \
+  blas/zswap.c \
   blas/xkblas_z.h\
   blas/xkblas_f77_z.h
 
@@ -169,6 +173,7 @@ XKBLAS_TASK_PRECISION_s=\
   blas/task_strmm.c\
   blas/task_ssyrk.c\
   blas/task_ssyr2k.c\
+  blas/task_sswap.c\
   blas/task_s.h \
   blas/task_s_internal.h
 
@@ -180,6 +185,7 @@ XKBLAS_TASK_PRECISION_d=\
   blas/task_dtrmm.c\
   blas/task_dsyrk.c\
   blas/task_dsyr2k.c\
+  blas/task_dswap.c\
   blas/task_d.h \
   blas/task_d_internal.h
 
@@ -194,6 +200,7 @@ XKBLAS_TASK_PRECISION_c=\
   blas/task_chemm.c\
   blas/task_cherk.c\
   blas/task_cher2k.c\
+  blas/task_cswap.c\
   blas/task_c.h\
   blas/task_c_internal.h
 
@@ -208,6 +215,7 @@ XKBLAS_TASK_PRECISION_z=\
   blas/task_zhemm.c\
   blas/task_zherk.c\
   blas/task_zher2k.c\
+  blas/task_zswap.c\
   blas/task_z.h\
   blas/task_z_internal.h
 
