@@ -13,7 +13,7 @@
 #include "task_z.h"
 #include "task_z_internal.h"
 
-/* In the following macro arg is of type of the task argument structure */
+/* In the following macro, arg is of type of the task argument structure */
 #define STR_EXPAND(tok) #tok
 #define TASK_NAME zswap
 #define STRNAME  STR_EXPAND(TASK_NAME)

@@ -142,19 +142,19 @@ struct xkblas_context {
    Both 2D arrays ldid and handle have dimension mtxnt and are stored in RowMajor format.
 */
 struct xkblas_matrix_descr {
-  void*            addr;   // matrix address
-  size_t           eltsize;//
-  size_t           ld;     // leading dimension
-  size_t           M;      // matrix dimension, #row M
-  size_t           N;      // matrix dimension, #col N
-  size_t           mb;     // tile size (M)
-  size_t           nb;     // tile size (N)
-  size_t           mt;     // number of rows of tile
-  size_t           nt;     // number of columns of tile
-  uint16_t*        ldid;   // array (rowmajor) of mapping attribute or 0
-  kaapi_handle_t*  handle; // array (rowmajor) of size MBxNB of handle
+  void*            addr;    // matrix address
+  size_t           eltsize; //
+  size_t           ld;      // leading dimension
+  size_t           M;       // matrix dimension, #row M
+  size_t           N;       // matrix dimension, #col N
+  size_t           mb;      // tile size (M)
+  size_t           nb;      // tile size (N)
+  size_t           mt;      // number of rows of tile
+  size_t           nt;      // number of columns of tile
+  uint16_t*        ldid;    // array (rowmajor) of mapping attribute or 0
+  kaapi_handle_t*  handle;  // array (rowmajor) of size MBxNB of handle
   size_t           capacity;// mt*nt size for handle allocation
-  uint32_t         gen;    // generation number of the entry
+  uint32_t         gen;     // generation number of the entry
   void*            entry;   // entry in hashtable for find
 #if KAAPI_DEBUG
   pthread_t        owner;

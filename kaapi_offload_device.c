@@ -1149,7 +1149,7 @@ void* kaapi_offload_device_thread( void* arg )
 
   /* */
 #if KAAPI_SLEEP_DEVICETHREAD
-  kaapi_fifo_register_waiter( device->ld->queue, kaapi_offload_device_wakeup, device );
+  kaapi_fifo_register_waiter( device->ld->queue, (void (*)(void *))kaapi_offload_device_wakeup, device );
 #else
   kaapi_fifo_register_waiter( device->ld->queue, 0, 0);
 #endif
