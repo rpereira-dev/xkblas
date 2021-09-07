@@ -58,7 +58,8 @@ endif
 
 ifdef CUDA_HOME
   CUDA_FLAGS=-I${CUDA_HOME}/include -DKAAPI_USE_CUDA=1
-  CUDA_LIBS=-Wl,-rpath=${CUDA_HOME}/lib64 -L${CUDA_HOME}/lib64 -lcublas -lcuda -lcudart
+  #if use driver implementation CUDA_LIBS=-Wl,-rpath=${CUDA_HOME}/lib64 -L${CUDA_HOME}/lib64 -lcublas -lcuda -lcudart
+  CUDA_LIBS=-Wl,-rpath=${CUDA_HOME}/lib64 -L${CUDA_HOME}/lib64 -lcublas -lcudart
   CUDA_KAAPI_PLUGIN=libkaapi_plugin_cuda.so.1
   CUDA_KAAPI_PLUGIN_C=./kaapi_plugin_cuda.c
   $(info CUDA defined and used)
