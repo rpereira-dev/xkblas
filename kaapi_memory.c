@@ -447,6 +447,7 @@ kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
     int flag = KAAPI_MEMORY_DEVICE_FLAG_NONE;
     size_t size_chunk0 = 0;
     kaapi_offload_get_mem_info(device->device, 0, &size_chunk0 );
+    //size_chunk0 = 1024*1024*8*128;
     size_chunk0 &= ~ 7UL; // round down to align to 8
     kaapi_alloc_chunk_t* chunk0 = malloc(sizeof(kaapi_alloc_chunk_t));
     chunk0->device_ptr = device->f_alloc(device,size_chunk0, &flag);
@@ -512,6 +513,7 @@ kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
     if (curr_size >= size)
     {
       /* TODO: because chunk is on GPU side, this test, I think, could be removed */
+#if 0
       if (curr_size - size > sizeof(kaapi_alloc_chunk_t))
       {
         if ((min_size_curr ==0) || (min_size > curr_size))
@@ -521,6 +523,11 @@ kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
           min_size_prevfree = prevfree;
         }
       }
+#else
+      min_size = curr_size;
+      min_size_curr = curr;
+      min_size_prevfree = prevfree;
+#endif
     }
     prevfree = curr;
     curr = curr->freelink;

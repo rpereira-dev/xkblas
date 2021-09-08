@@ -138,6 +138,7 @@ int kaapi_offload_stream_init(
   KAAPI_OFFLOAD_TRACE_IN
 
   s->device = device;
+
   unsigned int i = 0;
   unsigned int cnt = 0;
   kaapi_io_stream_t** ios;

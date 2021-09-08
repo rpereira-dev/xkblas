@@ -41,6 +41,12 @@ include make.inc
 KAAPI_USE_DYNLOADER=0
 GIT_HASH=$(shell (git describe --always --tags --long --abbrev=16 || cat kaapi_version.h |cut -d\  -f3) 2>/dev/null)
 
+#
+# Common C flags and libs
+#
+CPPFLAGS=
+LDFLAGS=
+
 ifeq ($(KAAPI_USE_DYNLOADER),0)
   $(info Configure with plugin statically linked into libkaapi)
 else
@@ -56,26 +62,44 @@ else
   HWLOC_FLAGS=-DKAAPI_USE_HWLOC=0
 endif
 
-ifdef CUDA_HOME
-  CUDA_FLAGS=-I${CUDA_HOME}/include -DKAAPI_USE_CUDA=1
-  #if use driver implementation CUDA_LIBS=-Wl,-rpath=${CUDA_HOME}/lib64 -L${CUDA_HOME}/lib64 -lcublas -lcuda -lcudart
-  CUDA_LIBS=-Wl,-rpath=${CUDA_HOME}/lib64 -L${CUDA_HOME}/lib64 -lcublas -lcudart
+ifdef KAAPI_USE_GPU_CUDA
+  ifeq ($(KAAPI_USE_GPU_CUDA),1)
+    #use the implementation on top of the driver API
+    CUDA_FLAGS=-I${CUDA_HOME}/include -DKAAPI_USE_CUDA=1 -DKAAPI_USE_CUDA_DRIVER_API=1
+    CUDA_LIBS=-Wl,-rpath=${CUDA_HOME}/lib64 -L${CUDA_HOME}/lib64 -lcublas -lcuda -lcudart
+    $(info CUDA defined and used through the driver API)
+  endif
+  ifeq ($(KAAPI_USE_GPU_CUDA),2)
+    #use the implementation on top of the runtime API
+    CUDA_FLAGS=-I${CUDA_HOME}/include -DKAAPI_USE_CUDA=1 -DKAAPI_USE_CUDA_RUNTIME_API=1
+    CUDA_LIBS=-Wl,-rpath=${CUDA_HOME}/lib64 -L${CUDA_HOME}/lib64 -lcublas -lcudart
+    $(info CUDA defined and used through the runtime API)
+  else
+    $(info "KAAPI_USE_GPU_CUDA defined to : $(KAAPI_USE_GPU_CUDA)")
+  endif
   CUDA_KAAPI_PLUGIN=libkaapi_plugin_cuda.so.1
   CUDA_KAAPI_PLUGIN_C=./kaapi_plugin_cuda.c
-  $(info CUDA defined and used)
 else
-  CUDA_FLAGS=-DKAAPI_USE_CUDA=0
-  $(info $$(CUDA_HOME) is not defiend - do not use CUDA)
+  $(info $$(KAAPI_USE_GPU_CUDA) is not defined - do not use CUDA)
 endif
 
+ifdef KAAPI_USE_GPU_HIP
+  HIPCC=hipcc -Wunused-command-line-argument
+  HIP_FLAGS=-D__HIP_PLATFORM_AMD__=1 -I${HIP_HOME}/include -I${HIPBLAS_HOME}/include -I${ROCBLAS_HOME}/include -DKAAPI_USE_CUDA=1 -DKAAPI_USE_HIP=1
+  #we use rocm/hip implementation:
+  HIP_LIBS=-Wl,-rpath=${HIP_HOME}/lib -L${HIP_HOME}/lib -L${HIPBLAS_HOME}/lib -lhipblas
+  HIP_KAAPI_PLUGIN=libkaapi_plugin_hip.so.1
+  HIP_KAAPI_PLUGIN_C=./kaapi_plugin_hip.c
+  $(info HIP defined and used)
+else
+  HIP_FLAGS=-DKAAPI_USE_HIP=0
+  $(info $$(KAAPI_USE_GPU_HIP) is not defined - do not use HIP)
+endif
+
+CPPFLAGS=${HWLOC_FLAGS} ${CUDA_FLAGS} ${HIP_FLAGS}
+LDFLAGS=${HWLOC_LIBS} ${CUDA_LIBS} ${HIP_LIBS}
 
 $(info Using $(BLAS_LIB_SO) with flags: $(BLAS_CPPFLAGS))
-
-#
-# Common C flags and libs
-#
-CPPFLAGS=${CUDA_FLAGS} ${HWLOC_FLAGS}
-LDFLAGS=${CUDA_LIBS} ${HWLOC_LIBS}
 
 
 #
@@ -86,7 +110,7 @@ UKAAPI_LIBNAME_A=libkaapi.a
 UKAAPI_SRC=./kaapi_format.c ./kaapi_impl.c  ./kaapi_task.c ./kaapi_rt.c  ./kaapi_hashmap.c ./kaapi_barrier.c ./kaapi_memory.c ./kaapi_offload_stream.c ./kaapi_offload.c ./kaapi_offload_device.c  ./kaapi_ld.c ./kaapi_dbg.c
 UKAAPI_FILE_LIB=${UKAAPI_SRC} ./kaapi_impl.h ./kaapi.h kaapi_offload_stream.h kaapi_offload.h kaapi_offload_dbg.h kaapi_plugin.h ./kaapi_atomic.h ./kaapi_error.h ./kaapi_format.h ./kaapi_hashmap.h ./kaapi_memory.h  kaapi_version.h
 
-UKAAPI_SRC_PLUGIN=${CUDA_KAAPI_PLUGIN_C} ./kaapi_plugin_host.c
+UKAAPI_SRC_PLUGIN=${CUDA_KAAPI_PLUGIN_C} ${HIP_KAAPI_PLUGIN_C} ./kaapi_plugin_host.c
 UKAAPI_FILE_PLUGIN=${UKAAPI_SRC_PLUGIN} kaapi_plugin.h
 
 ifeq ($(KAAPI_USE_DYNLOADER),0)
@@ -96,7 +120,7 @@ ifeq ($(KAAPI_USE_DYNLOADER),0)
   UKAAPI_LDFLAGS=${LDFLAGS} 
 else
   UKAAPI_LDFLAGS="-ldl"
-  UKAAPI_TARGET_PLUGIN=libkaapi_plugin_host.so.1 ${CUDA_KAAPI_PLUGIN}
+  UKAAPI_TARGET_PLUGIN=libkaapi_plugin_host.so.1 ${CUDA_KAAPI_PLUGIN} ${HIP_KAAPI_PLUGIN}
 endif
 
 
@@ -513,6 +537,10 @@ libkaapi_plugin_host.so.1: kaapi_plugin_host.o libkaapi.so
 libkaapi_plugin_cuda.so.1: kaapi_plugin_cuda.o libkaapi.so
 	$(CC) -shared -o libkaapi_plugin_cuda.so.1 kaapi_plugin_cuda.o ${UKAAPI_LDFLAGS} ${HWLOC_LIBS} ${CUDA_LIBS}
 
+libkaapi_plugin_hip.so.1: kaapi_plugin_hip.o libkaapi.so
+	$(CC) -shared -o libkaapi_plugin_hip.so.1 kaapi_plugin_hip.o ${UKAAPI_LDFLAGS} ${HWLOC_LIBS} ${HIP_LIBS}
+
+ifdef KAAPI_USE_GPU_CUDA
 libxkblas.so: libkaapi.so .generated ${XKBLAS_ALL_GENFILES} ${XKBLAS_SRC:.c=.o} 
 	echo ${XKBLAS_SRC:.c=.o}
 	$(CC) -shared -o libxkblas.so ${XKBLAS_SRC:.c=.o} ${XKBLAS_LDFLAGS} ${XKBLAS_CPPFLAGS} -L${KAAPI_HOME} -lkaapi -lm
@@ -520,6 +548,27 @@ libxkblas.so: libkaapi.so .generated ${XKBLAS_ALL_GENFILES} ${XKBLAS_SRC:.c=.o}
 libxkblas.a: libkaapi.a .generated ${XKBLAS_ALL_GENFILES} ${XKBLAS_SRC:.c=_a.o} 
 	$(AR) crv libxkblas.a ${XKBLAS_SRC:.c=_a.o} ${UKAAPI_SRC:%.c=%_a.o} ${UKAAPI_SRC_PLUGIN:.c=_a.o} 
 	$(RANLIB) libxkblas.a
+endif
+ifdef KAAPI_USE_GPU_HIP
+libxkblas.so: libkaapi.so .generated ${XKBLAS_ALL_GENFILES} ${XKBLAS_SRC:.c=.hip_o} 
+	echo ${XKBLAS_SRC:.c=.hip_o}
+	$(CC) -shared -o libxkblas.so ${XKBLAS_SRC:.c=.hip_o} ${XKBLAS_LDFLAGS} ${XKBLAS_CPPFLAGS} -L${KAAPI_HOME} -lkaapi -lm
+
+libxkblas.a: libkaapi.a .generated ${XKBLAS_ALL_GENFILES} ${XKBLAS_SRC:.c=.hip_a.o} 
+	$(AR) crv libxkblas.a ${XKBLAS_SRC:.c=.hip_a.o} ${UKAAPI_SRC:%.c=%.hip_a.o} ${UKAAPI_SRC_PLUGIN:.c=.hip_a.o} 
+	$(RANLIB) libxkblas.a
+endif
+
+ifdef KAAPI_USE_GPU_CUDA
+blas/common.h: blas/common.gen
+	cp blas/common.gen blas/common.h
+endif
+ifdef KAAPI_USE_GPU_HIP
+blas/common.h: blas/common.gen
+	hipify-perl blas/common.gen > blas/common.h
+endif
+
+
 
 blas/libxkblas_wrapper.c: blas/libxkblas_wrapper_z.c blas/libxkblas_wrapper_c.c blas/libxkblas_wrapper_d.c blas/libxkblas_wrapper_s.c
 blas/libxkblas_wrapper.c: blas/libxkblas_wrapper.h
@@ -567,6 +616,9 @@ kaapi_plugin_host.o: ${FILE_LIB} kaapi_plugin_host.c kaapi_plugin.h  Makefile
 kaapi_plugin_cuda.o: ${FILE_LIB} kaapi_plugin_cuda.c kaapi_plugin.h  Makefile 
 	$(CC) -c -fPIC ${CPPFLAGS} ${OPT} ./kaapi_plugin_cuda.c
 
+kaapi_plugin_hip.o: ${FILE_LIB} kaapi_plugin_hip.c kaapi_plugin.h  Makefile 
+	$(CC) -c -fPIC ${CPPFLAGS} ${OPT} ./kaapi_plugin_hip.c
+
 $(patsubst %.c,%.o,$(filter %.c,$(FILE_OTHER))): %.o:	 %.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
 	$(CC) -fPIC ${XKBLAS_CPPFLAGS} ${OPT} -DXKBLAS_CFLAGS='"${XKBLAS_CPPFLAGS} ${OPT}"' -c $<  -o $@
 
@@ -582,6 +634,52 @@ $(patsubst %.c,%.o,$(filter %.c, $(FILE_PRECISION_d))): %.o: %.c Makefile kaapi_
 $(patsubst %.c,%.o,$(filter %.c, $(FILE_PRECISION_s))): %.o: %.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
 	$(CC) -fPIC -DPRECISION_s -UPRECISION_d -UPRECISION_c -UPRECISION_z ${XKBLAS_CPPFLAGS} ${OPT} -c $<  -o $@
 
+#
+%.hip.c:	 %.c
+	hipify-perl $< |sed -e 's+hipComplex+hipblasComplex+g' \
+		-e 's+hipDoubleComplex+hipblasDoubleComplex+g' \
+		-e 's+cublasChemm+hipblasChemm+g' \
+		-e 's+cublasCher2k+hipblasCher2k+g' \
+		-e 's+cublasCherk+hipblasCherk+g' \
+		-e 's+cublasCsymm+hipblasCsymm+g' \
+		-e 's+cublasCsyr2k+hipblasCsyr2k+g' \
+		-e 's+cublasCsyrk+hipblasCsyrk+g' \
+		-e 's+cublasCtrmm+hipblasCtrmm+g' \
+		-e 's+cublasCtrsm+hipblasCtrsm+g' \
+		-e 's+cublasDsymm+hipblasDsymm+g' \
+		-e 's+cublasDsyr2k+hipblasDsyr2k+g' \
+		-e 's+cublasDsyrk+hipblasDsyrk+g' \
+		-e 's+cublasDtrmm+hipblasDtrmm+g' \
+		-e 's+cublasSsymm+hipblasSsymm+g' \
+		-e 's+cublasSsyr2k+hipblasSsyr2k+g' \
+		-e 's+cublasSsyrk+hipblasSsyrk+g' \
+		-e 's+cublasStrmm+hipblasStrmm+g' \
+		-e 's+cublasZhemm+hipblasZhemm+g' \
+		-e 's+cublasZher2k+hipblasZher2k+g' \
+		-e 's+cublasZherk+hipblasZherk+g' \
+		-e 's+cublasZsymm+hipblasZsymm+g' \
+		-e 's+cublasZsyr2k+hipblasZsyr2k+g' \
+		-e 's+cublasZsyrk+hipblasZsyrk+g' \
+		-e 's+cublasZtrmm+hipblasZtrmm+g' \
+		-e 's+cublasZtrsm+hipblasZtrsm+g' \
+		> $@
+
+$(patsubst %.c,%.hip_o,$(filter %.c,$(FILE_OTHER))): %.hip_o:	 %.hip.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
+	$(CC) -fPIC ${XKBLAS_CPPFLAGS} ${OPT} -DXKBLAS_CFLAGS='"${XKBLAS_CPPFLAGS} ${OPT}"' -c $<  -o $@
+
+$(patsubst %.c,%.hip_o,$(filter %.c, $(FILE_PRECISION_z))): %.hip_o: %.hip.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
+	$(CC) -fPIC -DPRECISION_z -UPRECISION_s -UPRECISION_d -UPRECISION_c ${XKBLAS_CPPFLAGS} ${OPT} -c $<  -o $@
+
+$(patsubst %.c,%.hip_o,$(filter %.c, $(FILE_PRECISION_c))): %.hip_o: %.hip.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
+	$(CC) -fPIC -DPRECISION_c -UPRECISION_s -UPRECISION_d -UPRECISION_z ${XKBLAS_CPPFLAGS} ${OPT} -c $<  -o $@
+
+$(patsubst %.c,%.hip_o,$(filter %.c, $(FILE_PRECISION_d))): %.hip_o: %.hip.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
+	$(CC) -fPIC -DPRECISION_d -UPRECISION_s -UPRECISION_c -UPRECISION_z ${XKBLAS_CPPFLAGS} ${OPT} -c $<  -o $@
+
+$(patsubst %.c,%.hip_o,$(filter %.c, $(FILE_PRECISION_s))): %.hip_o: %.hip.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
+	$(CC) -fPIC -DPRECISION_s -UPRECISION_d -UPRECISION_c -UPRECISION_z ${XKBLAS_CPPFLAGS} ${OPT} -c $<  -o $@
+
+
 
 # Static lib
 kaapi_plugin_host_a.o: ${FILE_LIB} kaapi_plugin_host.c kaapi_plugin.h  Makefile 
@@ -589,6 +687,9 @@ kaapi_plugin_host_a.o: ${FILE_LIB} kaapi_plugin_host.c kaapi_plugin.h  Makefile
 
 kaapi_plugin_cuda_a.o: ${FILE_LIB} kaapi_plugin_cuda.c kaapi_plugin.h  Makefile 
 	$(CC) -c ${CPPFLAGS} ${OPT} ./kaapi_plugin_cuda.c -o $@
+
+kaapi_plugin_hip_a.o: ${FILE_LIB} kaapi_plugin_hip.c kaapi_plugin.h  Makefile 
+	$(CC) -c ${CPPFLAGS} ${OPT} ./kaapi_plugin_hip.c -o $@
 
 $(patsubst %.c,%_a.o,$(filter %.c,$(FILE_OTHER))): %_a.o:	 %.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
 	$(CC) ${XKBLAS_CPPFLAGS} ${OPT} -DXKBLAS_CFLAGS='"${XKBLAS_CPPFLAGS} ${OPT}"' -c $<  -o $@ 
@@ -604,6 +705,22 @@ $(patsubst %.c,%_a.o,$(filter %.c, $(FILE_PRECISION_d))): %_a.o: %.c Makefile ka
 
 $(patsubst %.c,%_a.o,$(filter %.c, $(FILE_PRECISION_s))): %_a.o: %.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
 	$(CC) -DPRECISION_s -UPRECISION_d -UPRECISION_c -UPRECISION_z ${XKBLAS_CPPFLAGS} ${OPT} -c $<  -o $@
+
+$(patsubst %.c,%.hip_a.o,$(filter %.c,$(FILE_OTHER))): %.hip_a.o:	 %.hip.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
+	$(CC) -fPIC ${XKBLAS_CPPFLAGS} ${OPT} -DXKBLAS_CFLAGS='"${XKBLAS_CPPFLAGS} ${OPT}"' -c $<  -o $@
+
+$(patsubst %.c,%.hip_a.o,$(filter %.c, $(FILE_PRECISION_z))): %.hip_a.o: %.hip.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
+	$(CC) -fPIC -DPRECISION_z -UPRECISION_s -UPRECISION_d -UPRECISION_c ${XKBLAS_CPPFLAGS} ${OPT} -c $<  -o $@
+
+$(patsubst %.c,%.hip_a.o,$(filter %.c, $(FILE_PRECISION_c))): %.hip_a.o: %.hip.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
+	$(CC) -fPIC -DPRECISION_c -UPRECISION_s -UPRECISION_d -UPRECISION_z ${XKBLAS_CPPFLAGS} ${OPT} -c $<  -o $@
+
+$(patsubst %.c,%.hip_a.o,$(filter %.c, $(FILE_PRECISION_d))): %.hip_a.o: %.hip.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
+	$(CC) -fPIC -DPRECISION_d -UPRECISION_s -UPRECISION_c -UPRECISION_z ${XKBLAS_CPPFLAGS} ${OPT} -c $<  -o $@
+
+$(patsubst %.c,%.hip_a.o,$(filter %.c, $(FILE_PRECISION_s))): %.hip_a.o: %.hip.c Makefile kaapi_impl.h kaapi.h kaapi_offload.h kaapi_memory.h kaapi_atomic.h kaapi_error.h kaapi_offload_stream.h kaapi_version.h blas/xkblas.h blas/common.h .generated
+	$(CC) -fPIC -DPRECISION_s -UPRECISION_d -UPRECISION_c -UPRECISION_z ${XKBLAS_CPPFLAGS} ${OPT} -c $<  -o $@
+
 
 
 # Wrapper file for testing
@@ -624,8 +741,7 @@ $(patsubst %.c,%_wrap.o,$(filter %.c, $(FILE_PRECISION_s))): %_wrap.o: %.c Makef
 #${XKBLAS_GEN_TASK} ${XKBLAS_GEN_BLAS} ${XKBLAS_GEN_TESTING} .generated
 
 clean:
-	rm -f libkaapi.a libkaapi.so libxkblas.a libxkblas.so libxkblas_blaswrapper.so *.o blas/*.o testing/*.o\
-		libkaapi_plugin_host.so.1 libkaapi_plugin_cuda.so.1\
+	rm -f libkaapi.a libkaapi.so libxkblas.a libxkblas.so libxkblas_blaswrapper.so *.o blas/*.o blas/*.hip_o blas/*.hip_a.o blas/*.hip.c blas/common.h testing/*.o\
+		libkaapi_plugin_host.so.1 libkaapi_plugin_cuda.so.1 libkaapi_plugin_hip.so.1\
 		testing_z testing_c testing_d testing_s
-
 

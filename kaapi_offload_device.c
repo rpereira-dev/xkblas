@@ -830,7 +830,7 @@ int kaapi_sched_idle_offload(
       if (task ==0)
       {
         if (tidle_start ==0) tidle_start = kaapi_get_elapsedns();
-        else if (1e-9*(kaapi_get_elapsedns() - tidle_start) > 0.001)
+        else if (1e-9*(kaapi_get_elapsedns() - tidle_start) > 0.01)
 #if 0//KAAPI_USE_PERFCOUNTER
         else if ((device->cnt_task!=0) 
               && (1e-9*(kaapi_get_elapsedns() - tidle_start) > global_max_cpudelay/kaapi_default_param.cuda_conc_kernel) ///kaapi_default_param.cuda_conc_stream_kernel)) 
@@ -857,14 +857,16 @@ int kaapi_sched_idle_offload(
           int iimax = _kaapi_compute_load_device(ctxt, &min, &max, &avrg, &delta, imax, load);
           float minmax = max-min;
 
-          //if ((avrg > 2.0/ngpu) && (delta > 0)) 
+          if ((avrg > 2.0/ngpu) && (delta > 0)) 
           //if ((avrg >= 1.0) && (delta >= 1.0*kaapi_default_param.cuda_conc_kernel))
-          if ((avrg >= kaapi_default_param.cuda_conc_kernel/2.0) && (delta > 1.0*kaapi_default_param.cuda_conc_kernel))
+          //if ((avrg >= kaapi_default_param.cuda_conc_kernel/2.0) && (delta > 1.0*kaapi_default_param.cuda_conc_kernel))
           {
             int d = rand_r(&ctxt->seed) % 100;
             for (int i=d; i<d+iimax; ++i)
             {
               kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU, i % iimax );
+              task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 1);
+              if (task!=0) break;
               task = kaapi_fifo_queue_steal_with_affinity(ld->queue, device, 2);
               if (task!=0) break;
             }

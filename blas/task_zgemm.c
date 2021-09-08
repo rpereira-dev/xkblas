@@ -178,10 +178,11 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
   kaapi_stat_internal_t* kpi = &kaapi_perthread_stat[kaapi_offload_self_device()->ctxt->tid];
 #endif
   cublasStatus_t res;
-#if defined(PRECISION_s)
+#if defined(PRECISION_s) && (__HIP_PLATFORM_AMD__==0)
   if (arg->mm == XKBLAS_TENSOR_OP_MATH)
   {
     res = cublasSetMathMode((cublasHandle_t)handle, CUBLAS_TENSOR_OP_MATH);
+    kaapi_assert(res == CUBLAS_STATUS_SUCCESS);
 #if KAAPI_USE_PERFCOUNTER
     if (
         (arg->m % 4 == 0)
@@ -242,9 +243,11 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
     ++kpi->counter[KAAPI_CNT_GEMM_NOTONTC];
     kpi->dcounter[KAAPI_FLOPS_GEMM_NOTONTC]+= flops;
 #endif
+#if __HIP_PLATFORM_AMD__==0
     res = cublasSetMathMode((cublasHandle_t)handle, CUBLAS_DEFAULT_MATH);
+    kaapi_assert(res == CUBLAS_STATUS_SUCCESS);
+#endif
   }
-  kaapi_assert(res == CUBLAS_STATUS_SUCCESS);
 
   cublasZgemm((cublasHandle_t)handle,
       cblas2cublas_op(arg->transA), cblas2cublas_op(arg->transB),

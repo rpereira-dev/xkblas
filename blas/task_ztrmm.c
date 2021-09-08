@@ -163,7 +163,9 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
         arg->m, arg->n,
         (const cuDoubleComplex*)&arg->alpha,
         arg->A.data, arg->lda,
+#if KAAPI_USE_HIP==0
         arg->B.data, arg->ldb,
+#endif
         arg->B.data, arg->ldb);
 }
 #endif

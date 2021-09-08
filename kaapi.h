@@ -128,8 +128,6 @@ struct kaapi_device;
 typedef struct kaapi_device kaapi_device_t;
 struct kaapi_memgroup;
 typedef struct kaapi_memgroup kaapi_memgroup_t;
-struct kaapi_memgroup;
-typedef struct kaapi_memgroup kaapi_memgroup_t;
 struct kaapi_localitydomain;
 typedef struct kaapi_localitydomain kaapi_localitydomain_t;
 

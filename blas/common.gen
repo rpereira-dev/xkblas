@@ -199,7 +199,7 @@ static inline cublasOperation_t cblas2cublas_op( int trans )
   abort();
 }
 
-static inline cublasOperation_t cblas2cublas_side( int side )
+static inline cublasSideMode_t cblas2cublas_side( int side )
 {
   switch (side)
   {
@@ -209,7 +209,7 @@ static inline cublasOperation_t cblas2cublas_side( int side )
   abort();
 }
 
-static inline cublasOperation_t cblas2cublas_uplo( int uplo )
+static inline cublasFillMode_t cblas2cublas_uplo( int uplo )
 {
   switch (uplo)
   {
@@ -219,7 +219,7 @@ static inline cublasOperation_t cblas2cublas_uplo( int uplo )
   abort();
 }
 
-static inline cublasOperation_t cblas2cublas_diag( int diag )
+static inline cublasDiagType_t cblas2cublas_diag( int diag )
 {
   switch (diag)
   {

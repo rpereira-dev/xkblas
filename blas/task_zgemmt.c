@@ -168,6 +168,7 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
   );
 #endif
   cublasStatus_t res;
+#if defined(PRECISION_s) && (__HIP_PLATFORM_AMD__==0)
   if (arg->mm == XKBLAS_TENSOR_OP_MATH)
   {
     res = cublasSetMathMode((cublasHandle_t)handle, CUBLAS_TENSOR_OP_MATH);
@@ -188,6 +189,7 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
     res = cublasSetMathMode((cublasHandle_t)handle, CUBLAS_DEFAULT_MATH);
   } 
   kaapi_assert(res == CUBLAS_STATUS_SUCCESS);
+#endif
 
   /* no equivalent cublasZgemmt */
   cublasZgemm((cublasHandle_t)handle,
