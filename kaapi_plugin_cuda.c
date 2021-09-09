@@ -51,10 +51,8 @@
   - the historical implementation based on the driver API
   - the new implementation based only on the runtime API in order to make
   Kaapi more portable.
-  Please select the line defining your selection and comment the other line.
+  Please do selection of the API in make.inc
 */
-//#define KAAPI_USE_CUDA_DRIVER_API 1
-//#define KAAPI_USE_CUDA_RUNTIME_API 1
 
 #if (KAAPI_USE_CUDA_DRIVER_API!=0)&&(KAAPI_USE_CUDA_RUNTIME_API!=0)
 #  error "KAAPI_USE_CUDA_DRIVER_API and KAAPI_USE_CUDA_RUNTIME_API are defined. Please defined only ONE of the macro to use either the CUDA Driver xor the CUDA Runtime API."
@@ -65,8 +63,10 @@
 
 #if KAAPI_USE_CUDA_DRIVER_API
 #  include <cuda.h>
-#else
+#elif KAAPI_USE_CUDA_RUNTIME_API
 #  include <cuda_runtime.h>
+#else
+#  error "Not implemented"
 #endif
 #include <cublas_v2.h>
 
@@ -215,24 +215,22 @@ typedef struct kaapi_cuda_io_stream_t {
 #if KAAPI_USE_CUDA_DRIVER_API
   CUstream          stream;
   CUstream          stream_low;
-#if CONFIG_USE_EVENT
+#  if CONFIG_USE_EVENT
   CUevent*          end_events;               /* size: capacity */
-#if KAAPI_USE_PERFCOUNTER
+#    if KAAPI_USE_PERFCOUNTER
   CUevent*          start_events;             /* size: capacity */
-#endif
-#endif
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#    endif
+#  endif
+#elif KAAPI_USE_CUDA_RUNTIME_API
   cudaStream_t      stream;
   cudaStream_t      stream_low;
-#if CONFIG_USE_EVENT
+#  if CONFIG_USE_EVENT
   cudaEvent_t*      end_events;               /* size: capacity */
-#if KAAPI_USE_PERFCOUNTER
+#    if KAAPI_USE_PERFCOUNTER
   cudaEvent_t*      start_events;             /* size: capacity */
+#    endif
+#  endif
 #endif
-#endif
-#endif
-  //cublasHandle_t    handle;
 } kaapi_cuda_io_stream_t;
 
 /* number of used device for this run */
@@ -276,8 +274,7 @@ static void __cudaCheckError( CUresult err,  char *file, const int line )
     }
     return;
 }
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
 static void __cudaCheckError( cudaError_t err,  char *file, const int line )
 {
     extern void kaapi_memory_cache_print_all(void);
@@ -329,8 +326,7 @@ static void _kaapi_get_gpu_topo(void)
 #if KAAPI_USE_CUDA_DRIVER_API
   CUdevice cu_device1, cu_device2;
   CUresult res;
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   cudaError_t res;
 #endif
   int min_perf= 0; /* min_perf >= max_perf */
@@ -338,9 +334,8 @@ static void _kaapi_get_gpu_topo(void)
   int device_count;
 #if KAAPI_USE_CUDA_DRIVER_API
   CudaCheckError(cuDeviceGetCount(&device_count));
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
-  CudaCheckError(	cudaGetDeviceCount(&device_count));
+#elif KAAPI_USE_CUDA_RUNTIME_API
+  CudaCheckError(cudaGetDeviceCount(&device_count));
 #endif
 
   if (device_count ==0) return;
@@ -360,6 +355,7 @@ static void _kaapi_get_gpu_topo(void)
       else {
 #if KAAPI_USE_CUDA_DRIVER_API
         res = cuDeviceGet(&cu_device2, device2);
+        CudaCheckError(res);
 #endif
         int perfRank = 0;
         int accessSupported = 0;
@@ -368,8 +364,7 @@ static void _kaapi_get_gpu_topo(void)
         CudaCheckError(
           cuDeviceGetP2PAttribute(&accessSupported, CU_DEVICE_P2P_ATTRIBUTE_ACCESS_SUPPORTED,
             cu_device1, cu_device2));
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
         CudaCheckError(
           cudaDeviceGetP2PAttribute(&accessSupported, cudaDevP2PAttrAccessSupported,
             device1, device2));
@@ -380,8 +375,7 @@ static void _kaapi_get_gpu_topo(void)
           CudaCheckError(
             cuDeviceGetP2PAttribute(&perfRank, CU_DEVICE_P2P_ATTRIBUTE_PERFORMANCE_RANK,
               cu_device1, cu_device2));
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
           CudaCheckError(
             cudaDeviceGetP2PAttribute(&perfRank, cudaDevP2PAttrPerformanceRank,
               device1, device2));
@@ -490,10 +484,8 @@ static inline bool kaapi_cuda_device_is_initialized(kaapi_device_cuda_t* dev)
 #if _PLUGIN_DEBUG
 static inline bool kaapi_cuda_check_address(uintptr_t ptr)
 {
-#if KAAPI_USE_CUDA_DRIVER_API
   CUresult res;
   CUdeviceptr pbase;
-#endif
   size_t size;
   res = cuMemGetAddressRange( &pbase, &size, (CUdeviceptr)ptr );
   CudaCheckError(res);
@@ -519,8 +511,7 @@ static void cuda_mem_cache_init(kaapi_device_cuda_t* dev)
   size = (size_t)(dev->free_mem * PERCENTAGE);
   res = cuMemAlloc( &ptr, size );
   kaapi_assert(res != CUDA_ERROR_OUT_OF_MEMORY );
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   void* ptr =0;
   cudaError_t res;
   size_t size;
@@ -542,8 +533,7 @@ static void cuda_mem_cache_destroy(kaapi_device_cuda_t* dev)
 {
 #if KAAPI_USE_CUDA_DRIVER_API
   cuMemFree((CUdeviceptr)dev->cache->base);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   cudaFree(dev->cache->base);
 #endif
   free(dev->cache);
@@ -615,8 +605,7 @@ static uintptr_t cuda_alloc(kaapi_memory_device_t* dev, size_t size, int* flag)
 #if KAAPI_USE_CUDA_DRIVER_API
   CUdeviceptr ptr;
   CUresult res;
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   void* ptr;
   cudaError_t res;
 #endif
@@ -633,16 +622,15 @@ static uintptr_t cuda_alloc(kaapi_memory_device_t* dev, size_t size, int* flag)
   kaapi_assert(kaapi_cuda_device_is_initialized(device));
 
 #if KAAPI_USE_CUDA_DRIVER_API
-#if _PLUGIN_DEBUG
+#  if _PLUGIN_DEBUG
   CUcontext ctx;
   res = cuCtxGetCurrent( &ctx );
   assert( ctx == device->ctx );
-#endif
+#  endif
 
   res = cuMemAlloc( &ptr, size );
   if (res == CUDA_ERROR_OUT_OF_MEMORY )
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   res = cudaMalloc( &ptr, size );
   if (res == cudaErrorMemoryAllocation )
 #endif
@@ -676,8 +664,7 @@ static void cuda_free(kaapi_memory_device_t* dev, uintptr_t ptr, size_t size)
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev->device;
 #if KAAPI_USE_CUDA_DRIVER_API
   CUresult res;
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   cudaError_t res;
 #endif
 
@@ -685,17 +672,16 @@ static void cuda_free(kaapi_memory_device_t* dev, uintptr_t ptr, size_t size)
   kaapi_assert(kaapi_cuda_device_is_initialized(device));
 
 #if KAAPI_USE_CUDA_DRIVER_API
-#if _PLUGIN_DEBUG
+#  if _PLUGIN_DEBUG
   CUcontext ctx;
   res = cuCtxGetCurrent( &ctx );
   assert( ctx == device->ctx );
   kaapi_assert(kaapi_cuda_check_address(ptr) );
   fprintf(stdout, "cuda:%s: free ptr=%p\n", __FUNCTION__, (void*)ptr);
   fflush(stdout);
-#endif
+#  endif
   res = cuMemFree((CUdeviceptr)ptr);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   res = cudaFree((void*)ptr);
 #endif
 
@@ -727,12 +713,12 @@ static int cuda_copy(
 #endif
 
 #if KAAPI_USE_CUDA_DRIVER_API
-#if _PLUGIN_DEBUG
+#  if _PLUGIN_DEBUG
   CUcontext ctx;
   CUresult res = cuCtxGetCurrent( &ctx );
   assert( res == CUDA_SUCCESS );
   assert( ctx == device->ctx );
-#endif
+#  endif
 #endif
 
   /* enforce method to only process H2D or D2D or D2H copy */
@@ -826,16 +812,14 @@ static int cuda_memsync(kaapi_memory_device_t* dev, int begend)
 #endif
 #if KAAPI_USE_CUDA_DRIVER_API
   CUresult res;
-#if _PLUGIN_DEBUG
+#  if _PLUGIN_DEBUG
   CUcontext ctx;
   res = cuCtxGetCurrent( &ctx );
   assert( ctx == device->ctx );
-#endif
+#  endif
   res = cuCtxSynchronize();
   CudaCheckError(res);
-#endif
-
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   cudaError_t res;
   res = cudaSetDevice(kaapi_device_ids[device->inherited.device_id]);
   CudaCheckError(res);
@@ -876,9 +860,9 @@ static size_t cuda_get_free_mem(kaapi_memory_device_t* dev)
   CudaCheckError(res);
   res = cuCtxSetCurrent(device->ctx);
   CudaCheckError(res);
-#if _PLUGIN_DEBUG
+#  if _PLUGIN_DEBUG
   fprintf(stdout, "cuda:%s: device %d init\n", __FUNCTION__, device->inherited.device_id);
-#endif
+#  endif
   size_t free;
   size_t total;
   res = cuMemGetInfo(&free, &total);
@@ -887,15 +871,13 @@ static size_t cuda_get_free_mem(kaapi_memory_device_t* dev)
   device->free_mem = (size_t)free;
   res = cuCtxSetCurrent(ctx);
   CudaCheckError(res);
-#endif
-
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   cudaError_t res;
   res = cudaSetDevice(kaapi_device_ids[device->inherited.device_id]);
   CudaCheckError(res);
-#if _PLUGIN_DEBUG
+#  if _PLUGIN_DEBUG
   fprintf(stdout, "cuda:%s: device %d init\n", __FUNCTION__, device->inherited.device_id);
-#endif
+#  endif
   size_t free;
   size_t total;
   res = cudaMemGetInfo(&free, &total);
@@ -926,9 +908,7 @@ static void _kaapi_cuda_create_event( kaapi_cuda_io_stream_t* cios, int k )
   res = cuEventCreate(&cios->end_events[k], CU_EVENT_DISABLE_TIMING);
   CudaCheckError(res);
 #  endif
-#endif
-
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   cudaError_t res;
 #  if KAAPI_USE_PERFCOUNTER
   res = cudaEventCreateWithFlags(&cios->end_events[k], cudaEventDefault);
@@ -955,9 +935,7 @@ static void _kaapi_cuda_destroy_event( kaapi_cuda_io_stream_t* cios, int k )
   res = cuEventDestroy(cios->end_events[k]);
   CudaCheckError(res);
 #  endif
-#endif
-
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
 #  if KAAPI_USE_PERFCOUNTER
   res = cudaEventDestroy(cios->end_events[k]);
   CudaCheckError(res);
@@ -998,8 +976,7 @@ static void kaapi_cuda_init_cuda_stream(
   /* used by prefetching operation */
   res = cuStreamCreateWithPriority (&cios->stream_low, CU_STREAM_NON_BLOCKING, leastPriority);
   CudaCheckError(res);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   cudaError_t res;
   res = cudaDeviceGetStreamPriorityRange ( &leastPriority, &greatestPriority );
   CudaCheckError(res);
@@ -1013,21 +990,13 @@ static void kaapi_cuda_init_cuda_stream(
   if (type == KAAPI_IO_STREAM_KERN)
   {
     kaapi_assert_debug( thread_type == 0 );
+#if 0 // cublas handle moved to device and shared against the stream
     /*
      */
-#if 0
     cublasStatus_t cres = cublasCreate(&cios->handle);
     kaapi_assert(cres == CUBLAS_STATUS_SUCCESS);
     cres = cublasSetStream( cios->handle, cios->stream);
     kaapi_assert(cres == CUBLAS_STATUS_SUCCESS);
-#endif
-#if KAAPI_USE_TC
-    /*
-    */
-// Not the default
-//#warning "Compile with support for tensor core"
-//    res = cublasSetMathMode(cios->handle, CUBLAS_TENSOR_OP_MATH);
-//    kaapi_assert(cres == CUBLAS_STATUS_SUCCESS);
 #endif
   }
   else
@@ -1038,7 +1007,6 @@ static void kaapi_cuda_init_cuda_stream(
 #endif
     //cios->handle = 0;
   }
-  
 }
 
 
@@ -1052,8 +1020,7 @@ static kaapi_io_stream_t* cuda_stream_alloc(
 {
 #if KAAPI_USE_CUDA_DRIVER_API
   CUresult res;
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   cudaError_t res;
 #endif
   kaapi_assert_debug(plugin_initialized == true);
@@ -1070,8 +1037,7 @@ static kaapi_io_stream_t* cuda_stream_alloc(
 #    if KAAPI_USE_PERFCOUNTER
   cios->start_events = (CUevent*)malloc( capacity * sizeof(CUevent) );
 #    endif
-#  endif
-#  if KAAPI_USE_CUDA_RUNTIME_API
+#  elif KAAPI_USE_CUDA_RUNTIME_API
   cios->end_events = (cudaEvent_t*)malloc( capacity * sizeof(cudaEvent_t) );
 #    if KAAPI_USE_PERFCOUNTER
   cios->start_events = (cudaEvent_t*)malloc( capacity * sizeof(cudaEvent_t) );
@@ -1110,22 +1076,21 @@ static void cuda_stream_free(
 )
 {
   kaapi_cuda_io_stream_t* cios = (kaapi_cuda_io_stream_t*)ios;
-#if 0
+#if 0// moved to device
   if (cios->handle)
     cublasDestroy(cios->handle);
 #endif
 
 #if CONFIG_USE_EVENT
   free(cios->end_events);
-#if KAAPI_USE_PERFCOUNTER
+#  if KAAPI_USE_PERFCOUNTER
   free(cios->start_events);
-#endif
+#  endif
 #endif
 #if KAAPI_USE_CUDA_DRIVER_API
   cuStreamDestroy(cios->stream);
   cuStreamDestroy(cios->stream_low);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   cudaStreamDestroy(cios->stream);
   cudaStreamDestroy(cios->stream_low);
 #endif
@@ -1327,13 +1292,16 @@ static int cuda_stream_decode_ioinstruction(
   KAAPI_PLUGIN_TRACE_IN
   KAAPI_PLUGIN_TRACE_MSG("%s: instr '%s'\n", __FUNCTION__, name_io[instr->type]);
 
-  cudaError_t res = CUDA_SUCCESS;
   kaapi_cuda_io_stream_t* cios = (kaapi_cuda_io_stream_t*)ios;
 #if KAAPI_USE_CUDA_DRIVER_API
+  CUresult res = CUDA_SUCCESS;
   CUstream* stream = 0;
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
-  CUstream* stream = 0;
+#elif KAAPI_USE_CUDA_RUNTIME_API
+  cudaError_t res = cudaSuccess;
+  cudaStream_t* stream = 0;
+  int devid;
+  cudaGetDevice(&devid);
+  kaapi_assert(devid == kaapi_device_ids[device->inherited.device_id]);
   cudaSetDevice(kaapi_device_ids[device->inherited.device_id]);
 #endif
 
@@ -1373,17 +1341,14 @@ static int cuda_stream_decode_ioinstruction(
       kaapi_assert(res == CUDA_SUCCESS);
       res = cuEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
       kaapi_assert(res == CUDA_SUCCESS);
-      //printf("Start event recorded for IO %s at pos: %i\n", name_io[instr->type], ios->pos_wp );
 #  endif
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
 #  if CONFIG_USE_EVENT && KAAPI_USE_PERFCOUNTER
       instr->t1 = kaapi_get_elapsedtime();
       res = cudaEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
       kaapi_assert(res == CUDA_SUCCESS);
       res = cudaEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
       kaapi_assert(res == CUDA_SUCCESS);
-      //printf("Start event recorded for IO %s at pos: %i\n", name_io[instr->type], ios->pos_wp );
 #  endif
 #endif
 
@@ -1428,8 +1393,7 @@ static int cuda_stream_decode_ioinstruction(
                                        src,
                                        size,
                                        *stream);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
               res = cudaMemcpyAsync( dest,
                                      src,
                                      size,
@@ -1445,8 +1409,7 @@ static int cuda_stream_decode_ioinstruction(
                                        (CUdeviceptr)src,
                                        size,
                                        *stream);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
               res = cudaMemcpyAsync( dest,
                                      src,
                                      size,
@@ -1465,8 +1428,7 @@ static int cuda_stream_decode_ioinstruction(
                                        ((kaapi_device_cuda_t*)op->dev_src->device)->ctx,
                                        size,
                                        *stream);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
               res = cudaMemcpyPeerAsync( dest,
                                          kaapi_device_ids[op->dev_dest->device->device_id],
                                          src,
@@ -1554,8 +1516,7 @@ static int cuda_stream_decode_ioinstruction(
                src, dest, (int)size
             )
           );
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
           switch (instr->type)
           {
             case KAAPI_IO_COPY_H2H:
@@ -1589,21 +1550,19 @@ static int cuda_stream_decode_ioinstruction(
       };
 
 #if CONFIG_SYNCHRONOUS_COPY
-#if KAAPI_USE_CUDA_DRIVER_API
+#  if KAAPI_USE_CUDA_DRIVER_API
       res = cuStreamSynchronize( *stream );
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#  elif KAAPI_USE_CUDA_RUNTIME_API
       res = cudaStreamSynchronize( *stream );
-#endif
+#  endif
       CudaCheckError(res);
       ++ios->ok_p;
 #elif CONFIG_USE_EVENT 
-#if KAAPI_USE_CUDA_DRIVER_API
+#  if KAAPI_USE_CUDA_DRIVER_API
       res = cuEventRecord( cios->end_events[ ios->pos_wp % ios->count ], *stream );
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#  elif KAAPI_USE_CUDA_RUNTIME_API
       res = cudaEventRecord( cios->end_events[ ios->pos_wp % ios->count ], *stream );
-#endif
+#  endif
       CudaCheckError(res);
 #else // no use event, no synchronous == synchronous
       #error "Unsupported configuration"
@@ -1623,8 +1582,7 @@ static int cuda_stream_decode_ioinstruction(
       kaapi_assert(res == CUDA_SUCCESS);
       res = cuStreamSynchronize( cios->stream_low );
       kaapi_assert(res == CUDA_SUCCESS);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
       res = cudaStreamSynchronize( cios->stream );
       kaapi_assert(res == CUDA_SUCCESS);
       res = cudaStreamSynchronize( cios->stream_low );
@@ -1639,7 +1597,6 @@ static int cuda_stream_decode_ioinstruction(
       kaapi_assert_debug( thread_type == 0 );
 #endif
       /* same as cublas */
-      stream = &cios->stream;
       struct kaapi_io_kernel* op = &instr->inst.k_io;
       KAAPI_PLUGIN_TRACE_MSG("%s: instr '%s' exec task:%p, stream: %p\n", __FUNCTION__,
           name_io[instr->type],
@@ -1648,17 +1605,17 @@ static int cuda_stream_decode_ioinstruction(
       );
 #if KAAPI_USE_PERFCOUNTER
       instr->t1 = kaapi_get_elapsedtime();
-#if CONFIG_USE_EVENT
-#if KAAPI_USE_CUDA_DRIVER_API
+#  if CONFIG_USE_EVENT
+#    if KAAPI_USE_CUDA_DRIVER_API
       res = cuEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#    elif KAAPI_USE_CUDA_RUNTIME_API
       res = cudaEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
-#endif
+#    endif
       kaapi_assert(res == CUDA_SUCCESS);
+#  endif
 #endif
-#endif
-      cublasStatus_t cres = cublasSetStream( device->handle, cios->stream);
+      stream = &cios->stream;
+      cublasStatus_t cres = cublasSetStream( device->handle, *stream );
       kaapi_assert(cres == CUBLAS_STATUS_SUCCESS);
       kaapi_offload_device_execute_task(
         &device->inherited,
@@ -1666,21 +1623,19 @@ static int cuda_stream_decode_ioinstruction(
         device->handle
       );
 #if CONFIG_SYNCHRONOUS_KERNEL
-#if KAAPI_USE_CUDA_DRIVER_API
+#  if KAAPI_USE_CUDA_DRIVER_API
       res = cuStreamSynchronize( *stream );
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#  elif KAAPI_USE_CUDA_RUNTIME_API
       res = cudaStreamSynchronize( *stream );
-#endif
+#  endif
       kaapi_assert(res == CUDA_SUCCESS);
       ++ios->ok_p;
 #elif CONFIG_USE_EVENT 
-#if KAAPI_USE_CUDA_DRIVER_API
+#  if KAAPI_USE_CUDA_DRIVER_API
       res = cuEventRecord(cios->end_events[ ios->pos_wp % ios->count ], *stream );
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#  elif KAAPI_USE_CUDA_RUNTIME_API
       res = cudaEventRecord(cios->end_events[ ios->pos_wp % ios->count ], *stream );
-#endif
+#  endif
       kaapi_assert(res == CUDA_SUCCESS);
 #else // no use event, no synchronous
       #error "Unsupported configuration"
@@ -1712,18 +1667,17 @@ static int cuda_stream_advance_pending(
 #if CONFIG_USE_EVENT 
   if (blocking)
   {
-#if KAAPI_USE_CUDA_DRIVER_API
+#  if KAAPI_USE_CUDA_DRIVER_API
     res = cuStreamSynchronize( cios->stream );
     CudaCheckError(res);
     res = cuStreamSynchronize( cios->stream_low );
     CudaCheckError(res);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#  elif KAAPI_USE_CUDA_RUNTIME_API
     res = cudaStreamSynchronize( cios->stream );
     CudaCheckError(res);
     res = cudaStreamSynchronize( cios->stream_low );
     CudaCheckError(res);
-#endif
+#  endif
     ios->ok_p = ios->pos_wp;
     return 0;
   }
@@ -1742,14 +1696,14 @@ static int cuda_stream_advance_pending(
   {
     int shift = 0; //(ios->type == KAAPI_IO_STREAM_KERN ? 0: len_p/2-1);
     int idx = (ios->ok_p + shift)% ios->count;
-#if KAAPI_USE_CUDA_DRIVER_API
+#  if KAAPI_USE_CUDA_DRIVER_API
     res = cudaEventSynchronize(cios->end_events[idx]);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#  elif KAAPI_USE_CUDA_RUNTIME_API
     res = cudaEventSynchronize(cios->end_events[idx]);
-#endif
+#  endif
   }
-#endif
+#endif//if 0
+
   /* ios->ok_p is past the last ok pending request: test from ok_p to pos_wp */
   int cnt;
   uint64_t ios_okp = ios->ok_p; 
@@ -1772,8 +1726,7 @@ static int cuda_stream_advance_pending(
           res = cuEventQuery( cios->end_events[idx] );
           kaapi_assert_debug((res == CUDA_ERROR_NOT_READY)  || (res == CUDA_SUCCESS));
           if (res == CUDA_ERROR_NOT_READY)
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
           res = cudaEventQuery( cios->end_events[idx] );
           kaapi_assert_debug((res == cudaErrorNotReady)  || (res == cudaSuccess));
           if (res == cudaErrorNotReady)
@@ -1786,8 +1739,7 @@ static int cuda_stream_advance_pending(
 #if KAAPI_USE_PERFCOUNTER
 #  if KAAPI_USE_CUDA_DRIVER_API
         if (res == CUDA_SUCCESS)
-#  endif
-#  if KAAPI_USE_CUDA_RUNTIME_API
+# elif KAAPI_USE_CUDA_RUNTIME_API
         if (res == cudaSuccess)
 #  endif
           op->t2 = kaapi_get_elapsedtime();
@@ -1830,8 +1782,7 @@ static int cuda_stream_advance_pending(
     CudaCheckError(res);
     res = cuStreamSynchronize( cios->stream_low );
     CudaCheckError(res);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
     res = cudaStreamSynchronize( cios->stream );
     CudaCheckError(res);
     res = cudaStreamSynchronize( cios->stream_low );
@@ -1845,8 +1796,7 @@ static int cuda_stream_advance_pending(
 #if KAAPI_USE_CUDA_DRIVER_API
     res = cuStreamQuery( cios->stream );
     if (res == CUDA_ERROR_NOT_READY)
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
     res = cudaStreamQuery( cios->stream );
     if (res == cudaErrorNotReady)
 #endif
@@ -1858,8 +1808,7 @@ static int cuda_stream_advance_pending(
 #if KAAPI_USE_CUDA_DRIVER_API
     res = cuStreamQuery( cios->stream_low );
     if (res == CUDA_ERROR_NOT_READY)
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
     res = cudaStreamQuery( cios->stream_low );
     if (res == cudaErrorNotReady)
 #endif
@@ -1912,16 +1861,14 @@ static int cuda_stream_process_pending(
 #if KAAPI_USE_PERFCOUNTER
 #  if KAAPI_USE_CUDA_DRIVER_API
           CUresult res;
-#  endif
-#  if KAAPI_USE_CUDA_RUNTIME_API
+#  elif KAAPI_USE_CUDA_RUNTIME_API
           cudaError_t res;
 #  endif
 #  if KAAPI_DEBUG
 #    if KAAPI_USE_CUDA_DRIVER_API
           res = cuEventQuery( cios->start_events[idx] );
           if (res != CUDA_SUCCESS)
-#    endif
-#    if KAAPI_USE_CUDA_RUNTIME_API
+#    elif KAAPI_USE_CUDA_RUNTIME_API
           res = cudaEventQuery( cios->start_events[idx] );
           if (res != cudaSuccess)
 #    endif
@@ -1930,8 +1877,7 @@ static int cuda_stream_process_pending(
 #  if KAAPI_USE_CUDA_DRIVER_API
           res = cuEventElapsedTime ( &status.gpu_delay, cios->start_events[idx], cios->end_events[idx] );
           if (res != CUDA_SUCCESS) {
-#  endif
-#  if KAAPI_USE_CUDA_RUNTIME_API
+#  elif KAAPI_USE_CUDA_RUNTIME_API
           res = cudaEventElapsedTime ( &status.gpu_delay, cios->start_events[idx], cios->end_events[idx] );
           if (res != cudaSuccess) {
 #  endif
@@ -2044,8 +1990,7 @@ static int kaapi_cuda_io_thread( kaapi_device_cuda_t* device, kaapi_io_stream_ty
 
   res = cuCtxSetCurrent( ctx );
   kaapi_assert( res == CUDA_SUCCESS );
-#  endif
-#  if KAAPI_USE_CUDA_RUNTIME_API
+#  elif KAAPI_USE_CUDA_RUNTIME_API
   cudaError_t res;
   res = cudaSetDevice(kaapi_device_ids[device->inherited.device_id]);
   kaapi_assert( res == cudaSuccess );
@@ -2145,8 +2090,7 @@ KAAPI_PLUGIN_ENTRYPOINT(init)(void)
 {
 #if KAAPI_USE_CUDA_DRIVER_API
   CUresult res;
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   cudaError_t res;
 #endif
   kaapi_cuda_plugin_lock();
@@ -2162,8 +2106,7 @@ KAAPI_PLUGIN_ENTRYPOINT(init)(void)
   int device_count;
 #if KAAPI_USE_CUDA_DRIVER_API
   res = cuDeviceGetCount(&device_count);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   res = cudaGetDeviceCount(&device_count);
 #endif
   CudaCheckError(res);
@@ -2402,7 +2345,7 @@ int KAAPI_PLUGIN_ENTRYPOINT(host_register_testwait)(
 KAAPI_CLASS_ENTRYPOINT kaapi_device_t* 
 KAAPI_PLUGIN_ENTRYPOINT(device_create)(int dev)
 {
-#if _PLUGIN_DEBUG
+#if 1//_PLUGIN_DEBUG
   fprintf(stdout, "cuda:%s: device %d init\n", __FUNCTION__, dev);
 #endif
   kaapi_device_cuda_t* cudadevice = (kaapi_device_cuda_t*)malloc(sizeof(kaapi_device_cuda_t));
@@ -2499,9 +2442,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
   CudaCheckError(res);
   /* */
   cuCtxSynchronize();
-#endif
-  
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   struct cudaDeviceProp prop;
   cudaError_t res;
 
@@ -2552,8 +2493,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
     size_t total;
 #if KAAPI_USE_CUDA_DRIVER_API
     res = cuMemGetInfo(&free, &total);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
     res = cudaMemGetInfo(&free, &total);
 #endif
     CudaCheckError(res);
@@ -2620,8 +2560,7 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_commit)(kaapi_device_t
   CUresult res;
   res = cuCtxPushCurrent(device->ctx);
   CudaCheckError(res);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   cudaError_t res;
   res = cudaSetDevice(kaapi_device_ids[dev->device_id]);
   CudaCheckError(res);
@@ -2647,8 +2586,7 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_commit)(kaapi_device_t
 #  if KAAPI_USE_CUDA_DRIVER_API
       res = cuDeviceCanAccessPeer(&access, device->cu_device, kaapi_device_list[j]->cu_device);
       kaapi_assert( res == CUDA_SUCCESS );
-#  endif
-#  if KAAPI_USE_CUDA_RUNTIME_API
+#  elif KAAPI_USE_CUDA_RUNTIME_API
       res = cudaDeviceCanAccessPeer(&access,
         kaapi_device_ids[device->inherited.device_id],
         kaapi_device_ids[kaapi_device_list[j]->inherited.device_id]);
@@ -2659,8 +2597,7 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_commit)(kaapi_device_t
 #  if KAAPI_USE_CUDA_DRIVER_API
         res = cuCtxEnablePeerAccess(kaapi_device_list[j]->ctx, 0 );
         kaapi_assert( res == CUDA_SUCCESS );
-#  endif
-#  if KAAPI_USE_CUDA_RUNTIME_API
+#  elif KAAPI_USE_CUDA_RUNTIME_API
         res = cudaDeviceEnablePeerAccess(kaapi_device_ids[kaapi_device_list[j]->inherited.device_id], 0 );
         CudaCheckError(res);
 # endif
@@ -2857,6 +2794,10 @@ KAAPI_PLUGIN_ENTRYPOINT(device_finalize)(kaapi_device_t* dev)
   CUresult res;
   res = cuCtxPushCurrent(device->ctx);
   CudaCheckError(res);
+#elif KAAPI_USE_CUDA_RUNTIME_API
+  cudaError_t res;
+  res = cudaSetDevice(kaapi_device_ids[dev->device_id]);
+  CudaCheckError(res);
 #endif
 
   kaapi_dsm_unregister_device(&kaapi_the_dsm, &dev->memdev);
@@ -2908,8 +2849,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_attach)(kaapi_device_t* dev)
   CUresult res;
   res = cuCtxPushCurrent(device->ctx);
   CudaCheckError(res);
-#endif
-#if KAAPI_USE_CUDA_RUNTIME_API
+#elif KAAPI_USE_CUDA_RUNTIME_API
   cudaError_t res;
   res = cudaSetDevice( kaapi_device_ids[device->inherited.device_id] );
   CudaCheckError(res);
