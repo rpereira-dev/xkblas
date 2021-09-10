@@ -5,10 +5,12 @@
 KAAPI_HOME=$(PWD)
 
 #Select the target GPU: CUDA/Nvidia card XOR HIP/Amd card
-##If to use the CUDA Driver API:
-#KAAPI_USE_GPU_CUDA=1
-#If to use the CUDA Runtime API:
-KAAPI_USE_GPU_CUDA=2
+#If to use the CUDA Driver API:
+KAAPI_USE_GPU_CUDA=1
+
+##If to use the CUDA Runtime API:
+#KAAPI_USE_GPU_CUDA=2
+
 ##If to use AMD GPU through HIP (exclusive with previous options)
 #KAAPI_USE_GPU_HIP=1
 
@@ -52,5 +54,6 @@ KAAPI_OPTIONFLAGS=-DKAAPI_USE_SLEEP=1
 
 # FLAGS use for compiling the library
 #OPT=-O3 -std=gnu99 -DKAAPI_DEBUG=0 ${EXTRA} -DNDEBUG ${BLAS_USE} ${KAAPI_OPTIONFLAGS}
-OPT=-O0 -g -std=gnu99 -DKAAPI_DEBUG=1 ${EXTRA} ${BLAS_USE} ${KAAPI_OPTIONFLAGS}
+OPT=-O3 -std=gnu99 -DKAAPI_DEBUG=0 ${EXTRA} -DNDEBUG ${BLAS_USE} ${KAAPI_OPTIONFLAGS}
+#OPT=-O0 -g -std=gnu99 -DKAAPI_DEBUG=1 ${EXTRA} ${BLAS_USE} ${KAAPI_OPTIONFLAGS}
 

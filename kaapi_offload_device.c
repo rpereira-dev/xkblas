@@ -1200,6 +1200,7 @@ int kaapi_offload_device_init(kaapi_device_t* const device)
 #if KAAPI_PIPELINE_GPUTASK
   /* */
   kaapi_assert(0== pthread_mutex_init(&device->pipe_lock, 0));
+
   device->p_write   = 0; /* next position where to write new task */
   device->p_ready   = 0; /* position of the next task to insert into the kernel submission stream */
   device->p_finish  = 0; /* position of the next task to erase from the pipeline */

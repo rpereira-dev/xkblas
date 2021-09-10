@@ -105,7 +105,7 @@ static __thread int thread_type = 0;
 
 /*
 */
-#define _PLUGIN_NAME   "cuda"
+#define _PLUGIN_NAME   "hip"
 #define _PLUGIN_DEBUG   0
 
 #if KAAPI_USE_DYNLOADER

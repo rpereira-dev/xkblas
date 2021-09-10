@@ -41,7 +41,6 @@
 
 #include <stdint.h>
 
-
 #define KAAPI_PLUGIN_PREFIX_NAME "KAAPI_PLUGIN_"
 #define KAAPI_PLUGIN_ENTRYPOINT_NAME( func_name ) KAAPI_PLUGIN_PREFIX_NAME #func_name
 #define KAAPI_PLUGIN_ENTRYPOINT( func_name ) KAAPI_PLUGIN_ ## func_name
