@@ -50,7 +50,7 @@ RANLIB=ranlib
 # Extra flags for XKBlas:
 # - KAAPI_USE_SLEEP=1 to activate the policy to make active threads sleeping more
 # Set to KAAPI_USE_SLEEP=0 if you want to unactivate the policy
-KAAPI_OPTIONFLAGS=-DKAAPI_USE_SLEEP=1 
+KAAPI_OPTIONFLAGS=-DKAAPI_USE_SLEEP=1
 
 # FLAGS use for compiling the library
 #OPT=-O3 -std=gnu99 -DKAAPI_DEBUG=0 ${EXTRA} -DNDEBUG ${BLAS_USE} ${KAAPI_OPTIONFLAGS}

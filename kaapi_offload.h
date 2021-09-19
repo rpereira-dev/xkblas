@@ -403,7 +403,8 @@ static inline int kaapi_offload_device_accept_new_task( kaapi_device_t* device )
 {
 #if KAAPI_PIPELINE_GPUTASK
   if (device !=0)
-    return (device->p_write - device->p_finish) < device->pipe_size;
+    return  ((device->p_write - device->p_finish) < device->pipe_size)
+         && ((device->p_write - device->p_ready) < (1+kaapi_default_param.cuda_conc_kernel)/2);
 #else
   return (KAAPI_ATOMIC_READ(&device->cnt_pending)) <= kaapi_default_param.cuda_conc_kernel;
 #endif
