@@ -1360,18 +1360,6 @@ int xkblas_finalize(void)
       kaapi_print_counter();
       printf("[XKBlas stats]\n");
     }
-<<<<<<< HEAD
-    printf("\t[%12s]: count=%12li, time=%8e, flops=%10e\n",
-        "sum -->",
-        spawn_count,
-        time_count,
-        flops_count
-    );
-    printf("\t Global counters on GPU(s):\n");
-    kaapi_print_counter();
-    printf("[XKBlas stats]\n");
-=======
->>>>>>> 299b8eb... Suppress display except if KAAPI_VERBOSE or XKBLAS_VERBOSE is set
   }
 #endif
 }

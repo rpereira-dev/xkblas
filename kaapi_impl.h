@@ -55,7 +55,7 @@
 #define KAAPI_USE_HOST_PLUGIN 1
 #define KAAPI_USE_CUDA_PLUGIN 1
 
-#define KAAPI_USE_PERFCOUNTER 0    /* compile with some performance counters */
+#define KAAPI_USE_PERFCOUNTER 1    /* compile with some performance counters */
 
 /* 2^KAAPI_SIZE_DSM_MAP is the size of the hash map
 */

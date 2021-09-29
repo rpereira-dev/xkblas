@@ -151,6 +151,7 @@ static void callback_epilogue(
 
   /* */
   double flops = 0, data = 0;
+  const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
   --device->pendingtasks;
   if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
     kaapi_format_get_cost(fmt, kaapi_task_getargs(task), task, &flops, &data );
