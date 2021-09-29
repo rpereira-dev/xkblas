@@ -105,6 +105,8 @@ static void callback_epilogue(
   kaapi_task_t*    task         = (kaapi_task_t*)arg1;
   uint64_t         index        = (uint64_t)(uintptr_t)arg2;
 
+  kaapi_assert_debug( task->device ==device );
+
   KAAPI_ATOMIC_INCR(&device->cnt_exec);
   KAAPI_ATOMIC_DECR(&device->cnt_ready);
   
@@ -147,6 +149,16 @@ static void callback_epilogue(
     callback_epilogue_perparam, (uint64_t)device
   );
 
+  /* */
+  double flops = 0, data = 0;
+  --device->pendingtasks;
+  if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
+    kaapi_format_get_cost(fmt, kaapi_task_getargs(task), task, &flops, &data );
+  device->flops_tasks += flops;
+  device->data_tasks += data;
+  device->flops_pendingtasks -= flops;
+  device->data_pendingtasks -= data;
+  
 #if KAAPI_USE_PERFCOUNTER
   device->sum_cpudelay += status.cpu_delay;
   ++device->cnt_task;
@@ -170,28 +182,21 @@ static void callback_epilogue(
 #if KAAPI_LOG_DELAY
   fprintf(device->flog_delay,"%i,%f,%f,%f\n",device->device_id,kaapi_get_elapsedtime(),status.cpu_delay,status.gpu_delay);
 #endif
-#endif
 
-#if KAAPI_USE_PERFCOUNTER
-if (0){
-  const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
-  printf("Task: %s CPU: %f, GPU: %f\n", fmt->name, status.cpu_delay, status.gpu_delay);
-}
-  ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_TASK_EXEC];
-  kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_WORK]     += status.gpu_delay;
-  kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_CNT_TASK_WORK_CPU] += status.cpu_delay;
+  int tid = ctxt->tid;
+  ++kaapi_perthread_stat[tid].counter[KAAPI_CNT_TASK_EXEC];
+  kaapi_perthread_stat[tid].dcounter[KAAPI_CNT_TASK_WORK]     += status.gpu_delay;
+  kaapi_perthread_stat[tid].dcounter[KAAPI_CNT_TASK_WORK_CPU] += status.cpu_delay;
   if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
   {
     kaapi_task_withperfcnt_t* stask = (kaapi_task_withperfcnt_t*)task;
     const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
     kaapi_offloadtask_perfcounter_t* perf = &device->perfcnt.task[fmt->fmtid];
-    double flops = 0, data = 0;
-    kaapi_format_get_cost(fmt, kaapi_task_getargs(task), task, &flops, &data );
     perf->time  += status.gpu_delay;
     perf->flops += flops;
     perf->ai += flops/data;
-    kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_FLOPS_TASK_EXEC] += flops;
-    kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_FLOPS_TASK_PENDING] -= flops;
+    kaapi_perthread_stat[tid].dcounter[KAAPI_FLOPS_TASK_EXEC] += flops;
+    kaapi_perthread_stat[tid].dcounter[KAAPI_FLOPS_TASK_PENDING] -= flops;
   }
 #endif
   ++device->exec_count;
@@ -204,7 +209,8 @@ if (0){
 /* Call when data have been received on node
    When all data are valid for this task, insert the task into the stream
     arg0 : the device that acquire data for one of its task
-    arg1 : the task 
+    arg1 : the task
+  May be called by any device threads...
 */
 KAAPI_DEBUG_INST(kaapi_atomic64_t count_valid = {0};
                  kaapi_atomic64_t call_valid = {0};)
@@ -221,6 +227,7 @@ static void callback_set_valid(
 
   kaapi_assert(task !=0);
   KAAPI_DEBUG_INST(KAAPI_ATOMIC_INCR(&call_valid);)
+  kaapi_assert_debug( task->device ==device );
 
   int wc = KAAPI_ATOMIC_DECR(&task->wc);
   if (wc == 0)
@@ -320,18 +327,22 @@ int kaapi_offload_device_execute_task(
   KAAPI_OFFLOAD_TRACE_IN
   kaapi_context_t* ctxt = device->ctxt;
   kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
-  
-#if KAAPI_USE_PERFCOUNTER
-  ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_TASK_ASYNC_EXEC];
-  if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
-  {
-    const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
-    kaapi_task_withperfcnt_t* stask = (kaapi_task_withperfcnt_t*)task;
-    double flops = 0, data = 0;
-    kaapi_format_get_cost(fmt, kaapi_task_getargs(task), task, &flops, &data );
-    kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_FLOPS_TASK_PENDING] += flops;
-  }
+
+#if KAAPI_DEBUG
+  kaapi_assert( task->device ==device );
 #endif
+
+//#if KAAPI_USE_PERFCOUNTER
+//  ++kaapi_perthread_stat[ctxt->tid].counter[KAAPI_CNT_TASK_ASYNC_EXEC];
+//  if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
+//  {
+//    const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
+//    kaapi_task_withperfcnt_t* stask = (kaapi_task_withperfcnt_t*)task;
+//    double flops = 0, data = 0;
+//    kaapi_format_get_cost(fmt, kaapi_task_getargs(task), task, &flops, &data );
+//    kaapi_perthread_stat[ctxt->tid].dcounter[KAAPI_FLOPS_TASK_PENDING] += flops;
+//  }
+//#endif
   
   /* handle comes form portability layer: for cuda its the cublas hande */
   ctxt->pc = task;
@@ -428,6 +439,10 @@ static void kaapi_do_prefetch_data(
 
 
 /* Send necessary input data to the device where task will be excuted
+  Here: task is ready and will be prepared to be executed on GPU.
+   - arguments will be send if not yet
+   - once sending are completed, then callback to signal ends will
+   enforce kernel execution.
 */
 static int kaapi_offload_device_prepare_execute_task(
      kaapi_device_t* const device,
@@ -439,7 +454,29 @@ static int kaapi_offload_device_prepare_execute_task(
   uint16_t lid = kaapi_memory_asid_get_lid( device->memdev.asid );
   const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
   kaapi_assert(fmt !=0);
+
+#if KAAPI_DEBUG
+  /* the device that starts a task is also the device that complete the task */
+  kaapi_assert( task->device ==0 );
+  task->device = device;
+#endif
+
+  /* Register counters for performance analysis
+  */
+  double flops = 0, data = 0;
+  ++device->pendingtasks;
+  if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
+  {
+    kaapi_format_get_cost(fmt, kaapi_task_getargs(task), task, &flops, &data );
+    device->flops_pendingtasks += flops;
+    device->data_pendingtasks += data;
+  }
+#if KAAPI_USE_PERFCOUNTER
+  int tid = device->ctxt->tid;
+  ++kaapi_perthread_stat[tid].counter[KAAPI_CNT_TASK_ASYNC_EXEC];
+  kaapi_perthread_stat[tid].dcounter[KAAPI_FLOPS_TASK_PENDING] += flops;
   ++device->perfcnt.task[fmt->fmtid].spawn;
+#endif
 
   kaapi_assert_debug(device == kaapi_offload_self_device());
   kaapi_assert_debug(KAAPI_ATOMIC_READ(&task->wc) ==0);
@@ -621,6 +658,7 @@ static int kaapi_offload_device_prepare_execute_task(
 #endif //KAAPI_PIPELINE_GPUTASK
   return 0;
 }
+
 
 /* Sync call by non pure CPU thread
    Close to default kaapi_sched_sync, but task execution and activation to successors is deported
@@ -1202,6 +1240,14 @@ int kaapi_offload_device_init(kaapi_device_t* const device)
   for (int i=0; i<device->pipe_size; ++i) 
     device->pipeline[i] = 0;
 #endif
+
+  /* */
+  device->time_tasks = 0.0;
+  device->flops_tasks = 0.0;
+  device->data_tasks = 0.0;
+  device->pendingtasks = 0;
+  device->flops_pendingtasks= 0.0;
+  device->data_pendingtasks = 0.0;
 
 #if KAAPI_USE_PERFCOUNTER
   device->cnt_task     = 0.0;

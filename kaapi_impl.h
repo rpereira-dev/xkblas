@@ -38,7 +38,7 @@
 #ifndef _KAAPI_IMPL_H
 #define _KAAPI_IMPL_H 1
 
-#define KAAPI_ADVANCED_VERSION 0   /* to compile with mix code where next features are already present but not yet fully validated : NOT REALLY IN USE */
+#define KAAPI_ADVANCED_VERSION 0   /* to compile with mix code where next features are already present but not yet fully validated : DO NOT USE IT*/
 
 #define KAAPI_HAVE_IO_THREADS 0    /* do not use IO threads [Experimental feature!!!!] */
 

@@ -113,20 +113,29 @@ static kaapi_counter_info_t kaapi_name_counter[] = {
   {0, "#MISS", 0, 0, 0},
   {0, "Hit bytes", "Bytes", 0, 0},
   {0, "Miss bytes", "Bytes", 0, 0},
-  {0, "Async Pin", "s", 1, 0},
-  {0, "Async Unpin", "s", 1, 0},
-  {0, "Async Wait pin", "s", 1, 0},
-  {0, "Cuda Pin", "s", 1, 0},
-  {0, "Cuda Unpin", "s", 1, 0},
-  {0, "Overhead pin", "s", 1, 0},
+#if KAAPI_ADVANCED_VERSION
+  {1, "Time Async Pin", "s", 1, 0},
+  {1, "Time Async Unpin", "s", 1, 0},
+  {1, "Time Async Wait pin", "s", 1, 0},
+  {1, "Cuda Pin", "s", 1, 0},
+  {1, "Cuda Unpin", "s", 1, 0},
+  {1, "Overhead pin", "s", 1, 0},
+#else
+  {0, "experimental (3)", 0, 1, 0},
+  {0, "experimental (4)", 0, 1, 0},
+  {0, "experimental (5)", 0, 1, 0},
+  {0, "experimental (6)", 0, 1, 0},
+  {0, "experimental (7)", 0, 1, 0},
+  {0, "experimental (8)", 0, 1, 0},
+#endif
 #if KAAPI_PIPELINE_GPUTASK
   {1, "Reorder hit", 0, 0, 0},
   {1, "Reorder miss", 0, 0, 0},
   {1, "Reorder miss len", 0, 0, 0},
 #else
-  {0, "Reorder hit", 0, 0, 0},
-  {0, "Reorder miss", 0, 0, 0},
-  {0, "Reorder miss len", 0, 0, 0},
+  {0, "Unused", 0, 0, 0},
+  {0, "Unused", 0, 0, 0},
+  {0, "Unused", 0, 0, 0},
 #endif
   {0, "", "", 0, 0}
 };

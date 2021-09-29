@@ -271,6 +271,9 @@ struct kaapi_task {
   unsigned int                 ld: 13;  // iff flag KAAPI_TASK_FLAG_LD_BOUND is set, else ignored
   kaapi_atomic16_t             wc;
   kaapi_frame_t*               frame;
+#if KAAPI_DEBUG
+  kaapi_device_t*              device;
+#endif
 };
 
 typedef kaapi_task_t kaapi_task_withperfcnt_t;
@@ -1096,6 +1099,9 @@ kaapi_task_t* kaapi_task_init(
   task->body      = body;
   task->flags     = KAAPI_TASK_FLAG_DEFAULT;
   KAAPI_ATOMIC_WRITE(&task->wc, 1); 
+#if KAAPI_DEBUG
+  task->device = 0;
+#endif
   return task;
 }
 

@@ -104,7 +104,13 @@ struct kaapi_device {
     int volatile                finalize;      /* true iff driver stop device */
     int                         is_initialized;/* True if driver is initialized */
   
-    kaapi_offload_perfcounter_t perfcnt; /* */
+    double                      time_tasks;        /* cumulative time for all executed tasks */
+    double                      flops_tasks;       /* cumulative flops for all executed tasks */
+    double                      data_tasks;        /* cumulative data for all executed tasks */
+    uint64_t                    pendingtasks;      /* #tasks (between prepare data and end of execution) */
+    double                      flops_pendingtasks;/* idem for pending tasks (between prepare data and end of execution) */
+    double                      data_pendingtasks; /* idem for pending tasks */
+    kaapi_offload_perfcounter_t perfcnt;       /* per task */
     const char*                 name;          /* Device name */
     void*                       handle;        /* device handle, e.g. cublas handle for GPU*/
 
