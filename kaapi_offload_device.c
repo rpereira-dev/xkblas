@@ -190,7 +190,6 @@ static void callback_epilogue(
   if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
   {
     kaapi_task_withperfcnt_t* stask = (kaapi_task_withperfcnt_t*)task;
-    const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
     kaapi_offloadtask_perfcounter_t* perf = &device->perfcnt.task[fmt->fmtid];
     perf->time  += status.gpu_delay;
     perf->flops += flops;
@@ -749,16 +748,15 @@ static void callback_replyrequest_memsync(
 }
 
 
-/*
+/* Compute load of device. Return the number of GPUs having the maximal load
 */
 #define KAAPI_IMAX 4
-static int _kaapi_compute_load_device(
-    kaapi_context_t* ctxt,
-    int* pmin, 
+int _kaapi_compute_load_device(
+    int* pmin,
     int* pmax, 
     float* pavrg, 
     float* pdelta, 
-    int* imax,  /* of size at least 4 */
+    int* imax,  /* of size at least KAAPI_IMAX */
     int* pload
 )
 {
@@ -771,12 +769,7 @@ static int _kaapi_compute_load_device(
   for (int i=0; i<ngpu; ++i)
   {
     kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU,i);
-#if KAAPI_PIPELINE_GPUTASK
-    load[i] = ld->device->p_ready -  ld->device->p_finish;
-#else
-    load[i] = KAAPI_ATOMIC_READ(&ld->device->cnt_ready);
-#endif
-    //load[i] = kaapi_fifo_queue_size( ld->queue );
+    load[i] = ld->device->pendingtasks;
     sum += (float)load[i];
     int l = load[i];
     if (l> max) {
@@ -885,7 +878,7 @@ int kaapi_sched_idle_offload(
           int min; 
           float avrg;
           float delta;
-          int iimax = _kaapi_compute_load_device(ctxt, &min, &max, &avrg, &delta, imax, load);
+          int iimax = _kaapi_compute_load_device(&min, &max, &avrg, &delta, imax, load);
           float minmax = max-min;
 
           if ((avrg > 2.0/ngpu) && (delta > 0)) 
