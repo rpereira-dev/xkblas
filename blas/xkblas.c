@@ -1730,6 +1730,33 @@ size_t xkblas_auto_tilesize(
   xkblas_kernel_t kernel, size_t M, size_t N, size_t K
 )
 {
+
+#if 1
+{
+xkblas_context_t* ctxt = xkblas_context_get();
+int ngpu= kaapi_localitydomain_count(KAAPI_LD_GPU);
+float load[ngpu];
+int lmin, lmax;
+float avrg;
+float delta;
+int imax_gpu[ngpu];
+int imax_count;
+imax_count = _kaapi_compute_load_device(
+    &lmin,
+    &lmax,
+    &avrg,
+    &delta,
+    imax_gpu,
+    load);
+char tmp[256];
+ssize_t ssize = snprintf(tmp,256,"--- ctxt:%p #Lmax: %i Load: ", ctxt,imax_count);
+for (int i=0; i<ngpu; ++i)
+  ssize += snprintf(tmp+ssize, 256-ssize, "%f ", load[i]);
+ssize += snprintf(tmp+ssize, 256-ssize,"\n");
+printf(tmp);
+}
+#endif
+
   /* get default tile size and initialize internal descriptor if not yet */
   size_t NB = xkblas_get_param();
   if (NB !=0) return NB;
@@ -1907,14 +1934,12 @@ extern void xkblas_load_sym(void** ptr, const char* name)
       abort();
     }
   }
-  //printf("[xkblas]: load symbol %s.\n",name);
   *ptr = dlsym( handle_cpublas, name );
   if (*ptr ==0)
   {
     fprintf(stderr,"*** Error: [xkblas] cannot load symbol '%s' from '%s'\n", name, XKBLAS_BLASLIB);
     abort();
   }
-  //printf("[xkblas]: end load symbol %s.\n",name);
 }
 
 
