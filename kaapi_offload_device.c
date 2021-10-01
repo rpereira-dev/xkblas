@@ -472,6 +472,7 @@ static int kaapi_offload_device_prepare_execute_task(
     device->flops_pendingtasks += flops;
     device->data_pendingtasks += data;
   }
+
 #if KAAPI_USE_PERFCOUNTER
   int tid = device->ctxt->tid;
   ++kaapi_perthread_stat[tid].counter[KAAPI_CNT_TASK_ASYNC_EXEC];
@@ -753,18 +754,17 @@ static void callback_replyrequest_memsync(
 /*
 */
 #define KAAPI_IMAX 4
-static int _kaapi_compute_load_device(
-    kaapi_context_t* ctxt,
+int _kaapi_compute_load_device(
     int* pmin, 
     int* pmax, 
     float* pavrg, 
     float* pdelta, 
     int* imax,  /* of size at least 4 */
-    int* pload
+    float* pload
 )
 {
   int ngpu= kaapi_localitydomain_count(KAAPI_LD_GPU);
-  int load[ngpu];
+  float load[ngpu];
   int max = 0;
   int min = INT_MAX;
   float sum = 0.0;
@@ -772,12 +772,8 @@ static int _kaapi_compute_load_device(
   for (int i=0; i<ngpu; ++i)
   {
     kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU,i);
-#if KAAPI_PIPELINE_GPUTASK
-    load[i] = ld->device->p_ready -  ld->device->p_finish;
-#else
-    load[i] = KAAPI_ATOMIC_READ(&ld->device->cnt_ready);
-#endif
-    //load[i] = kaapi_fifo_queue_size( ld->queue );
+    load[i] = ld->device->pendingtasks;
+    //load[i] = ld->device->flops_tasks;
     sum += (float)load[i];
     int l = load[i];
     if (l> max) {
@@ -880,13 +876,13 @@ int kaapi_sched_idle_offload(
           kaapi_localitydomain_t* ld;
 #if 1
           int ngpu= kaapi_localitydomain_count(KAAPI_LD_GPU);
-          int load[ngpu]; 
+          float load[ngpu]; 
           int imax[KAAPI_IMAX]; 
           int max;
           int min; 
           float avrg;
           float delta;
-          int iimax = _kaapi_compute_load_device(ctxt, &min, &max, &avrg, &delta, imax, load);
+          int iimax = _kaapi_compute_load_device(&min, &max, &avrg, &delta, imax, load);
           float minmax = max-min;
 
           if ((avrg > 2.0/ngpu) && (delta > 0)) 

@@ -103,9 +103,10 @@ typedef uint8_t   kaapi_format_id_t;
 #define KAAPI_PROC_TYPE_DEFAULT 0x0
 #define KAAPI_PROC_TYPE_HOST    0x0
 #define KAAPI_PROC_TYPE_CUDA    0x1
+#define KAAPI_PROC_TYPE_HIP     0x2
 #define KAAPI_PROC_TYPE_CPU     KAAPI_PROC_TYPE_HOST
 #define KAAPI_PROC_TYPE_GPU     KAAPI_PROC_TYPE_CUDA
-#define KAAPI_PROC_TYPE_MAX 2
+#define KAAPI_PROC_TYPE_MAX 3
 
 
 /* Fwd decl
@@ -273,6 +274,7 @@ struct kaapi_task {
   kaapi_frame_t*               frame;
 #if KAAPI_DEBUG
   kaapi_device_t*              device;
+  uint64_t                     pad;
 #endif
 };
 
