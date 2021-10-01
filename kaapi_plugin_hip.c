@@ -874,7 +874,7 @@ static size_t cuda_get_mem_info(kaapi_memory_device_t* dev, size_t* mem_total, s
   if (mem_total) *mem_total = device->prop.mem_total;
   if (mem_limit) *mem_limit = device->mem_limit;
 #if _PLUGIN_DEBUG
-  fprintf(stdout, "cuda:%s: device %d init\n", __FUNCTION__, device->inherited.device_id, (mem_total ==0 ? -1 : *mem_total), (mem_limit ==0 ? -1 : *mem_limit));
+  fprintf(stdout, "hip:%s: device %d init\n", __FUNCTION__, device->inherited.device_id, (mem_total ==0 ? -1 : *mem_total), (mem_limit ==0 ? -1 : *mem_limit));
 #endif
   return device->prop.mem_total;
 }
@@ -1674,7 +1674,6 @@ static int cuda_stream_decode_ioinstruction(
       kaapi_assert(cres == HIPBLAS_STATUS_SUCCESS);
 #if KAAPI_USE_PERFCOUNTER
       instr->t1 = kaapi_get_elapsedtime();
-     rocblas_add_stream
 #if CONFIG_USE_EVENT
 #if KAAPI_USE_CUDA_DRIVER_API
       res = hipEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
@@ -2131,7 +2130,7 @@ KAAPI_PLUGIN_ENTRYPOINT(get_name)(void)
 {
   KAAPI_PLUGIN_TRACE_IN
   KAAPI_PLUGIN_TRACE_OUT
-  return "cuda";
+  return "hip";
 }
 
 
@@ -2614,7 +2613,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
 #endif
 
 #if _PLUGIN_DEBUG
-  fprintf(stdout, "cuda:%s: cuda %d out\n", __FUNCTION__, dev->device_id);
+  fprintf(stdout, "hip:%s: cuda %d out\n", __FUNCTION__, dev->device_id);
 #endif
   kaapi_cuda_plugin_unlock();
 
