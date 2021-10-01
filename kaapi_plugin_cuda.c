@@ -2058,7 +2058,11 @@ KAAPI_PLUGIN_ENTRYPOINT(get_name)(void)
 {
   KAAPI_PLUGIN_TRACE_IN
   KAAPI_PLUGIN_TRACE_OUT
+#ifndef __HIP_PLATFORM_AMD__
+  return "hip";
+#else
   return "cuda";
+#endif
 }
 
 

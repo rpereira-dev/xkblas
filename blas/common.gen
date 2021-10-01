@@ -296,18 +296,6 @@ static void kaapi_error( const char* s1, const char* s2)
 */
 extern uint32_t xkblas_context_get_generation(void);
 
-
-/*
-*/
-extern __thread xkblas_context_t* _xkblas_self_context;
-extern xkblas_context_t* xkblas_context_alloc(void);
-static inline xkblas_context_t* xkblas_context_get(void)
-{
-  if (_xkblas_self_context ==0)
-    xkblas_context_alloc();
-  return _xkblas_self_context;
-}
-
 /*
 */
 static inline kaapi_thread_t* xkblas_self_thread()

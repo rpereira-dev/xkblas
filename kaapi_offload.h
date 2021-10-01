@@ -416,6 +416,18 @@ static inline int kaapi_offload_device_accept_new_task( kaapi_device_t* device )
 #endif
   return 0;
 }
+
+/*
+*/
+extern int _kaapi_compute_load_device(
+    int* pmin,
+    int* pmax,
+    float* pavrg,
+    float* pdelta,
+    int* imax,  /* of size at least KAAPI_IMAX */
+    float* pload
+);
+
 #endif // #if defined(KAAPI_USE_OFFLOAD)
 
 

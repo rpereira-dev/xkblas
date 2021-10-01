@@ -302,7 +302,11 @@ const char* kaapi_localitydomain_info(
     unsigned int i
 )
 {
-  static const char* ARCH2STR[] = { "host", "cuda" };
+  static const char* ARCH2STR[] = { 
+    "host", 
+    "cuda",
+    "hip" 
+  };
   static char buffer[256];
   kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(type,i);
   if (ld == 0) return 0;

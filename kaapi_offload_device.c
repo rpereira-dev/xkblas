@@ -151,6 +151,7 @@ static void callback_epilogue(
 
   /* */
   double flops = 0, data = 0;
+  const kaapi_format_t* fmt = kaapi_task_getformat_ref(task);
   --device->pendingtasks;
   if (kaapi_taskflag_get(task,KAAPI_TASK_PERFCNT))
     kaapi_format_get_cost(fmt, kaapi_task_getargs(task), task, &flops, &data );
@@ -470,6 +471,7 @@ static int kaapi_offload_device_prepare_execute_task(
     device->flops_pendingtasks += flops;
     device->data_pendingtasks += data;
   }
+
 #if KAAPI_USE_PERFCOUNTER
   int tid = device->ctxt->tid;
   ++kaapi_perthread_stat[tid].counter[KAAPI_CNT_TASK_ASYNC_EXEC];
@@ -761,7 +763,7 @@ int _kaapi_compute_load_device(
 )
 {
   int ngpu= kaapi_localitydomain_count(KAAPI_LD_GPU);
-  int load[ngpu];
+  float load[ngpu];
   int max = 0;
   int min = INT_MAX;
   float sum = 0.0;
@@ -770,6 +772,7 @@ int _kaapi_compute_load_device(
   {
     kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(KAAPI_LD_GPU,i);
     load[i] = ld->device->pendingtasks;
+    //load[i] = ld->device->flops_tasks;
     sum += (float)load[i];
     int l = load[i];
     if (l> max) {
@@ -872,7 +875,7 @@ int kaapi_sched_idle_offload(
           kaapi_localitydomain_t* ld;
 #if 1
           int ngpu= kaapi_localitydomain_count(KAAPI_LD_GPU);
-          int load[ngpu]; 
+          float load[ngpu]; 
           int imax[KAAPI_IMAX]; 
           int max;
           int min; 
