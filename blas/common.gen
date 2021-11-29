@@ -50,16 +50,16 @@ typedef double CFloat64_t;
 #ifndef KAAPI_NO_INCLUDE_BLAS_H
 #if defined(KAAPI_BLAS_USE_OPENBLAS)
 #  include <cblas.h>
-#  include <lapacke.h>
+//#  include <lapacke.h>
 #elif defined(KAAPI_BLAS_USE_MKL)
-#  undef lapack_complex_float
-#  undef lapack_complex_double
-#  define lapack_complex_float Complex32_t
-#  define lapack_complex_double Complex64_t
+//#  undef lapack_complex_float
+//#  undef lapack_complex_double
+//#  define lapack_complex_float Complex32_t
+//#  define lapack_complex_double Complex64_t
 #  include <mkl.h>
 #  include <mkl_types.h>
 #  include <mkl_cblas.h>
-#  include <mkl_lapacke.h>
+//#  include <mkl_lapacke.h>
 #else
 #  error "Blas library undefined"
 #endif

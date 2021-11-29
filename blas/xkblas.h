@@ -397,9 +397,9 @@ extern uint64_t xkblas_elapsedns(void);
 extern double xkblas_elapsedtime(void);
 
 
-#include "xkblas_z.h"
-#include "xkblas_c.h"
-#include "xkblas_d.h"
-#include "xkblas_s.h"
+#include "zxkblas.h"
+#include "cxkblas.h"
+#include "dxkblas.h"
+#include "sxkblas.h"
 
 #endif /* _xkblas_h_ */

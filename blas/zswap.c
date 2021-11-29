@@ -10,8 +10,8 @@
  * @precisions normal z -> s d c
  */
 #include "common.h"
-#include "task_z.h"
-#include "task_z_internal.h"
+#include "ztask.h"
+#include "ztask_internal.h"
 #include <math.h>
 
 

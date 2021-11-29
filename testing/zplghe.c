@@ -38,7 +38,7 @@
 #define RndF_Mul 5.4210108624275222e-20f
 #define RndD_Mul 5.4210108624275222e-20
 
-#if defined(PRECISION_z) || defined(PRECISION_c)
+#if (PRECISION_z==1) || (PRECISION_c==1)
 #define NBELEM   2
 #else
 #define NBELEM   1
@@ -81,7 +81,7 @@ void testing_zplghe(
         for (i = j; i < N; i++) {
             A[j*lda+i] = 0.5f - ran * RndF_Mul;
             ran  = Rnd64_A * ran + Rnd64_C;
-#if defined(PRECISION_z) || defined(PRECISION_c)
+#if (PRECISION_z==1) || (PRECISION_c==1)
             A[j*lda+i] += I*(0.5f - ran * RndF_Mul);
             ran   = Rnd64_A * ran + Rnd64_C;
 #endif
@@ -89,7 +89,7 @@ void testing_zplghe(
     }
 
     for (j = 0; j < N; j++) {
-#if defined(PRECISION_z) || defined(PRECISION_c)
+#if (PRECISION_z==1) || (PRECISION_c==1)
         A[j+j*lda] += bump - I*cimag( A[j+j*lda] );
 #else
         A[j+j*lda] += bump;

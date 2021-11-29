@@ -31,6 +31,7 @@
  Rnd64seed is changed during the matrix generation time.
  */
 #include "xkblas.h"
+#include "ztask_internal.h"
 
 //static unsigned long long int Rnd64seed = 100;
 #define Rnd64_A 6364136223846793005ULL
@@ -38,7 +39,7 @@
 #define RndF_Mul 5.4210108624275222e-20f
 #define RndD_Mul 5.4210108624275222e-20
 
-#if defined(PRECISION_z) || defined(PRECISION_c)
+#if (PRECISION_z==1) || (PRECISION_c==1)
 #define NBELEM   2
 #else
 #define NBELEM   1
@@ -81,7 +82,7 @@ void testing_zplgsy(
         for (i = j; i < N; i++) {
             A[j*lda+i] = 0.5f - ran * RndF_Mul;
             ran  = Rnd64_A * ran + Rnd64_C;
-#if defined(PRECISION_z) || defined(PRECISION_c)
+#if (PRECISION_z==1) || (PRECISION_c==1)
             A[j*lda+i] += I*(0.5f - ran * RndF_Mul);
             ran   = Rnd64_A * ran + Rnd64_C;
 #endif

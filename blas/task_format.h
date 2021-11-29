@@ -173,12 +173,16 @@ static int PNAME(fnc_get_affinity)(
 
 static void PNAME(fnc_get_cost)(
   const kaapi_format_t* fmt, const void* sp, kaapi_task_t* t,
-  double *f, double *d
+  double *f, double* df, double *data
 )
 {
   NAME(Arg) *arg = (NAME(Arg) *)sp;
+#if defined(PRECISION_z)||defined(PRECISION_d)
+  if (df) { *df = TASK_FLOPS; }
+#else
   if (f) { *f = TASK_FLOPS; }
-  if (d) { *d = TASK_DATA; }
+#endif
+  if (data) { *data = TASK_DATA; }
 }
 
 

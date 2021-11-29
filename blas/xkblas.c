@@ -1150,11 +1150,6 @@ int xkblas_init(void)
     else
       printf("[XKBlas] unkown math mode '%s', use default\n", m);
   }
-  kaapi_counter_set_condition( KAAPI_CNT_GEMM_ONTC, xkblas_ismode_math_tc );
-  kaapi_counter_set_condition( KAAPI_CNT_GEMM_NOTONTC, xkblas_ismode_math_tc );
-  kaapi_counter_set_condition( KAAPI_FLOPS_GEMM_ONTC, xkblas_ismode_math_tc );
-  kaapi_counter_set_condition( KAAPI_FLOPS_GEMM_NOTONTC, xkblas_ismode_math_tc );
-
   xkblas_register_task_format();
   kaapi_register_format_writeback();
   kaapi_register_format_invalidate();
@@ -1322,46 +1317,6 @@ int xkblas_finalize(void)
   handle_cpublas = 0;
 
   kaapi_finalize();
-
-#if KAAPI_USE_PERFCOUNTER
-  if (verbose)
-  {
-    /* move final display of counter after terminaison of kaapi and full memory reclamation */
-    if (disphead && getenv("KAAPI_VERBOSE"))
-    {
-      printf("\t total\n");
-      uint64_t spawn_count = 0;
-      double time_count = 0, flops_count = 0;
-      for (kaapi_format_id_t i=0; i<KAAPI_FORMAT_MAX; ++i)
-      {
-        if (cumul.task[i].spawn>0)
-        {
-          printf("\t[%12s]: count=%12li, time=%8e, flops=%10e, ai=%10e bar{ai}=%10e\n",
-            task_names[i],
-            cumul.task[i].spawn,
-            cumul.task[i].time,
-            cumul.task[i].flops,
-            cumul.task[i].ai,
-            cumul.task[i].ai/cumul.task[i].spawn
-          );
-          spawn_count+= cumul.task[i].spawn;
-          time_count+= cumul.task[i].time;
-          flops_count+= cumul.task[i].flops;
-          free(task_names[i]); task_names[i] = 0;
-        } 
-      }
-      printf("\t[%12s]: count=%12li, time=%8e, flops=%10e\n",
-          "sum -->",
-          spawn_count,
-          time_count,
-          flops_count
-      );
-      printf("\t Global counters on GPU(s):\n");
-      kaapi_print_counter();
-      printf("[XKBlas stats]\n");
-    }
-  }
-#endif
 }
 
 

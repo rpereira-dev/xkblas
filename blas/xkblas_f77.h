@@ -55,9 +55,9 @@ typedef double complex Complex64_t;
 typedef double CFloat64_t;
 #endif
 
-#include "xkblas_f77_z.h"
-#include "xkblas_f77_c.h"
-#include "xkblas_f77_d.h"
-#include "xkblas_f77_s.h"
+#include "zxkblas_f77.h"
+#include "cxkblas_f77.h"
+#include "dxkblas_f77.h"
+#include "sxkblas_f77.h"
 
 #endif /* _xkblas_f77_h_ */
