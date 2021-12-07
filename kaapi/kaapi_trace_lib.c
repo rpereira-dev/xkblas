@@ -127,7 +127,7 @@ const char* kaapi_event_name[]
 /*10 */  "PerfCounter",
 /*11 */  "TaskPerfCntr",
 /*12 */  "PerUncore",
-/*13 */  "Yield",
+/*13 */  "Call",
 /*14 */  "Loop",
 /*15 */  "Energy"
 };
@@ -188,9 +188,11 @@ int kaapi_event_get_name( int8_t evtno, int8_t kind, char* buffer, int ssize)
     else if (kind==1) kindstr = "End";
     else if (kind==2) kindstr = "Switch"; /* for evt_perfcounter*/
     break;
-  case KAAPI_EVT_YIELD:
+  case KAAPI_EVT_CALL:
     if (kind==0) kindstr = "Begin";
     else if (kind==1) kindstr = "End";
+    else if (kind==2) kindstr = "info";
+    else if (kind==3) kindstr = "info";
     break;
   case KAAPI_EVT_LOOP:
     break;
@@ -210,12 +212,12 @@ int kaapi_event_get_name( int8_t evtno, int8_t kind, char* buffer, int ssize)
 typedef struct {
   const char*            name;         /* human readable */
   const char*            cmdlinename;  /* command line name */
-  int                    eventcode;
-  int                    ns2s;         /* 1 iff need conversion ns -> s when displayed */
-  int                    opaccum;      /* 0 = add, 1=max */
-  uint32_t               type;
+  uint8_t                eventcode;
+  uint8_t                ns2s;         /* 1 iff need conversion ns -> s when displayed */
+  uint8_t                opaccum;      /* 0 = add, 1=max */
+  uint8_t                kind;
+  uint8_t                ctype;
   char                   unit;
-  void*                  ctxt;
   const char*            helpstring;
   kaapi_perf_counter_t  (*reader)(void*arg);
   void*                   arg_reader;
@@ -233,76 +235,6 @@ typedef struct {
       B: -> Bytes
 */
 kaapi_perfctr_info_t kaapi_perfctr_info[KAAPI_PERF_ID_MAX] = {
-                                        /* evt ns2s accum type unit  ctxt help */
-/* 0 */  { "WorkCPU",       "WORK_CPU",      0,   1,   0,   0,   's',  0, "" },
-/* 1 */  { "WorkGPU",       "WORK_GPU",      0,   1,   0,   0,   's',  0, "" },
-/* 2 */  { "Tidle",         "TIDLE",         0,   1,   0,   0,   's',  0, "" },
-/* 3 */  { "TInf",          "TINF",          0,   1,   1,   0,   's',  0, "<not implemented>" },
-/* 4 */  { "TaskSpawn",     "TASKSPAWN",     0,   1,   0,   0,   '#',  0, "" },
-/* 5 */  { "TaskStartExec", "TASKSTARTEXEC", 0,   1,   0,   0,   '#',  0, "" },
-/* 6 */  { "TaskExec",      "TASKEXEC",      0,   1,   0,   0,   '#',  0, "" },
-/* 7 */  { "TaskSteal",     "TASKSTEAL",     0,   1,   0,   0,   '#',  0, "" },
-
-/* 8 */  { "StealReq",      "STEALREQ",      0,   1,   0,   0,   '#',  0, "" },
-/* 9 */  { "StealReqOk",    "STEALREQOK",    0,   1,   0,   0,   '#',  0, "" },
-/* 10 */ { "StealOp",       "STEALOP",       0,   1,   0,   0,   '#',  0, "" },
-/* 11 */ { "Sync",          "SYNC",          0,   1,   0,   0,   '#',  0, "" },
-/* 12 */ { "GPUAlloc",      "GPUALLOC",      0,   1,   0,   0,   'B',  0, "" },
-/* 13 */ { "GPUFree",       "GPUFREE",       0,   1,   0,   0,   'B',  0, "" },
-/* 14 */ { "CPY_H2H",       "CPYH2H",        0,   1,   0,   0,   'B',  0, "" },
-/* 15 */ { "CPY_H2D",       "CPYH2D",        0,   1,   0,   0,   'B',  0, "" },
-/* 16 */ { "CPY_D2H",       "CPYD2H",        0,   1,   0,   0,   'B',  0, "" },
-/* 17 */ { "CPY_D2D",       "CPYD2D",        0,   1,   0,   0,   'B',  0, "" },
-/* 18 */ { "CacheHit",      "CACHE_HIT",     0,   1,   0,   0,   '#',  0, "" },
-/* 19 */ { "CacheMiss",     "CACHE_MISS",    0,   1,   0,   0,   '#',  0, "" },
-/* 20 */ { "ByteCacheHit",  "CACHE_HIT_B",   0,   1,   0,   0,   'B',  0, "" },
-/* 21 */ { "ByteCacheMiss", "CACHE_MISS_B",  0,   1,   0,   0,   'B',  0, "" },
-
-/* 22 */ { "CPUFlops",      "CPU_FLOPS",     0,   1,   0,   0,   '#',  0, "" },
-/* 23 */ { "CPUDFlops",     "CPU_DFLOPS",    0,   1,   0,   0,   '#',  0, "" },
-/* 24 */ { "GPUFlops",      "GPU_FLOPS",     0,   1,   0,   0,   '#',  0, "" },
-/* 25 */ { "GPUDFlops",     "GPU_DFLOPS",    0,   1,   0,   0,   '#',  0, "" },
-/* 26 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 27 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-
-/* 28 */ { "ReorderHit",    "REORDER_HIT",   0,   1,   0,   0,   '#',  0, "" },
-/* 29 */ { "ReorderMiss",   "REORDER_MISS",  0,   1,   0,   0,   '#',  0, "" },
-/* 30 */ { "ReorderMissLen","REORDER_MISS_LEN",0, 1,   0,   0,   '#',  0, "" },
-
-/* 31 */ { "LocalRead",     "LOCAL_READ",    0,   1,   0,   0,   'B',  0, "" },
-/* 32 */ { "LocalWrite",    "LOCAL_WRITE",   0,   1,   0,   0,   'B',  0, "" },
-/* 33 */ { "RemoteRead",    "REMOTE_READ",   0,   1,   0,   0,   'B',  0, "" },
-/* 34 */ { "RemoteWrite",   "REMOTE_WRITE",  0,   1,   0,   0,   'B',  0, "" },
-/* 35 */ { "DFGBuild",      "DFGBUILD",      0,   1,   0,   0,   's',  0, "" },
-/* 36 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 37 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 38 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 39 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 40 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 41 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 42 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 43 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 44 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 45 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 46 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 47 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 48 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 49 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 50 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 51 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 52 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 53 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 54 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 55 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 56 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 57 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 58 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 59 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 60 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 61 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 62 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" },
-/* 63 */ { "",              "",              0,   0,   0,   0,   ' ',  0, "" }
-=======
                                         /* evt ns2s accum kind ctype unit   help */
 /* 0 */  { "WorkCPU",       "WORK_CPU",      0,   1,   0,   0,   0,   's',  "<not yet implemented>" },
 /* 1 */  { "WorkGPU",       "WORK_GPU",      0,   1,   0,   0,   0,   's',  "<not yet implemented>" },
@@ -372,7 +304,6 @@ kaapi_perfctr_info_t kaapi_perfctr_info[KAAPI_PERF_ID_MAX] = {
 /* 61 */ { "",              "",              0,   0,   0,   0,   0,   ' ',  "" },
 /* 62 */ { "",              "",              0,   0,   0,   0,   0,   ' ',  "" },
 /* 63 */ { "",              "",              0,   0,   0,   0,   0,   ' ',  "" }
->>>>>>> a0859b0 (Make files compile)
 };
 
 /*
@@ -559,6 +490,8 @@ static const char* _get_group( int event)
 {
   if (KAAPI_EVT_MASK(event) & KAAPI_EVT_MASK_COMPUTE)
     return "COMPUTE";
+  if (KAAPI_EVT_MASK(event) & KAAPI_EVT_MASK_CALL)
+    return "CALL";
   if (KAAPI_EVT_MASK(event) & KAAPI_EVT_MASK_SCHED)
     return "SCHED";
 #if KAAPI_USE_PERFCOUNTER==1
@@ -646,11 +579,15 @@ static void _kaapi_print_help(void)
 
   fprintf(stdout,
    "<eventlist>: is a list (separator ',') of event name of groups of events.\n"
-   "    Predefined groups are COMPUTE|PERFCTR|OFFLOAD|SCHED\n"
+   "    Predefined groups are COMPUTE|CALL|PERFCTR|OFFLOAD|SCHED\n"
   );
   fprintf(stdout,"\t%16.16s: %s", "COMPUTE",
      "related to all events concerning task executions.\n"
      "\t                  This group is enough to build data flow graph from the trace.\n"
+  );
+  fprintf(stdout,"\t%16.16s: %s", "CALL",
+     "related to all events concerning call to xkblas routines.\n"
+     "\t                  This group is mandatory to evaluate performance of blas routines.\n"
   );
 #if KAAPI_USE_PERFCOUNTER==1
   fprintf(stdout,"\t%16.16s: %s", "PERFCTR",
@@ -806,8 +743,9 @@ int kaapi_tracelib_init(
       uint64_t mask = 0;
       char* name = getenv("KAAPI_RECORD_MASK");
       bool err = kaapi_parse_listkeywords( &mask, &name, ',',
-         4,
+         5,
            "COMPUTE", (uint64_t)KAAPI_EVT_MASK_COMPUTE,
+           "CALL",    (uint64_t)KAAPI_EVT_MASK_CALL,
            "SCHED",   (uint64_t)KAAPI_EVT_MASK_SCHED,
 /* parse perfctr event masks even if support is not defined */
            "PERFCTR", (uint64_t)KAAPI_EVT_MASK_PERFCOUNTER,
@@ -1623,7 +1561,6 @@ kaapi_perf_id_t kaapi_tracelib_create_user_perfid(
   kaapi_perfctr_info[id].ctype = code_ctype;
   kaapi_perfctr_info[id].unit = unit;
   kaapi_perfctr_info[id].helpstring = 0;
->>>>>>> a0859b0 (Make files compile)
   kaapi_perfctr_info[id].reader = read;
   kaapi_perfctr_info[id].arg_reader = ctxt;
   return id;
@@ -1670,7 +1607,7 @@ static int kaapi_get_events(
 
   while (*s)
   {
-    uint32_t type = 0;
+    uint8_t type = 0;
 
     for (j = 0; j < (sizeof(name) - 1) && *s && (*s != ','); ++s, ++j)
       name[j] = *s;
@@ -1795,7 +1732,7 @@ int get_kaapi_code( char* name )
 }
 
 /* any update in this list of event => update README.envvars */
-static int get_event_code(char* name, int* code, uint32_t* type)
+static int get_event_code(char* name, int* code, uint8_t* type)
 {
   *code = -1;
   if (strncasecmp(name, "PAPI", 4) !=0)

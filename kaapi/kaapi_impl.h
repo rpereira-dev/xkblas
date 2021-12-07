@@ -75,7 +75,7 @@ BUG: if set to 0 / PIPELINE set to 0 => deadlock
 
 /* To activate or not the loadbalancing between GPUs
 */
-#define KAAPI_WS_GPUTASK 0
+#define KAAPI_WS_GPUTASK 1
 
 /* use pipeline to order task insertions, communications and kernel launchs
    else only the number of inserted tasks + pending tasks in the stream is limited
@@ -108,6 +108,9 @@ BUG: if set to 0 / PIPELINE set to 0 => deadlock
 */
 #define KAAPI_COMPILE_SOURCE 1
 
+#ifndef KAAPI_CACHE_LINE_SIZE
+#define KAAPI_CACHE_LINE_SIZE 64
+#endif
 
 #if defined(KAAPI_DEBUG)
 #define KAAPI_RETURN_ERROR(err,val) \
@@ -124,13 +127,46 @@ BUG: if set to 0 / PIPELINE set to 0 => deadlock
 
 #include <errno.h>  // error code
 #include <stdlib.h> // free, malloc
+#include <stdint.h> 
 
+
+/* Fwd
+*/
+struct kaapi_context; 
+typedef struct kaapi_context kaapi_context_t;  
+
+
+/* Definition of parameters for the runtime system
+*/
+typedef struct kaapi_rtparam_t {
+  size_t                stackblocsize;      /* default stack bloc size */
+  uint8_t               sys_ncpus;          /* number of CPU plugged to this node */
+  uint8_t               ncpus;              /* number of CPU for this node */
+  uint8_t               sys_ngpus;          /* number of GPU plugged to this node */
+  uint8_t               ngpus;              /* number of GPU for this node */
+  uint32_t              gpu_set;            /* GPU to use */
+  double                cuda_cache_factor;  /* percent of total free memory used by cache */
+  uint16_t              cuda_stream_capacity;  /* capacity of input stream */
+  uint8_t               cuda_conc_stream_kernel;/* number of concurrent cuda kernel stream per device*/
+  uint8_t               cuda_conc_kernel;  /* number of pending kernel per kernel stream */
+  uint8_t               cuda_conc_h2d;     /* number of concurrent cuda h2d stream per device*/
+  uint8_t               cuda_conc_d2h;     /* number of concurrent cuda d2h stream per device*/
+  uint8_t               cuda_conc_d2d;     /* number of concurrent cuda d2d stream per device*/
+  float                 cuda_cache_limit;  /* percent reserved for cache */
+} kaapi_rtparam_t;
+
+extern kaapi_rtparam_t kaapi_default_param;
+
+
+/* Here include */
 #include "kaapi.h"
 #include "kaapi_atomic.h"
 #include "kaapi_hashmap.h"
 #include "kaapi_format.h"
-#include "kaapi_offload_stream.h"
+#include "kaapi_offload_datatype.h"
 #include "kaapi_memory.h"
+#include "kaapi_offload_stream.h"
+#include "kaapi_offload.h"
 #include "kaapi_perfctr.h"
 #include "kaapi_trace.h"
 
@@ -183,26 +219,6 @@ struct kaapi_queue;
 /* steal request header */
 struct kaapi_header_request_t;
 
-/* Definition of parameters for the runtime system
-*/
-typedef struct kaapi_rtparam_t {
-  size_t                stackblocsize;      /* default stack bloc size */
-  uint8_t               sys_ncpus;          /* number of CPU plugged to this node */
-  uint8_t               ncpus;              /* number of CPU for this node */
-  uint8_t               sys_ngpus;          /* number of GPU plugged to this node */
-  uint8_t               ngpus;              /* number of GPU for this node */
-  uint32_t              gpu_set;            /* GPU to use */
-  double                cuda_cache_factor;  /* percent of total free memory used by cache */
-  uint16_t              cuda_stream_capacity;  /* capacity of input stream */
-  uint8_t               cuda_conc_stream_kernel;/* number of concurrent cuda kernel stream per device*/
-  uint8_t               cuda_conc_kernel;  /* number of pending kernel per kernel stream */
-  uint8_t               cuda_conc_h2d;     /* number of concurrent cuda h2d stream per device*/
-  uint8_t               cuda_conc_d2h;     /* number of concurrent cuda d2h stream per device*/
-  uint8_t               cuda_conc_d2d;     /* number of concurrent cuda d2d stream per device*/
-  float                 cuda_cache_limit;  /* percent reserved for cache */
-} kaapi_rtparam_t;
-
-extern kaapi_rtparam_t kaapi_default_param;
 
 /** Initialize specific format for some task
 */
@@ -260,9 +276,6 @@ typedef struct {
 
 /* Barrier
 */
-#ifndef KAAPI_CACHE_LINE_SIZE
-#define KAAPI_CACHE_LINE_SIZE 64
-#endif
 #define KAAPI_BAR_CYCLES 3
 struct kaapi_barrier {
   kaapi_atomic_t cycle __attribute__ ((aligned (KAAPI_CACHE_LINE_SIZE)));

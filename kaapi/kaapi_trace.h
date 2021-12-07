@@ -113,6 +113,7 @@ typedef union {
     uint32_t  i32[2];
     uint16_t  i16[4];
     uint8_t   i8[8];
+    char      c8[8];
 } kaapi_event_data_t;
 
 
@@ -178,15 +179,19 @@ typedef struct kaapi_event_t {
 #define KAAPI_EVT_STEAL_REQUEST      6     /* when k-processor begin to process requests, data=victim.id */
 
 #define KAAPI_EVT_OFFLOAD_CPY        7     /* data transfer: kind: 0 (push into stream), 1(begin), 2(end),
-                                              d0: src, d1: dest, d2: size, d3: 0(H2H), 1(H2D), 2(D2H), 3(D2D) */
+                                              d0: id, d1.i32[0]: src kid, d1.i32[1]: dest kid, d2: size, d3.i8[0]: 0(H2H), 1(H2D), 2(D2H), 3(D2D), d3.i8[1]: stream id
+                                              Event for begin and end only requires 1 data (the id)
+                                           */
 #define KAAPI_EVT_OFFLOAD_KERN       8     /* kernel exec: kind: 0 (push into stream), 1(begin), 2(end),
-                                              d0: task arg pointer, d1: fmtid, d2: task arg */
+                                              d0: id: d1: task, d2: fmtid, d3.i8[0]: stream id
+                                              Event for begin and end only requires 1 data (the task)
+                                              */
 #define KAAPI_EVT_TASKSYNC           9     /* sched_sync: kind: 0(begin), 1(end) */
 #define KAAPI_EVT_PERFCOUNTER        10    /* format <perf id (0, 1, 2..)>, <value> */
 #define KAAPI_EVT_TASK_PERFCOUNTER   11    /* d0=task; d1.i8[0..2]: perf counter id; d2, d3: values */
                                            /* several KAAPI_EVT_TASK_PERFCOUNTER may follow KAAPI_EVT_TASK_END */
 #define KAAPI_EVT_PERF_UNCORE        12    /* d0.i8[0]: number of uncore events in the record, d0.i8[1]..i8[3]: ids of uncore events in perfset d1,d2,d3: event counters  */
-#define KAAPI_EVT_YIELD              13    /* i0[] = 1 iff beg, = 0 iff end */
+#define KAAPI_EVT_CALL               13    /* kind: 0(begin), 1(end), 2(info), 3(info). If begin: c8[0..7]: name, d1,d2,d3: param */
 #define KAAPI_EVT_LOOP               14    /* kind: 0(begin), 1(end), 2(next); d0.i8[0]: sched type, d0.i32[1]: workshareid; if kind=0 or 2, d1: ub, d2: lb, d3 stride */
 #define KAAPI_EVT_ENERGY             15    /* */
 
@@ -213,15 +218,19 @@ typedef uint64_t kaapi_event_mask_type_t;
     (  KAAPI_EVT_MASK(KAAPI_EVT_TASK_EXEC) \
      | KAAPI_EVT_MASK(KAAPI_EVT_TASK_INFO) \
      | KAAPI_EVT_MASK(KAAPI_EVT_TASK_USERATTR) \
-     | KAAPI_EVT_MASK(KAAPI_EVT_OFFLOAD_KERN) \
+     | KAAPI_EVT_MASK(KAAPI_EVT_TASKSYNC) \
+     | KAAPI_EVT_MASK(KAAPI_EVT_CALL) \
     )
     
+#define KAAPI_EVT_MASK_CALL \
+    (  KAAPI_EVT_MASK(KAAPI_EVT_CALL) \
+     | KAAPI_EVT_MASK(KAAPI_EVT_TASKSYNC) \
+    )
 
 #define KAAPI_EVT_MASK_SCHED \
     (  KAAPI_EVT_MASK(KAAPI_EVT_SCHED) \
      | KAAPI_EVT_MASK(KAAPI_EVT_STEAL_REQUEST) \
      | KAAPI_EVT_MASK(KAAPI_EVT_TASKSYNC) \
-     | KAAPI_EVT_MASK(KAAPI_EVT_YIELD) \
     )
 
 #define KAAPI_EVT_MASK_ENERGY \
@@ -309,7 +318,7 @@ typedef struct kaapi_tracelib_thread_t {
 #if KAAPI_USE_PERFCOUNTER==1
   int                      papi_event_set;
   unsigned int	           papi_event_count;
-  kaapi_perf_idset_t	   papi_event_mask;
+  kaapi_perf_idset_t	     papi_event_mask;
 #endif
 } __attribute__((aligned (KAAPI_CACHE_LINE))) kaapi_tracelib_thread_t;
 
@@ -628,7 +637,6 @@ static inline kaapi_event_buffer_t* kaapi_event_push(
 {
   kaapi_event_buffer_t* evb = kproc->eventbuffer;
   evb->pos++;
-
   if (evb->pos == KAAPI_EVENT_BUFFER_SIZE)
     evb = kproc->eventbuffer = kaapi_event_flushbuffer(evb);
   return evb;
@@ -896,7 +904,7 @@ unsigned int kaapi_perf_idset_empty(const kaapi_perf_idset_t* set)
 
 #else // #if KAAPI_USE_TRACELIB==1
 #define KAAPI_IFUSE_TRACE(kproc,inst)
-#define KAAPI_EVENT_GET(kproc, eventno, kind )
+#define KAAPI_EVENT_GET(kproc, eventno, kind ) 0
 #define KAAPI_EVENT_PUSH(kproc, eventno )
 
 #define KAAPI_EVENT_PUSH0(kproc, eventno, kind )

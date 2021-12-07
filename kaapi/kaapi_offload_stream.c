@@ -42,7 +42,8 @@
 #include <stdio.h>
 #include <errno.h>
 
-
+kaapi_atomic64_t offload_ker_id = {0};
+kaapi_atomic64_t offload_cpy_id = {0};
 
 static char* name_io[] __attribute__((unused)) = {
   "IO_NOP",
@@ -146,45 +147,44 @@ int kaapi_offload_stream_init(
 
   prefix[KAAPI_IO_STREAM_H2D] = 0;
   cnt += (s->count[KAAPI_IO_STREAM_H2D]  = kaapi_default_param.cuda_conc_h2d);
-  prefix[KAAPI_IO_STREAM_KERN] = cnt;
-  cnt += (s->count[KAAPI_IO_STREAM_KERN] = kaapi_default_param.cuda_conc_stream_kernel);
   prefix[KAAPI_IO_STREAM_D2H] = cnt;
   cnt += (s->count[KAAPI_IO_STREAM_D2H]  = kaapi_default_param.cuda_conc_d2h);
 #if KAAPI_USE_STREAM_D2D
   prefix[KAAPI_IO_STREAM_D2D] = cnt;
   cnt += (s->count[KAAPI_IO_STREAM_D2D]  = kaapi_default_param.cuda_conc_d2d);
-  prefix[KAAPI_IO_STREAM_D2D+1] = cnt;
-#else
-  prefix[KAAPI_IO_STREAM_D2H+1] = cnt;
 #endif
+  prefix[KAAPI_IO_STREAM_KERN] = cnt;
+  cnt += (s->count[KAAPI_IO_STREAM_KERN] = kaapi_default_param.cuda_conc_stream_kernel);
+  prefix[KAAPI_IO_STREAM_KERN+1] = cnt;
 
   KAAPI_ATOMIC_WRITE(&s->next[KAAPI_IO_STREAM_D2H], 0);
-  KAAPI_ATOMIC_WRITE(&s->next[KAAPI_IO_STREAM_KERN], 0);
   KAAPI_ATOMIC_WRITE(&s->next[KAAPI_IO_STREAM_H2D], 0);
 #if KAAPI_USE_STREAM_D2D
   KAAPI_ATOMIC_WRITE(&s->next[KAAPI_IO_STREAM_D2D], 0);
 #endif
+  KAAPI_ATOMIC_WRITE(&s->next[KAAPI_IO_STREAM_KERN], 0);
   s->ios[0] = ios = (kaapi_io_stream_t**)malloc(sizeof(kaapi_io_stream_t*) * cnt );
   kaapi_assert( s->ios[0]!= 0 );
-  s->ios[KAAPI_IO_STREAM_H2D] = s->ios[0]+prefix[KAAPI_IO_STREAM_H2D];
-  s->ios[KAAPI_IO_STREAM_KERN] = s->ios[0]+prefix[KAAPI_IO_STREAM_KERN];
+  s->ios[KAAPI_IO_STREAM_H2D]  = s->ios[0]+prefix[KAAPI_IO_STREAM_H2D];
   s->ios[KAAPI_IO_STREAM_D2H]  = s->ios[0]+prefix[KAAPI_IO_STREAM_D2H];
 #if KAAPI_USE_STREAM_D2D
   s->ios[KAAPI_IO_STREAM_D2D]  = s->ios[0]+prefix[KAAPI_IO_STREAM_D2D];
 #endif
+  s->ios[KAAPI_IO_STREAM_KERN] = s->ios[0]+prefix[KAAPI_IO_STREAM_KERN];
 
   for (i = 0; i<cnt; ++i)
   {
     kaapi_io_stream_type_t type =
-        i < prefix[KAAPI_IO_STREAM_KERN] ? KAAPI_IO_STREAM_H2D :
-        i < prefix[KAAPI_IO_STREAM_D2H] ? KAAPI_IO_STREAM_KERN :
+        i < prefix[KAAPI_IO_STREAM_D2H] ? KAAPI_IO_STREAM_H2D :
+        i < prefix[KAAPI_IO_STREAM_D2D] ? KAAPI_IO_STREAM_D2H :
 #if KAAPI_USE_STREAM_D2D
-        i < prefix[KAAPI_IO_STREAM_D2D] ? KAAPI_IO_STREAM_D2H : KAAPI_IO_STREAM_D2D
+        i < prefix[KAAPI_IO_STREAM_KERN] ? KAAPI_IO_STREAM_D2D : KAAPI_IO_STREAM_KERN
 #else
-          KAAPI_IO_STREAM_D2H
+          KAAPI_IO_STREAM_KERN
 #endif
     ;
     ios[i]  = s->f_stream_alloc( device, type, capacity );
+    ios[i]->sid = i;
     kaapi_assert( ios[i] != 0 );
     ios[i]->stream = s;
 //printf("%i:: init stream %i type: %s\n", device->ld->ldid, i, 
@@ -206,11 +206,10 @@ int kaapi_offload_stream_destroy(
   KAAPI_OFFLOAD_TRACE_IN
   unsigned int cnt = stream->count[KAAPI_IO_STREAM_D2H]+
                      stream->count[KAAPI_IO_STREAM_H2D]+
-                     stream->count[KAAPI_IO_STREAM_KERN]
 #if KAAPI_USE_STREAM_D2D
-                     +stream->count[KAAPI_IO_STREAM_D2D]
+                     stream->count[KAAPI_IO_STREAM_D2D]+
 #endif
-;
+                     stream->count[KAAPI_IO_STREAM_KERN];
   unsigned int i;
 
   for (i = 0; i<cnt; ++i)
@@ -234,11 +233,10 @@ void kaapi_offload_print_stream_info(kaapi_offload_stream_t* stream)
   unsigned int i;
   unsigned int cnt = stream->count[KAAPI_IO_STREAM_D2H]+
                      stream->count[KAAPI_IO_STREAM_H2D]+
-                     stream->count[KAAPI_IO_STREAM_KERN]
 #if KAAPI_USE_STREAM_D2D
-                     +stream->count[KAAPI_IO_STREAM_D2D]
+                     stream->count[KAAPI_IO_STREAM_D2D]+
 #endif
-;
+                     stream->count[KAAPI_IO_STREAM_KERN];
 
   for (i = 0; i<cnt; ++i)
   {
@@ -331,10 +329,10 @@ int kaapi_offload_stream_size(
   int s = 0;
   kaapi_assert((stype == KAAPI_IO_STREAM_D2H)
             || (stype == KAAPI_IO_STREAM_H2D)
-            || (stype == KAAPI_IO_STREAM_KERN)
 #if KAAPI_USE_STREAM_D2D
             || (stype == KAAPI_IO_STREAM_D2D)
 #endif
+            || (stype == KAAPI_IO_STREAM_KERN) 
             || (stype == KAAPI_IO_STREAM_ALL));
 
   kaapi_io_stream_type_t deb;
@@ -366,10 +364,10 @@ int kaapi_offload_stream_sizepending(
   int s = 0;
   kaapi_assert((stype == KAAPI_IO_STREAM_D2H)
             || (stype == KAAPI_IO_STREAM_H2D)
-            || (stype == KAAPI_IO_STREAM_KERN)
 #if KAAPI_USE_STREAM_D2D
             || (stype == KAAPI_IO_STREAM_D2D)
 #endif
+            || (stype == KAAPI_IO_STREAM_KERN)
             || (stype == KAAPI_IO_STREAM_ALL));
 
   kaapi_io_stream_type_t deb;
@@ -416,6 +414,144 @@ int kaapi_offload_stream_isempty(
   return 1;
 }
 
+
+/*
+*/
+void kaapi_stream_insert_io_task_inst(
+    kaapi_offload_stream_t* stream,
+    kaapi_io_stream_type_t  stype,
+    kaapi_task_t*           task,
+    kaapi_io_cbk_fnc_t      fnc,
+    void*                   arg0,
+    void*                   arg1,
+    void*                   arg2
+)
+{ 
+  KAAPI_OFFLOAD_TRACE_IN
+  
+#if KAAPI_USE_PERFCOUNTER 
+  double t0 = kaapi_get_elapsedtime();
+#endif
+  kaapi_io_stream_t* ios;
+  kaapi_io_instruction_t* inst = kaapi_offload_stream_push( stream, stype, &ios );
+
+#if KAAPI_USE_TRACELIB==1
+  {
+    inst->inst.k_io.reserved = KAAPI_ATOMIC_INCR(&offload_ker_id);
+    kaapi_context_t* ctxt =kaapi_self_context();
+    kaapi_event_t* evt = KAAPI_EVENT_GET(&ctxt->kproc, KAAPI_EVT_OFFLOAD_KERN, 0 /*push*/ );
+    if (evt)
+    {
+      evt->u.s.d0.u = inst->inst.k_io.reserved;
+      evt->u.s.d1.p = task;
+      evt->u.s.d2.u = kaapi_task_getformat_ref(task)->fmtid;
+      evt->u.s.d3.i8[0] = ios->sid;
+      KAAPI_EVENT_PUSH(&kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_KERN);
+    }
+  }
+#endif
+
+#if KAAPI_DEBUG
+  kaapi_assert_debug( ios != 0 );
+  kaapi_assert_debug( inst ==  &ios->instr[ios->pos_w % ios->count] );
+  kaapi_assert_debug( ios->mutex._owner == pthread_self());
+#endif
+  
+  inst->type = KAAPI_IO_KERN;
+  inst->inst.k_io.fnc   = fnc;
+  inst->inst.l_io.arg[0]= arg0;
+  inst->inst.l_io.arg[1]= arg1;
+  inst->inst.l_io.arg[2]= arg2;
+  inst->inst.k_io.task  = task;
+#if KAAPI_USE_PERFCOUNTER
+  inst->t0 = t0;
+  inst->t1 =0;
+  inst->t2 =0;
+  inst->t3 =0;
+#endif
+
+  kaapi_offload_stream_commit( stream, stype, ios );
+
+#if KAAPI_DEBUG
+  kaapi_assert_debug( ios->mutex._owner != pthread_self() );
+#endif
+  KAAPI_OFFLOAD_TRACE_OUT
+}
+
+
+/*
+*/
+void kaapi_stream_insert_io_copy_inst(
+    kaapi_offload_stream_t*    stream,
+    kaapi_io_stream_type_t     stype,
+    kaapi_io_type_t            io_type,
+    kaapi_io_copy_priority_t   prio,
+    const void*                src,
+    const kaapi_memory_view_t* view_src,
+    kaapi_memory_device_t*     dev_src,
+    void*                      dest,
+    const kaapi_memory_view_t* view_dest,
+    kaapi_memory_device_t*     dev_dest,
+    kaapi_io_cbk_fnc_t         fnc,
+    void*                      arg0,
+    void*                      arg1,
+    void*                      arg2
+)
+{
+  KAAPI_OFFLOAD_TRACE_IN
+  kaapi_assert_debug( (io_type >=KAAPI_IO_COPY_H2H) && (io_type <= KAAPI_IO_COPY_D2D));
+  kaapi_assert( kaapi_memory_view_size(view_src) == kaapi_memory_view_size(view_dest));
+  kaapi_assert_debug( (io_type !=KAAPI_IO_COPY_D2D)|| (kaapi_memory_view_iscontiguous(view_src) &&  kaapi_memory_view_iscontiguous(view_src)) );
+  kaapi_assert_debug( (io_type !=KAAPI_IO_COPY_H2D)|| kaapi_memory_view_iscontiguous(view_dest) );
+  kaapi_assert_debug( (io_type !=KAAPI_IO_COPY_D2H)|| kaapi_memory_view_iscontiguous(view_src) );
+  kaapi_assert_debug( (io_type !=KAAPI_IO_COPY_D2H)|| kaapi_memory_view_iscontiguous(view_src) );
+
+  kaapi_io_stream_t* ios;
+  kaapi_io_instruction_t* inst
+    = kaapi_offload_stream_push( stream, stype, &ios );
+
+#if KAAPI_DEBUG
+  kaapi_assert_debug( ios != 0 );
+  kaapi_assert_debug( ios->mutex._owner == pthread_self());
+#endif
+#if KAAPI_USE_TRACELIB==1
+  {
+    int kid_src  = dev_src->device->device_id;
+    int kid_dest = dev_dest->device->device_id;
+    inst->inst.c_io.reserved = KAAPI_ATOMIC_INCR(&offload_cpy_id);
+    kaapi_context_t* ctxt =kaapi_self_context();
+    kaapi_event_t* evt = KAAPI_EVENT_GET(&ctxt->kproc, KAAPI_EVT_OFFLOAD_CPY, 0 /*push*/ );
+    if (evt)
+    {
+      evt->u.s.d0.u = inst->inst.c_io.reserved;
+      evt->u.s.d1.i32[0] = kid_src;
+      evt->u.s.d1.i32[1] = kid_dest;
+      evt->u.s.d2.u = kaapi_memory_view_size( view_src );
+      evt->u.s.d3.i8[0] = io_type - KAAPI_IO_COPY_H2H; /* see kaapi_trace.h KAAPI_EVT_OFFLOAD_CPY */
+      evt->u.s.d3.i8[1] = ios->sid;
+      KAAPI_EVENT_PUSH(&ctxt->kproc, KAAPI_EVT_OFFLOAD_CPY);
+    }
+  }
+#endif
+
+  inst->type = io_type;
+  inst->inst.c_io.fnc   = fnc;
+  inst->inst.l_io.arg[0]= arg0;
+  inst->inst.l_io.arg[1]= arg1;
+  inst->inst.l_io.arg[2]= arg2;
+  inst->inst.c_io.prio  = prio;
+  inst->inst.c_io.src   = src;
+  inst->inst.c_io.view_src  = view_src;
+  inst->inst.c_io.dev_src  = dev_src;
+  inst->inst.c_io.dest  = dest;
+  inst->inst.c_io.view_dest = view_dest;
+  inst->inst.c_io.dev_dest  = dev_dest;
+  kaapi_offload_stream_commit( stream, stype, ios );
+#if KAAPI_DEBUG
+  kaapi_assert_debug( ios->mutex._owner != pthread_self() );
+#endif
+  KAAPI_OFFLOAD_TRACE_OUT
+}
 
 
 /*

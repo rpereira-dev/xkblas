@@ -109,9 +109,7 @@ static void callback_epilogue(
 
   KAAPI_ATOMIC_INCR(&device->cnt_exec);
   KAAPI_ATOMIC_DECR(&device->cnt_ready);
-  KAAPI_EVENT_PUSH3( &device->ctxt->kproc, KAAPI_EVT_OFFLOAD_KERN,
-       2 /* end */, task, kaapi_task_getformat_ref(task)->fmtid, kaapi_task_getargs(task) );
-  KAAPI_EVENT_PUSH3( &device->ctxt->kproc, KAAPI_EVT_TASK_EXEC,
+  KAAPI_EVENT_PUSH3( &kaapi_self_context()->kproc, KAAPI_EVT_TASK_EXEC,
        3 /* end */, task, kaapi_task_getformat_ref(task)->fmtid, kaapi_task_getargs(task) );
   
   /* update the finish index for the current tasks and all next task that may have finish earlier */
@@ -236,8 +234,6 @@ static void callback_set_valid(
     KAAPI_ATOMIC_INCR(&device->cnt_ready);
     KAAPI_ATOMIC_DECR(&device->cnt_pending);
 #if KAAPI_PIPELINE_GPUTASK ==0
-    KAAPI_EVENT_PUSH3( &device->ctxt->kproc, KAAPI_EVT_OFFLOAD_KERN,
-         0 /* push into stream */, task, kaapi_task_getformat_ref(task)->fmtid, kaapi_task_getargs(task) );
     kaapi_stream_insert_io_task_inst(
       &device->stream,
       KAAPI_IO_STREAM_KERN,
@@ -259,8 +255,6 @@ static void callback_set_valid(
 # if KAAPI_REORDER_TASK_EXEC
   if (wc ==0)
   {
-    KAAPI_EVENT_PUSH3( &device->ctxt->kproc, KAAPI_EVT_OFFLOAD_KERN,
-         0 /* push into stream */, task, kaapi_task_getformat_ref(task)->fmtid, kaapi_task_getargs(task) );
     kaapi_stream_insert_io_task_inst(
       &device->stream,
       KAAPI_IO_STREAM_KERN,
@@ -302,8 +296,6 @@ static void callback_set_valid(
 #  if KAAPI_LOG_PIPE
       printf("Task[%i]=%p insert into stream\n",index, task);
 #  endif
-      KAAPI_EVENT_PUSH3( &device->ctxt->kproc, KAAPI_EVT_OFFLOAD_KERN,
-           0 /* push into stream */, task, kaapi_task_getformat_ref(task)->fmtid, kaapi_task_getargs(task) );
       kaapi_stream_insert_io_task_inst(
         &device->stream,
         KAAPI_IO_STREAM_KERN,
@@ -340,10 +332,8 @@ int kaapi_offload_device_execute_task(
 #if KAAPI_DEBUG
   kaapi_assert( task->device ==device );
 #endif
-  KAAPI_EVENT_PUSH3( &ctxt->kproc, KAAPI_EVT_TASK_EXEC,
+  KAAPI_EVENT_PUSH3( &kaapi_self_context()->kproc, KAAPI_EVT_TASK_EXEC,
      2 /* begin */, task, kaapi_task_getformat_ref(task)->fmtid, kaapi_task_getargs(task) );
-  KAAPI_EVENT_PUSH3( &ctxt->kproc, KAAPI_EVT_OFFLOAD_KERN,
-     1 /* begin */, task, kaapi_task_getformat_ref(task)->fmtid, kaapi_task_getargs(task) );
   
   /* handle comes form portability layer: for cuda its the cublas hande */
   ctxt->pc = task;
@@ -473,10 +463,10 @@ static int kaapi_offload_device_prepare_execute_task(
     device->data_pendingtasks += data;
   }
 
-  KAAPI_CTXT_PERFREG_INCR(device->ctxt,KAAPI_PERF_ID_TASKSTARTEXEC);
-  KAAPI_CTXT_PERFREG_ADD(device->ctxt,KAAPI_PERF_ID_FLOPS_GPU, flops);
-  KAAPI_CTXT_PERFREG_ADD(device->ctxt,KAAPI_PERF_ID_DFLOPS_GPU, dflops);
-  KAAPI_EVENT_PUSH3( &device->ctxt->kproc, KAAPI_EVT_TASK_EXEC,
+  KAAPI_CTXT_PERFREG_INCR(kaapi_self_context(),KAAPI_PERF_ID_TASKSTARTEXEC);
+  KAAPI_CTXT_PERFREG_ADD(kaapi_self_context(),KAAPI_PERF_ID_FLOPS_GPU, flops);
+  KAAPI_CTXT_PERFREG_ADD(kaapi_self_context(),KAAPI_PERF_ID_DFLOPS_GPU, dflops);
+  KAAPI_EVENT_PUSH3( &kaapi_self_context()->kproc, KAAPI_EVT_TASK_EXEC,
        1 /* Async Start exec */, task, fmt->fmtid, kaapi_task_getargs(task));
 
   kaapi_assert_debug(device == kaapi_offload_self_device());
@@ -625,8 +615,6 @@ static int kaapi_offload_device_prepare_execute_task(
 # if KAAPI_LOG_PIPE
     printf("Task[%i]=%p insert into stream\n",index, task);
 # endif
-    KAAPI_EVENT_PUSH3( &device->ctxt->kproc, KAAPI_EVT_OFFLOAD_KERN,
-         0 /* push into stream */, task, fmt->fmtid, kaapi_task_getargs(task) );
     kaapi_stream_insert_io_task_inst(
       &device->stream,
       KAAPI_IO_STREAM_KERN,
@@ -823,7 +811,7 @@ int kaapi_sched_idle_offload(
   uint64_t send_msg = 0;
   uint64_t tidle_start = 0;
 
-  KAAPI_EVENT_PUSH0( &ctxt->kproc, KAAPI_EVT_SCHED, 0 /* start */ );
+  KAAPI_EVENT_PUSH0( &kaapi_self_context()->kproc, KAAPI_EVT_SCHED, 0 /* start */ );
 
   /* */
   kaapi_offload_set_current_device(device);
@@ -1176,6 +1164,7 @@ void* kaapi_offload_device_thread( void* arg )
   device->ctxt = ctxt;
   ctxt->device = device;
   ctxt->ld = device->ld;
+  _kaapi_self_context = ctxt;
 
   /* infinite loop with the device context */
   kaapi_offload_device_push( device );
@@ -1197,6 +1186,7 @@ void* kaapi_offload_device_thread( void* arg )
   }
 #endif
   kaapi_thread_unbind(thread);
+  _kaapi_self_context = 0;
   return 0;
 }
 

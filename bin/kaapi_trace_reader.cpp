@@ -195,7 +195,7 @@ FileSet* OpenFiles( int count, const char** filenames )
 #if KAAPI_USE_PERFCOUNTER==1
         for (int kk=0; kk<pfcc; ++kk)
         {
-#if 1
+#if 0
 printf("Header perfctr name: %s\n", ((kaapi_eventfile_header*)fdset->fds[c].header)->perfcounter_name[kk] );
 #endif
           fdset->perfcounter_name_extC[kk] = strdup(((kaapi_eventfile_header*)fdset->fds[c].header)->perfcounter_name[kk]);
@@ -281,7 +281,7 @@ int ReadFiles(
     file_event* fe = &fdset->fds[ne.fds];
     
 
-    /* The container name is passed in/out: first event can initialize them */
+    /* The container name is passed in/out: event can initialize them */
     callback( arg, fe->name, &fe->base[fe->rpos++] );
     
     if (fe->rpos < fe->end)

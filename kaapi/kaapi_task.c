@@ -1019,6 +1019,19 @@ int kaapi_thread_unbind(kaapi_thread_t* thread)
   return 0;
 }
 
+
+/*
+*/
+__thread kaapi_context_t* _kaapi_self_context = 0;
+kaapi_context_t* kaapi_init_get_context(void)
+{
+  kaapi_thread_t* kthread = kaapi_thread_bind(KAAPI_PROC_TYPE_HOST,0);
+  kaapi_assert( kthread != 0);
+  kaapi_context_t* kctxt = kaapi_thread2context(kthread);
+  return kctxt;
+}
+
+
 /**
 */
 struct kaapi_team* kaapi_team_alloc(void)

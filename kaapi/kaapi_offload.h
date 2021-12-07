@@ -51,9 +51,6 @@
 #define KAAPI_PLUGIN_ENTRYPOINT_NAME( func_name ) KAAPI_PLUGIN_PREFIX_NAME #func_name
 #define KAAPI_PLUGIN_ENTRYPOINT( func_name ) KAAPI_PLUGIN_ ## func_name
 
-#include "kaapi_offload_stream.h"
-
-
 #if !defined(KAAPI_USE_OFFLOAD)
 /* exported function even if OFFLOAD is disable */
 static inline unsigned int kaapi_offload_get_num_devices(void)

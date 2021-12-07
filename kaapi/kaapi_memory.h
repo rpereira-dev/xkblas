@@ -238,6 +238,7 @@ struct kaapi_memory_device {
 #endif
 };
 
+typedef struct kaapi_memory_device kaapi_memory_device_t;
 
 /* Return the memory device with the given asid
 */

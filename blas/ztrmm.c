@@ -25,6 +25,7 @@
 #include "common.h"
 #include "ztask.h"
 #include "ztask_internal.h"
+#include <string.h>
 
 
 /**
@@ -197,6 +198,28 @@ int xkblas_ztrmm_async( int side, int uplo,
 #endif
 
     xkblas_auto_map( KERN_TRMM, Bh );
+
+#if KAAPI_USE_TRACELIB==1
+    kaapi_context_t* ctxt =kaapi_self_context();
+    kaapi_event_t* evt = KAAPI_EVENT_GET(&ctxt->kproc, KAAPI_EVT_CALL, 0 /*begin*/ );
+    if (evt)
+    {
+      strncpy(evt->u.s.d0.c8,"ztrmm",8);
+      evt->u.s.d1.u = N;
+      evt->u.s.d2.u = NRHS;
+      evt->u.s.d3.u = side;
+      KAAPI_EVENT_PUSH(&ctxt->kproc, KAAPI_EVT_CALL);
+    }
+    evt = KAAPI_EVENT_GET(&ctxt->kproc, KAAPI_EVT_CALL, 2 /*info*/ );
+    if (evt)
+    {
+      evt->u.s.d0.u = uplo;
+      evt->u.s.d1.u = transA;
+      evt->u.s.d2.u = diag;
+      evt->u.s.d3.u = 0;
+      KAAPI_EVENT_PUSH(&ctxt->kproc, KAAPI_EVT_CALL);
+    }
+#endif
 
     /*
      *  CblasLeft / CblasUpper / CblasNoTrans

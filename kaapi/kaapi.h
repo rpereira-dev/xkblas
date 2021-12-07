@@ -119,6 +119,8 @@ struct kaapi_task;
 typedef struct kaapi_task kaapi_task_t;
 struct kaapi_thread;
 typedef struct kaapi_thread kaapi_thread_t;
+struct kaapi_context;
+typedef struct kaapi_context kaapi_context_t;
 struct kaapi_team;
 typedef struct kaapi_team kaapi_team_t;
 struct kaapi_frame;
@@ -239,6 +241,16 @@ extern kaapi_task_t* kaapi_thread_current_task(kaapi_thread_t* thread );
 extern int kaapi_thread_set_current_task(kaapi_thread_t* thread, kaapi_task_t* task );
 
 
+/* Get the current running threads
+*/
+extern __thread kaapi_context_t* _kaapi_self_context;
+extern kaapi_context_t* kaapi_init_get_context(void);
+static inline kaapi_context_t* kaapi_self_context(void)
+{
+  if (_kaapi_self_context ==0)
+    _kaapi_self_context = kaapi_init_get_context();
+  return _kaapi_self_context;
+}
 
 /* ========================================================================= */
 /* Kaapi Task                                                                */

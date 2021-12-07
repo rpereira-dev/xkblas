@@ -48,7 +48,7 @@ int xkblas_dbg_setname(
 {
   if (name ==0) return EINVAL;
   if (Ah ==0) return EINVAL;
-#if defined(KAAPI_DEBUG)
+
   size_t Amt = Ah->mt;
   size_t Ant = Ah->nt;
   for (size_t m = 0; m < Amt; m++)
@@ -58,9 +58,6 @@ int xkblas_dbg_setname(
       snprintf(buffer,64,"%s(%i,%i)",name, (int)m, (int)n);
       kaapi_dbg_register_name( (void*)( (uintptr_t)Ah->addr + Ah->eltsize*(m*Ah->mb + n*Ah->nb*Ah->ld)), buffer );
     }
-#else
-  fprintf(stderr,"*** To use xkblas_dbg_setname you need to compile XKBlas and Kaapi library with support for debug");
-#endif
   return 0;
 }
 
@@ -69,7 +66,6 @@ int xkblas_dbg_setname(
 */
 void xkblas_dbg_dump_graph( const char* name )
 {
-#if defined(KAAPI_DEBUG)
   extern kaapi_handle_t* xkblas_context_get_list_sync0(void);
   static int cnt = 0;
   char buffer[128];
@@ -80,7 +76,4 @@ void xkblas_dbg_dump_graph( const char* name )
   printf("<<<< Dump graph in file '%s\n", buffer);
   kaapi_dump_dot_list_handle(xkblas_self_thread(), xkblas_context_get_list_sync0(), buffer);
   printf("<<<< End dump graph in file '%s\n", buffer);
-#else
-  fprintf(stderr,"*** To use xkblas_dbg_dump_graph you need to compile XKBlas and Kaapi library with support for debug");
-#endif
 }

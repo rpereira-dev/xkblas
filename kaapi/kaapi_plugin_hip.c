@@ -56,6 +56,7 @@
   Please select the line defining your selection and comment the other line.
 */
 //#define KAAPI_USE_CUDA_DRIVER_API 1
+/* define for HIP to force it to follow CUDA_RUNTIME_API branches */
 #define KAAPI_USE_CUDA_RUNTIME_API 1
 
 #if (KAAPI_USE_CUDA_DRIVER_API!=0)&&(KAAPI_USE_CUDA_RUNTIME_API!=0)
@@ -65,9 +66,7 @@
 #  error "KAAPI_USE_CUDA_DRIVER_API and KAAPI_USE_CUDA_RUNTIME_API are NOT defined. Please defined only ONE of the macro to use either the CUDA Driver xor the CUDA Runtime API."
 #endif
 
-#if KAAPI_USE_CUDA_DRIVER_API
-#  include <hip/hip_runtime.h>
-#endif
+#include <hip/hip_runtime.h>
 #include <hipblas.h>
 #include <internal/rocblas-functions.h>
 #include <internal/rocblas-auxiliary.h>
@@ -807,18 +806,6 @@ static int cuda_copy(
   /* verify iff all inputs are in local node */
   kaapi_assert_debug( device->inherited.stream.device == &device->inherited );
 
-  KAAPI_EVENT_PUSH4( &device->inherited.ctxt->kproc, KAAPI_EVT_OFFLOAD_CPY,
-     0 /* push */, kaapi_pointer2void(src), kaapi_pointer2void(dest), kaapi_memory_view_size( view_src ), io_type-3 );
-  kaapi_stream_insert_io_copy_inst(
-      &device->inherited.stream,
-      tstream,
-      io_type,
-      priority,
-      kaapi_pointer2void(src), view_src, kaapi_memory_device_get(src.asid),
-      kaapi_pointer2void(dest), view_dest, kaapi_memory_device_get(dest.asid),
-      cbk, arg0, arg1, arg2
-  );
-
   return EINPROGRESS;
 }
 
@@ -1019,9 +1006,9 @@ static void kaapi_cuda_init_cuda_stream(
 #endif
   if (type == KAAPI_IO_STREAM_KERN)
   {
-    kaapi_assert_debug( thread_type == 0 );
     /*
      */
+    kaapi_assert_debug( thread_type == 0 );
 #if 0
     if (cios->handle ==0)
     {
@@ -1393,9 +1380,6 @@ static int cuda_stream_decode_ioinstruction(
       instr->t1 = kaapi_get_elapsedtime();
       res = hipEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
       kaapi_assert(res == hipSuccess);
-      res = hipEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
-      kaapi_assert(res == hipSuccess);
-      //printf("Start event recorded for IO %s at pos: %i\n", name_io[instr->type], ios->pos_wp );
 #  endif
 #endif
 #if KAAPI_USE_CUDA_RUNTIME_API
@@ -1403,9 +1387,6 @@ static int cuda_stream_decode_ioinstruction(
       instr->t1 = kaapi_get_elapsedtime();
       res = hipEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
       kaapi_assert(res == hipSuccess);
-      res = hipEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
-      kaapi_assert(res == hipSuccess);
-      //printf("Start event recorded for IO %s at pos: %i\n", name_io[instr->type], ios->pos_wp );
 #  endif
 #endif
 
@@ -1432,8 +1413,8 @@ static int cuda_stream_decode_ioinstruction(
       void* src  = kaapi_memory_view2pointer((void*)op->src, op->view_src);
       void* dest = kaapi_memory_view2pointer((void*)op->dest, op->view_dest);
 
-      KAAPI_EVENT_PUSH4( &device->inherited.ctxt->kproc, KAAPI_EVT_OFFLOAD_CPY,
-         1 /* begin */, src, dest, size, instr->type-3 );
+      KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
+         1 /* begin */, op->reserved );
       switch (type)
       {
         case KAAPI_MEMORY_VIEW_1D:
@@ -1444,8 +1425,8 @@ static int cuda_stream_decode_ioinstruction(
           {
             case KAAPI_IO_COPY_H2H:
               memcpy( dest, src, size );
-              KAAPI_EVENT_PUSH4( &device->inherited.ctxt->kproc, KAAPI_EVT_OFFLOAD_CPY,
-                 2 /* end */, src, dest, size, instr->type-3 );
+              KAAPI_EVENT_PUSH4( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
+                 2 /* end */, op->reserved );
               res = 0;
             break;
             case KAAPI_IO_COPY_H2D:
@@ -1624,8 +1605,8 @@ static int cuda_stream_decode_ioinstruction(
       CudaCheckError(res);
 #if KAAPI_USE_TRACELIB==1
       if ((type != KAAPI_MEMORY_VIEW_1D) && (instr->type != KAAPI_IO_COPY_H2H)
-        KAAPI_EVENT_PUSH4( &device->inherited.ctxt->kproc, KAAPI_EVT_OFFLOAD_CPY,
-         2 /* end */, src, dest, size, instr->type-3 );
+        KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
+         2 /* end */, op->reserved );
 #endif
       ++ios->ok_p;
 #elif CONFIG_USE_EVENT 
@@ -1679,6 +1660,9 @@ static int cuda_stream_decode_ioinstruction(
       );
       hipblasStatus_t cres = hipblasSetStream( device->handle, cios->stream);
       kaapi_assert(cres == HIPBLAS_STATUS_SUCCESS);
+
+      KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_KERN,
+         1 /* begin */, op->reserved );
 #if KAAPI_USE_PERFCOUNTER
       instr->t1 = kaapi_get_elapsedtime();
 #if CONFIG_USE_EVENT
@@ -1704,8 +1688,8 @@ static int cuda_stream_decode_ioinstruction(
       res = hipStreamSynchronize( *stream );
 #endif
       kaapi_assert(res == hipSuccess);
-      KAAPI_EVENT_PUSH4( &device->inherited.ctxt->kproc, KAAPI_EVT_OFFLOAD_CPY,
-         2 /* end */, op->src, op->dest, kaapi_memory_view_size(op->view_src), op->type-3 );
+      KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_KERN,
+         2 /* end */, op->reserved );
       ++ios->ok_p;
 #elif CONFIG_USE_EVENT 
 #if KAAPI_USE_CUDA_DRIVER_API
@@ -1816,13 +1800,13 @@ static int cuda_stream_advance_pending(
 #if KAAPI_USE_TRACELIB==1
             if (op->type != KAAPI_IO_KERN)
             {
-              KAAPI_EVENT_PUSH4( &device->ctxt->kproc, KAAPI_EVT_OFFLOAD_CPY,
-                 2 /* end */, op->inst.c_io.src, op->inst.c_io.dest, kaapi_memory_view_size(op->inst.c_io.view_src), op->type-3 );
+              KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
+                 2 /* end */, op->inst.c_io.reserved );
             }
             else
             {
-              KAAPI_EVENT_PUSH3( &device->ctxt->kproc, KAAPI_EVT_OFFLOAD_KERN,
-                 2 /* end */, op->inst.k_io.task, kaapi_task_getformat_ref(op->inst.k_io.task)->fmtid, kaapi_task_getargs(op->inst.k_io.task) );
+              KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_KERN,
+                 2 /* end */, op->inst.k_io.reserved );
             }
 #endif
             if (prev_iosokp+1 == ios_okp) ++prev_iosokp;

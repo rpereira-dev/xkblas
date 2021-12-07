@@ -90,9 +90,9 @@ xkblas_context_t* xkblas_context_alloc(void)
 
       Todo that-> use user_size extra context in thread_bind.
     */
-    kaapi_thread_t* kthread = kaapi_thread_bind(KAAPI_PROC_TYPE_HOST,0);
+    kaapi_context_t* kctxt = kaapi_self_context();
+    kaapi_thread_t* kthread = kaapi_context2thread(kctxt);
     kaapi_assert( kthread != 0);
-    kaapi_context_t* kctxt = kaapi_thread2context(kthread);
     _xkblas_self_thread = kthread;
     xkblas_context_t* ctxt = (xkblas_context_t*)malloc(sizeof(xkblas_context_t));
     int err = kaapi_hashmap_init(&ctxt->xkblas_ptr2handle, ctxt->xkblas_mapentries, KAAPI_SIZE_DSM_MAP, 0);
@@ -1487,17 +1487,6 @@ int xkblas_memory_coherent_async(
   void* A, size_t LD, size_t eltsize
 )
 {
-#if 0
-  xkblas_sync();
-  printf("-----------------------------\n");
-  for (size_t i=0; i<kaapi_localitydomain_count(KAAPI_LD_GPU); ++i)
-  {
-    printf("  lid[%i]=%i,  %s\n", (int)i, (int)kaapi_localitydomain_get_num(KAAPI_LD_GPU, i), kaapi_localitydomain_info(KAAPI_LD_GPU, i) );
-    kaapi_localitydomain_t* ld = kaapi_localitydomain_get( kaapi_localitydomain_get_num(KAAPI_LD_GPU, i) );
-    kaapi_memory_cache_print( kaapi_memory_device_get( ld->device->memdev.asid ) );
-  }
-#endif
-
   xkblas_matrix_descr_t* Ah = xkblas_find(A);
   if (!xkblas_matrix_descr_isinit(Ah)) /* unknown matrix, return except if debug mode because it is strange to call this
   function with unknown matrix */
@@ -1512,6 +1501,29 @@ int xkblas_memory_coherent_async(
   size_t LDA = LD;
   size_t Amt = Ah->mt;
   size_t Ant = Ah->nt;
+
+#if KAAPI_USE_TRACELIB==1
+    kaapi_context_t* ctxt =kaapi_self_context();
+    kaapi_event_t* evt = KAAPI_EVENT_GET(&ctxt->kproc, KAAPI_EVT_CALL, 0 /*begin*/ );
+    if (evt)
+    {
+      strncpy(evt->u.s.d0.c8,"coherent",8);
+      evt->u.s.d1.u = Ah->M;
+      evt->u.s.d2.u = Ah->N;
+      evt->u.s.d3.u = A_MB;
+      KAAPI_EVENT_PUSH(&ctxt->kproc, KAAPI_EVT_CALL);
+    }
+    evt = KAAPI_EVENT_GET(&ctxt->kproc, KAAPI_EVT_CALL, 2 /*info*/ );
+    if (evt)
+    {
+      evt->u.s.d0.u = A_NB;
+      evt->u.s.d1.u = uplo;
+      evt->u.s.d2.u = memflag;
+      evt->u.s.d3.u = 0;
+      KAAPI_EVENT_PUSH(&ctxt->kproc, KAAPI_EVT_CALL);
+    }
+#endif
+
 
   /* tile iteration */
   if (uplo ==0)
@@ -1559,17 +1571,6 @@ int xkblas_memory_coherent_async(
     printf("[%s]: invalid argument uplo\n", __func__);
     abort();
   }
-
-#if 0
-  xkblas_sync();
-  printf("-----------------------------\n");
-  for (size_t i=0; i<kaapi_localitydomain_count(KAAPI_LD_GPU); ++i)
-  {
-    printf("  lid[%i]=%i,  %s\n", (int)i, (int)kaapi_localitydomain_get_num(KAAPI_LD_GPU, i), kaapi_localitydomain_info(KAAPI_LD_GPU, i) );
-    kaapi_localitydomain_t* ld = kaapi_localitydomain_get( kaapi_localitydomain_get_num(KAAPI_LD_GPU, i) );
-    kaapi_memory_cache_print( kaapi_memory_device_get( ld->device->memdev.asid ) );
-  }
-#endif
 
   return 0;
 }
@@ -1686,7 +1687,7 @@ size_t xkblas_auto_tilesize(
 )
 {
 
-#if 1
+#if 0
 {
 xkblas_context_t* ctxt = xkblas_context_get();
 int ngpu= kaapi_localitydomain_count(KAAPI_LD_GPU);
@@ -1811,19 +1812,20 @@ int xkblas_auto_map(
 {
   switch (kernel)
   {
+    case KERN_SYRK:
 #if 0
+    {
       xkblas_map_ij_cyclic(
         1, CblasColMajor,
         Ah->M, Ah->N, Ah->addr, Ah->ld, Ah->eltsize,
         0
       );
-      break;
+    } break;
 #endif
 
     case KERN_SYR2K:
     case KERN_SYMM:
     case KERN_GEMM:
-    case KERN_SYRK:
     case KERN_TRMM:
     case KERN_GEMMT:
     case KERN_TRSM:

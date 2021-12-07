@@ -112,7 +112,9 @@ typedef enum {
   KERN_SYR2K,
   KERN_HEMM,
   KERN_HERK,
-  KERN_HER2K
+  KERN_HER2K,
+  KERN_SWAP
+
 } xkblas_kernel_t;
 
 /*

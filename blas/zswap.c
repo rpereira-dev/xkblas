@@ -13,6 +13,7 @@
 #include "ztask.h"
 #include "ztask_internal.h"
 #include <math.h>
+#include <string.h>
 
 
 /**
@@ -110,7 +111,29 @@ int xkblas_zswap_async(
     Complex64_t zs;
 
     /* map matrix blocs onto the ressource : do nothing if matrix blocs are already mapped */
-    xkblas_auto_map( KERN_GEMM, Ch );
+    xkblas_auto_map( KERN_SWAP, Ch );
+
+#if KAAPI_USE_TRACELIB==1
+    kaapi_context_t* ctxt =kaapi_self_context();
+    kaapi_event_t* evt = KAAPI_EVENT_GET(&ctxt->kproc, KAAPI_EVT_CALL, 0 /*begin*/ );
+    if (evt)
+    {
+      strncpy(evt->u.s.d0.c8,"zswap",8);
+      evt->u.s.d1.u = M;
+      evt->u.s.d2.u = N;
+      evt->u.s.d3.u = i;
+      KAAPI_EVENT_PUSH(&ctxt->kproc, KAAPI_EVT_CALL);
+    }
+    evt = KAAPI_EVENT_GET(&ctxt->kproc, KAAPI_EVT_CALL, 2 /*info*/ );
+    if (evt)
+    {
+      evt->u.s.d0.u = j;
+      evt->u.s.d1.u = 0;
+      evt->u.s.d2.u = 0;
+      evt->u.s.d3.u = 0;
+      KAAPI_EVENT_PUSH(&ctxt->kproc, KAAPI_EVT_CALL);
+    }
+#endif
 
     /* get the bloc's indexes holding i and j */
     int ib = i / Cnb;

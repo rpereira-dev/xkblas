@@ -40,144 +40,15 @@
 #define KAAPI_OFFLOAD_STREAM_H_INCLUDED
 
 #include "kaapi_offload_dbg.h"
-
-
-/* fwd decl
-*/
-struct kaapi_io_instruction;
-struct kaapi_io_stream;
-struct kaapi_offload_stream;
-struct kaapi_device;
-struct kaapi_memory_device;
-typedef struct kaapi_memory_device kaapi_memory_device_t;
-
-/*
-*/
-typedef struct {
-  int   error;
-  float cpu_delay; /* time on CPU between launch and completion */
-  float gpu_delay; /* time of CPU between launch and completion */
-} kaapi_io_status_t;
-
-typedef void (*kaapi_io_cbk_fnc_t)(
-    kaapi_io_status_t,
-    struct kaapi_io_stream*,
-    void*, void*, void*
-);
-
-/* io instruction bck: all differents instruction should have this fields first
-*/
-struct kaapi_io_cbk {
-  kaapi_io_cbk_fnc_t           fnc;
-  void*                        arg[3];
-};
-
-/*
-*/
-typedef enum kaapi_io_copy_priority {
-  KAAPI_IO_COPY_PRIORITY_LOW    = 0,
-  KAAPI_IO_COPY_PRIORITY_NORMAL = 1,
-  KAAPI_IO_COPY_PRIORITY_HIGH   = 2
-} kaapi_io_copy_priority_t;
-
-/* io instruction to write/read data from the corresponding device
-   src == host emitting the request
-*/
-struct kaapi_io_copy {
-  kaapi_io_cbk_fnc_t           fnc;
-  void*                        arg[3];
-  kaapi_io_copy_priority_t     prio;
-  const void*                  src;
-  const kaapi_memory_view_t*   view_src;
-  kaapi_memory_device_t*       dev_src;
-  void*                        dest;
-  const kaapi_memory_view_t*   view_dest;
-  kaapi_memory_device_t*       dev_dest;
-};
-
-
-/* marker begin...end for group of request
-*/
-struct kaapi_io_begin {
-  kaapi_io_cbk_fnc_t           fnc;
-  void*                        arg[3];
-  struct kaapi_io_instruction* first;
-};
-
-struct kaapi_io_end {
-  kaapi_io_cbk_fnc_t           fnc;
-  void*                        arg[3];
-  struct kaapi_io_instruction* last;
-};
-
-
-/* marker call back, acts as a full memory barrier : any write, read or kernel instructon
-   before the sync are never re-ordered after the sync.
-*/
-struct kaapi_io_barrier {
-  kaapi_io_cbk_fnc_t           fnc;
-  void*                        arg[3];
-};
-
-/* io instruction kernel : to launch kernel on the device
-  The delay field of the status arguments of the callback, if defined, is the delay in millisecond
-  to execute the kernel.
-*/
-struct kaapi_io_kernel {
-  kaapi_io_cbk_fnc_t           fnc;
-  void*                        arg[3];
-  kaapi_task_body_t            body;
-  kaapi_task_t*                task;
-};
-
-
-typedef enum kaapi_io_type {
-  KAAPI_IO_NOP      = 0,
-  KAAPI_IO_BEGIN    = 1,
-  KAAPI_IO_END      = 2,
-  KAAPI_IO_COPY_H2H = 3,
-  KAAPI_IO_COPY_H2D = 4,
-  KAAPI_IO_COPY_D2H = 5,
-  KAAPI_IO_COPY_D2D = 6,
-  KAAPI_IO_BARRIER  = 7,
-  KAAPI_IO_KERN     = 8
-} kaapi_io_type_t;
-
-
-/* one instruction in the stream:
-   - each different case correspond to particular operation between the host (that emit
-   the instruction) and the device implied in the operation.
-   - once the instruction is locally terminated, a corresponding callback, if defined, 
-   is called to signal the application of the completion of the operation.
-*/
-typedef struct kaapi_io_instruction {
-  kaapi_io_type_t          type;
-  union {
-    struct kaapi_io_cbk     cbk;   /* cbk info always first fields of structure */
-    struct kaapi_io_begin   f_io;
-    struct kaapi_io_end     l_io;
-    struct kaapi_io_copy    c_io;
-    struct kaapi_io_kernel  k_io;
-    struct kaapi_io_barrier b_io;
-  } inst;
-#if KAAPI_USE_PERFCOUNTER==1
-  double                    t0; /* insert time in the stream */
-  double                    t1; /* start time of execution */
-  double                    t2; /* time where detected completed */
-  double                    t3; /* time where callback returns or == t2 */
-#endif
-} kaapi_io_instruction_t;
-
+#include "kaapi_offload_datatype.h"
 
 /*
 */
 typedef enum kaapi_io_stream_type {
   KAAPI_IO_STREAM_H2D  = 0, /* from CPU to GPU */
-  KAAPI_IO_STREAM_KERN = 1,
-  KAAPI_IO_STREAM_D2H  = 2, /* from GPU to CPU */
-#if KAAPI_USE_STREAM_D2D
-  KAAPI_IO_STREAM_D2D  = 3, /* from GPU to GPU */
-#endif
+  KAAPI_IO_STREAM_D2H  = 1, /* from GPU to CPU */
+  KAAPI_IO_STREAM_D2D  = 2, /* from GPU to GPU */
+  KAAPI_IO_STREAM_KERN = 3,
   KAAPI_IO_STREAM_ALL       /* internal purpose */
 } kaapi_io_stream_type_t;
 
@@ -199,16 +70,17 @@ typedef enum kaapi_io_stream_type {
 */
 typedef struct kaapi_io_stream {
   kaapi_io_stream_type_t       type;
+  int                          sid;       /* with respect to all io_stream in the device offload_stream */
   kaapi_lock_t                 mutex;     /*  lock */
   uint64_t                     count;     /* the size of array instr and pending */
   uint64_t                     smax;      /* maximal occupency of the stream */
   uint64_t                     smax_p;    /* maximal occupency of pending requests in the stream */
   uint64_t                     max_p;     /* ok_p..max_p should have been directly notified */
-  uint64_t                     pos_r;	  /* first instruction to process */
-  uint64_t                     pos_w;	  /* next position for writing instructions */
+  uint64_t                     pos_r;	    /* first instruction to process */
+  uint64_t                     pos_w;	    /* next position for writing instructions */
   volatile uint64_t            pos_rp;	  /* first pending instruction into the bloc */
   volatile uint64_t            pos_wp;	  /* next position for writing into the pending bloc */
-  kaapi_io_instruction_t*      instr;	  /* first instruction */
+  kaapi_io_instruction_t*      instr;	    /* first instruction */
   kaapi_io_instruction_t*      pending;   /* pending instructions, not yet completed */
   struct kaapi_offload_stream* stream;
   volatile uint64_t            ok_p __attribute__((aligned(KAAPI_CACHE_LINE)));
@@ -228,7 +100,7 @@ typedef struct kaapi_offload_stream {
   struct kaapi_device*   device;
   int                    count[KAAPI_IO_STREAM_ALL];    /* number of iostream per type */
   kaapi_atomic_t         next[KAAPI_IO_STREAM_ALL];     /* next  stream fifo */
-  kaapi_io_stream_t**    ios[KAAPI_IO_STREAM_ALL];      /* relatively to the host that emits request */
+  kaapi_io_stream_t**    ios[KAAPI_IO_STREAM_ALL];      /* basic stream */
 
   /* virtualisation */
   struct kaapi_io_stream* (*f_stream_alloc)(
@@ -432,7 +304,7 @@ static inline void kaapi_stream_insert_io_end_inst(
 
 /*
 */
-static inline void kaapi_stream_insert_io_task_inst(
+extern void kaapi_stream_insert_io_task_inst(
     kaapi_offload_stream_t* stream,
     kaapi_io_stream_type_t  stype,
     kaapi_task_t*           task,
@@ -440,44 +312,11 @@ static inline void kaapi_stream_insert_io_task_inst(
     void*                   arg0,
     void*                   arg1,
     void*                   arg2
-)
-{
-  KAAPI_OFFLOAD_TRACE_IN
-
-#if KAAPI_USE_PERFCOUNTER
-  double t0 = kaapi_get_elapsedtime();
-#endif
-  kaapi_io_stream_t* ios;
-  kaapi_io_instruction_t* inst = kaapi_offload_stream_push( stream, stype, &ios );
-
-#if KAAPI_DEBUG
-  kaapi_assert_debug( ios != 0 );
-  kaapi_assert_debug( inst ==  &ios->instr[ios->pos_w % ios->count] );
-  kaapi_assert_debug( ios->mutex._owner == pthread_self());
-#endif
-
-  inst->type = KAAPI_IO_KERN;
-  inst->inst.k_io.fnc   = fnc;
-  inst->inst.l_io.arg[0]= arg0;
-  inst->inst.l_io.arg[1]= arg1;
-  inst->inst.l_io.arg[2]= arg2;
-  inst->inst.k_io.task  = task;
-#if KAAPI_USE_PERFCOUNTER
-  inst->t0 = t0;
-  inst->t1 =0;
-  inst->t2 =0;
-  inst->t3 =0;
-#endif
-  kaapi_offload_stream_commit( stream, stype, ios );
-#if KAAPI_DEBUG
-  kaapi_assert_debug( ios->mutex._owner != pthread_self() );
-#endif
-  KAAPI_OFFLOAD_TRACE_OUT
-}
+);
 
 /*
 */
-static inline void kaapi_stream_insert_io_copy_inst(
+extern void kaapi_stream_insert_io_copy_inst(
     kaapi_offload_stream_t*    stream,
     kaapi_io_stream_type_t     stype,
     kaapi_io_type_t            io_type,
@@ -492,43 +331,7 @@ static inline void kaapi_stream_insert_io_copy_inst(
     void*                      arg0,
     void*                      arg1,
     void*                      arg2
-)
-{
-  KAAPI_OFFLOAD_TRACE_IN
-  kaapi_assert_debug( (io_type >=KAAPI_IO_COPY_H2H) && (io_type <= KAAPI_IO_COPY_D2D));
-  kaapi_assert( kaapi_memory_view_size(view_src) == kaapi_memory_view_size(view_dest));
-  kaapi_assert_debug( (io_type !=KAAPI_IO_COPY_D2D)|| (kaapi_memory_view_iscontiguous(view_src) &&  kaapi_memory_view_iscontiguous(view_src)) );
-  kaapi_assert_debug( (io_type !=KAAPI_IO_COPY_H2D)|| kaapi_memory_view_iscontiguous(view_dest) );
-  kaapi_assert_debug( (io_type !=KAAPI_IO_COPY_D2H)|| kaapi_memory_view_iscontiguous(view_src) );
-  kaapi_assert_debug( (io_type !=KAAPI_IO_COPY_D2H)|| kaapi_memory_view_iscontiguous(view_src) );
-
-  kaapi_io_stream_t* ios;
-  kaapi_io_instruction_t* inst
-    = kaapi_offload_stream_push( stream, stype, &ios );
-
-#if KAAPI_DEBUG
-  kaapi_assert_debug( ios != 0 );
-  kaapi_assert_debug( ios->mutex._owner == pthread_self());
-#endif
-
-  inst->type = io_type;
-  inst->inst.c_io.fnc   = fnc;
-  inst->inst.l_io.arg[0]= arg0;
-  inst->inst.l_io.arg[1]= arg1;
-  inst->inst.l_io.arg[2]= arg2;
-  inst->inst.c_io.prio  = prio;
-  inst->inst.c_io.src   = src;
-  inst->inst.c_io.view_src  = view_src;
-  inst->inst.c_io.dev_src  = dev_src;
-  inst->inst.c_io.dest  = dest;
-  inst->inst.c_io.view_dest = view_dest;
-  inst->inst.c_io.dev_dest  = dev_dest;
-  kaapi_offload_stream_commit( stream, stype, ios );
-#if KAAPI_DEBUG
-  kaapi_assert_debug( ios->mutex._owner != pthread_self() );
-#endif
-  KAAPI_OFFLOAD_TRACE_OUT
-}
+);
 
 
 /*

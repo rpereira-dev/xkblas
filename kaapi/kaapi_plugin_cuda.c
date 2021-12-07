@@ -782,9 +782,6 @@ static int cuda_copy(
   /* verify iff all inputs are in local node */
   kaapi_assert_debug( device->inherited.stream.device == &device->inherited );
 
-  KAAPI_EVENT_PUSH4( &device->inherited.ctxt->kproc, KAAPI_EVT_OFFLOAD_CPY,
-     0 /* push */, kaapi_pointer2void(src), kaapi_pointer2void(dest), kaapi_memory_view_size( view_src ), io_type-3 );
-
   kaapi_stream_insert_io_copy_inst(
       &device->inherited.stream,
       tstream,
@@ -1345,14 +1342,10 @@ static int cuda_stream_decode_ioinstruction(
       instr->t1 = kaapi_get_elapsedtime();
       res = cuEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
       kaapi_assert(res == CUDA_SUCCESS);
-      res = cuEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
-      kaapi_assert(res == CUDA_SUCCESS);
 #  endif
 #elif KAAPI_USE_CUDA_RUNTIME_API
 #  if CONFIG_USE_EVENT && KAAPI_USE_PERFCOUNTER
       instr->t1 = kaapi_get_elapsedtime();
-      res = cudaEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
-      kaapi_assert(res == cudaSuccess);
       res = cudaEventRecord(cios->start_events[ ios->pos_wp % ios->count ], *stream );
       kaapi_assert(res == cudaSuccess);
 #  endif
@@ -1381,8 +1374,8 @@ static int cuda_stream_decode_ioinstruction(
       void* src  = kaapi_memory_view2pointer((void*)op->src, op->view_src);
       void* dest = kaapi_memory_view2pointer((void*)op->dest, op->view_dest);
       
-      KAAPI_EVENT_PUSH4( &device->inherited.ctxt->kproc, KAAPI_EVT_OFFLOAD_CPY,
-         1 /* begin */, src, dest, size, instr->type-3 );
+      KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
+         1 /* begin */, op->reserved );
       switch (type)
       {
         case KAAPI_MEMORY_VIEW_1D:
@@ -1393,8 +1386,8 @@ static int cuda_stream_decode_ioinstruction(
           {
             case KAAPI_IO_COPY_H2H:
               memcpy( dest, src, size );
-              KAAPI_EVENT_PUSH4( &device->inherited.ctxt->kproc, KAAPI_EVT_OFFLOAD_CPY,
-                 2 /* end */, src, dest, size, instr->type-3 );
+              KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
+                 2 /* end */, op->reserved );
               res = 0;
             break;
             case KAAPI_IO_COPY_H2D:
@@ -1568,8 +1561,8 @@ static int cuda_stream_decode_ioinstruction(
       CudaCheckError(res);
 #if KAAPI_USE_TRACELIB==1
       if ((type != KAAPI_MEMORY_VIEW_1D) && (instr->type != KAAPI_IO_COPY_H2H)
-        KAAPI_EVENT_PUSH4( &device->inherited.ctxt->kproc, KAAPI_EVT_OFFLOAD_CPY,
-         2 /* end */, src, dest, size, instr->type-3 );
+        KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
+         2 /* end */, op->reserved );
 #endif
       ++ios->ok_p;
 #elif CONFIG_USE_EVENT 
@@ -1619,6 +1612,8 @@ static int cuda_stream_decode_ioinstruction(
           op->task,
           (void*)*stream
       );
+      KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_KERN,
+         1 /* begin */, op->reserved );
 #if KAAPI_USE_PERFCOUNTER
       instr->t1 = kaapi_get_elapsedtime();
 #  if CONFIG_USE_EVENT
@@ -1643,8 +1638,8 @@ static int cuda_stream_decode_ioinstruction(
       res = cudaStreamSynchronize( *stream );
 #  endif
       kaapi_assert(res == CUDA_SUCCESS);
-      KAAPI_EVENT_PUSH3( &device->inherited.ctxt->kproc, KAAPI_EVT_OFFLOAD_KERN,
-         2 /* end */, op->task, kaapi_task_getformat_ref(op->task)->fmtid, kaapi_task_getargs(op->task) );
+      KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_KERN,
+         2 /* end */, op->reserved );
       ++ios->ok_p;
 #elif CONFIG_USE_EVENT 
 #  if KAAPI_USE_CUDA_DRIVER_API
@@ -1761,13 +1756,13 @@ static int cuda_stream_advance_pending(
 #if KAAPI_USE_TRACELIB==1
             if (op->type != KAAPI_IO_KERN)
             {
-              KAAPI_EVENT_PUSH4( &device->ctxt->kproc, KAAPI_EVT_OFFLOAD_CPY,
-                 2 /* end */, op->inst.c_io.src, op->inst.c_io.dest, kaapi_memory_view_size(op->inst.c_io.view_src), op->type-3 );
+              KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
+                 2 /* end */, op->inst.c_io.reserved );
             }
             else
             {
-              KAAPI_EVENT_PUSH3( &device->ctxt->kproc, KAAPI_EVT_OFFLOAD_KERN,
-                 2 /* end */, op->inst.k_io.task, kaapi_task_getformat_ref(op->inst.k_io.task)->fmtid, kaapi_task_getargs(op->inst.k_io.task) );
+              KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_KERN,
+                 2 /* end */, op->inst.k_io.reserved );
             }
 #endif
             if (prev_iosokp+1 == ios_okp) ++prev_iosokp;
