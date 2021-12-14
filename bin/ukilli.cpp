@@ -743,7 +743,7 @@ static void callback_main(
       else if (kind==2)
       { /* end */
         if (iter == the_parallel_region->container_task_ker.end())
-        { fprintf(stdout, "***%i::%" PRIu64 " [end] Unknown task ker: %p\n", kid, event->date, task); break; }
+        { fprintf(stdout, "***%i::%" PRIu64 " [end] Unknown task ker: %p\n", kid, event->date, taskid); break; }
         ti->t_stop = event->date;
         the_parallel_region->flush( ti );
         the_parallel_region->container_task_ker.erase( taskid );
@@ -1074,9 +1074,9 @@ void csv_parallel_region_t::flush( task_ker* ti)
   );
 #else
   fprintf(csv_parallel_region_t::fout_kern,
-    "%i,%s,%i,%.15f,%.15f,%.15f,%.15f,%s,%lu,%lu\n",
+    "%i,%s,%i,%.15f,%.15f,%.15f,%.15f,%s,%lu\n",
     ti->kid,type_name[the_parallel_region->container_kproc[ti->kid].type], ti->stream,
-    ns2s(ti->t_push), ns2s(ti->t_start), ns2s(ti->t_stop), ns2s(ti->delay()),name, ti->task,ti->taskid 
+    ns2s(ti->t_push), ns2s(ti->t_start), ns2s(ti->t_stop), ns2s(ti->delay()),name, ti->task
   );
 #endif
 }
