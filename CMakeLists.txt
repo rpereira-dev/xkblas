@@ -151,7 +151,7 @@ endif()
 
 if (KAAPI_USE_MKL)
   add_compile_options("-DKAAPI_BLAS_USE_MKL=1")
-  add_compile_options("-DXKBLAS_BLASLIB=libmkl_intel_ilp64.so")
+  add_compile_options("-DXKBLAS_BLASLIB=\"libmkl_intel_ilp64.so\"")
 endif()
 if (KAAPI_USE_OPENBLAS)
   add_compile_options("-DKAAPI_BLAS_USE_OPENBLAS=1")
