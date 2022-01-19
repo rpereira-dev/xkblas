@@ -45,7 +45,7 @@
 #include "kaapi_impl.h"
 #include "kaapi_offload.h"
 
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_CUDA || KAAPI_USE_HIP
 #    include <cublas_v2.h>
 //#include <cuda.h>
 #include <cuda_runtime_api.h>
@@ -395,7 +395,11 @@ int xkblas_set_ngpus(int ngpus)
  */
 void* xkblas_malloc( size_t size )
 {
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_HIP
+  void* ptr = 0;
+  kaapi_assert_m(hipSuccess== hipHostMalloc(&ptr, size, hipHostMallocPortable),"hipHostAlloc failed");
+  return ptr;
+#elif KAAPI_USE_CUDA  
   void* ptr = 0;
   //CUresult err = cuMemHostAlloc(&ptr, size, CU_MEMHOSTALLOC_PORTABLE);
   //kaapi_assert_m(CUDA_SUCCESS== err, "cuMemHostAlloc failed");
@@ -410,7 +414,7 @@ void* xkblas_malloc( size_t size )
  */
 void xkblas_free( void* ptr, size_t sz )
 {
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_CUDA || KAAPI_USE_HIP
   //kaapi_assert_m(CUDA_SUCCESS==  cuMemFreeHost(ptr),"cuMemFreeHost failed");
   kaapi_assert_m(cudaSuccess== cudaFreeHost(ptr),"cudaFreeHost failed");
 #else
@@ -424,7 +428,7 @@ void xkblas_free( void* ptr, size_t sz )
 uint64_t xkblas_register_memory_async( void* ptr, size_t sz )
 {
 
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_CUDA || KAAPI_USE_HIP
   kaapi_driver_t* driver = kaapi_offload_driver_bytype( KAAPI_PROC_TYPE_CUDA );
   if (driver ==0) return 0;
   return driver->f_host_register( ptr, sz, 0, 0, 0, 0);
@@ -438,7 +442,7 @@ uint64_t xkblas_register_memory_async( void* ptr, size_t sz )
 uint64_t xkblas_unregister_memory_async( void* ptr, size_t sz )
 {
 
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_CUDA || KAAPI_USE_HIP
   kaapi_driver_t* driver = kaapi_offload_driver_bytype( KAAPI_PROC_TYPE_CUDA );
   if (driver ==0) return 0;
   return driver->f_host_unregister( ptr, sz, 0, 0, 0, 0);
@@ -451,7 +455,7 @@ uint64_t xkblas_unregister_memory_async( void* ptr, size_t sz )
 */
 int xkblas_register_memory_test( uint64_t handle )
 {
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_CUDA || KAAPI_USE_HIP
   kaapi_driver_t* driver = kaapi_offload_driver_bytype( KAAPI_PROC_TYPE_CUDA );
   if (driver ==0) return 1; /* always completed */
   return driver->f_host_register_testwait( handle, 0 );
@@ -464,7 +468,7 @@ int xkblas_register_memory_test( uint64_t handle )
 */
 int xkblas_register_memory_wait( uint64_t handle )
 {
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_CUDA || KAAPI_USE_HIP
   kaapi_driver_t* driver = kaapi_offload_driver_bytype( KAAPI_PROC_TYPE_CUDA );
   if (driver ==0) return 1; /* always completed */
   return driver->f_host_register_testwait( handle, 1 );
@@ -477,7 +481,7 @@ int xkblas_register_memory_wait( uint64_t handle )
 */
 int xkblas_register_memory_waitall( )
 {
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_CUDA || KAAPI_USE_HIP
   kaapi_driver_t* driver = kaapi_offload_driver_bytype( KAAPI_PROC_TYPE_CUDA );
   if (driver ==0) return 1; /* always completed */
   return driver->f_host_register_testwait( (uint64_t)-1, 2 );
@@ -796,7 +800,7 @@ static void NAME(task_body_cpu)( kaapi_task_t* task, kaapi_thread_t* thread )
 
 /*
 */
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_CUDA || KAAPI_USE_HIP
 #if KAAPI_DEBUG
 kaapi_atomic_t spawn_writeback={0};
 kaapi_atomic_t pending_writeback={0};
@@ -930,7 +934,7 @@ static void NAME(task_body_cpu)( kaapi_task_t* task, kaapi_thread_t* thread )
 
 /*
 */
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_CUDA || KAAPI_USE_HIP
 static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, void* handle )
 {
   kaapi_context_t* ctxt = kaapi_thread2context(thread);
@@ -1016,7 +1020,7 @@ static void NAME(task_body_cpu)( kaapi_task_t* task, kaapi_thread_t* thread )
 
 /*
 */
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_CUDA || KAAPI_USE_HIP
 static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, void* handle )
 {
 }

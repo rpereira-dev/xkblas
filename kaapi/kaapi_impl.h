@@ -53,7 +53,6 @@
 #endif
 
 #define KAAPI_USE_HOST_PLUGIN 1
-#define KAAPI_USE_CUDA_PLUGIN 1
 
 /* 2^KAAPI_SIZE_DSM_MAP is the size of the hash map
 */

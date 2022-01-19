@@ -149,18 +149,6 @@ extern "C" {
 #define KAAPI_PERF_GROUP_FLOPS     6
 
 
-/* counter type
-*/
-typedef int64_t kaapi_perf_counter_t;
-
-/* identifier of a perf event
-*/
-typedef uint32_t kaapi_perf_id_t;
-
-/* type of a set of events
-*/
-typedef uint64_t kaapi_perf_idset_t;
-
 
 /* All counters per thread
 */

@@ -1271,7 +1271,6 @@ void* kaapi_cuda_register_thread(void* dummy )
         kaapi_io_status_t ios = {0, req.err };
         req.cbk(ios, 0, req.arg0, req.arg1, req.arg2);
       }
-#warning "TODO: current thread has not a K-context"
 #if KAAPI_USE_PERFCOUNTER==1
       double t1p = kaapi_get_elapsedtime();
 
@@ -1425,7 +1424,7 @@ static int cuda_stream_decode_ioinstruction(
           {
             case KAAPI_IO_COPY_H2H:
               memcpy( dest, src, size );
-              KAAPI_EVENT_PUSH4( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
+              KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
                  2 /* end */, op->reserved );
               res = 0;
             break;

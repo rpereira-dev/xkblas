@@ -453,7 +453,7 @@ kaapi_offload_find_plugins(void)
 }
 #endif
 
-#if KAAPI_USE_CUDA_PLUGIN
+#if KAAPI_USE_CUDA
 {
   current = malloc(sizeof(kaapi_driver_t));
   extern void KAAPI_PLUGIN_ENTRYPOINT(get_cuda_driver)(kaapi_driver_t* driver);
@@ -468,7 +468,7 @@ kaapi_offload_find_plugins(void)
 }
 #endif
 
-#if KAAPI_USE_HIP_PLUGIN
+#if KAAPI_USE_HIP
 {
   current = malloc(sizeof(kaapi_driver_t));
   extern void KAAPI_PLUGIN_ENTRYPOINT(get_hip_driver)(kaapi_driver_t* driver);

@@ -11,7 +11,6 @@ add_custom_command (
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-find_package(PAPI)
 if (${PAPI_FOUND})
   add_compile_options("-DKAAPI_USE_PAPI=1")
 else()
@@ -69,8 +68,8 @@ if (${CUDA_RT_FOUND})
 endif()
 
 if (${HIP_FOUND})
-  include_directories(${HIP_INCLUDE_DIRS})
-  target_link_libraries(kaapi ${HIP_LIBRARIES})
+  include_directories(${HIP_INCLUDE_DIRS} ${HIPBLAS_INCLUDE_DIRS} ${ROCBLAS_INCLUDE_DIRS})
+  target_link_libraries(kaapi ${HIP_LIBRARIES} ${HIPBLAS_LIBRARIES})
 endif()
 
 if (${PAPI_FOUND})

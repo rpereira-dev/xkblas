@@ -98,9 +98,13 @@ extern "C" {
 
 /* Kaapi types.
  */
-typedef uint32_t  kaapi_globalid_t;
-typedef uint32_t  kaapi_processor_id_t;
-typedef uint8_t   kaapi_format_id_t;
+typedef uint32_t kaapi_globalid_t;
+typedef uint32_t kaapi_processor_id_t;
+typedef uint8_t  kaapi_format_id_t;
+typedef int64_t  kaapi_perf_counter_t;
+typedef uint32_t kaapi_perf_id_t;
+typedef uint64_t kaapi_perf_idset_t;
+
 
 /* K-thread processor type for format */
 #define KAAPI_PROC_TYPE_DEFAULT  0x0

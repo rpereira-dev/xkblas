@@ -1,4 +1,5 @@
 
+include_directories(${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/../blas ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/kaapi ${CMAKE_SOURCE_DIR}/blas ${BLAS_INCLUDE_DIRS} ${CUBLAS_INCLUDE_DIRS} ${HIP_INCLUDE_DIRS} ${HIPBLAS_INCLUDE_DIRS})
 
 list(APPEND GENERATED_SOURCES 
   stesting_gemm.c stesting_trsm.c stesting_trmm.c stesting_symm.c stesting_syrk.c stesting_syr2k.c splgsy.c stesting_auxiliary.h stesting_auxiliary.c
@@ -19,7 +20,6 @@ foreach(file IN LISTS GENERATED_SOURCES)
   #message(STATUS "Include dir for BLAS: ${BLAS_INCLUDE_DIRS}")
 endforeach()
 
-include_directories(${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/../blas ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/kaapi ${CMAKE_SOURCE_DIR}/blas ${CUBLAS_INCLUDE_DIRS} ${BLAS_INCLUDE_DIRS})
 
 #--- Testing_z
 set(SOURCES_TESTING_Z
@@ -77,7 +77,7 @@ set(SOURCES_TESTING_D
 
 add_executable(dtesting ${SOURCES_TESTING_D})
 #target_compile_options(dtesting PUBLIC -DPRECISION_d -UPRECISION_s -UPRECISION_z -UPRECISION_c) 
-target_link_libraries(dtesting xkblas kaapi ${BLAS_LIBRARIES} ${CUBLAS_LIBRARIES} m)
+target_link_libraries(dtesting xkblas kaapi ${BLAS_LIBRARIES} ${CUBLAS_LIBRARIES} ${HIP_LIBRARIES} m)
 install(TARGETS dtesting DESTINATION testing)
 
 
