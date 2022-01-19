@@ -795,7 +795,8 @@ static void callback_main(
         ci->t_start    = event->date;
         ci->t_stop     = 0;
         ci->kid        = kid;
-        strncpy(ci->name, KAAPI_EVENT_DATA(event,0,c8),8);
+        bzero(ci->name, 8); 
+        strncpy(ci->name, KAAPI_EVENT_DATA(event,0,c8),7);
         ci->param[0]   = KAAPI_EVENT_DATA(event,1,u);
         ci->param[1]   = KAAPI_EVENT_DATA(event,2,u);
         ci->param[2]   = KAAPI_EVENT_DATA(event,3,u);

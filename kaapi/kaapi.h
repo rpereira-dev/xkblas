@@ -144,6 +144,18 @@ typedef struct kaapi_localitydomain kaapi_localitydomain_t;
 
 typedef struct kaapi_listrequest_iterator kaapi_listrequest_iterator_t;
 
+/* counter type
+*/
+typedef int64_t kaapi_perf_counter_t;
+
+/* identifier of a perf event
+*/
+typedef uint32_t kaapi_perf_id_t;
+
+/* type of a set of events
+*/
+typedef uint64_t kaapi_perf_idset_t;
+
 
 /** \ingroup Kaapi
     Identifier to a locality domain 
