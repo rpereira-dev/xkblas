@@ -70,11 +70,11 @@
 /* To activate use of OCR data management. Should be the default when ok.
 BUG: if set to 0 / PIPELINE set to 0 => deadlock 
 */
-#define KAAPI_USE_OCR 1
+#define KAAPI_USE_OCR 0
 
 /* To activate or not the loadbalancing between GPUs
 */
-#define KAAPI_WS_GPUTASK 1
+#define KAAPI_WS_GPUTASK 0
 
 /* use pipeline to order task insertions, communications and kernel launchs
    else only the number of inserted tasks + pending tasks in the stream is limited
