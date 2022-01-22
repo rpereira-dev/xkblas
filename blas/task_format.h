@@ -194,8 +194,13 @@ void NAME(register_format)(void)
          (void*)NAME(task_body_cpu), /* key */
          NAME(task_body_cpu), /* body CPU */
   #if KAAPI_USE_CUDA && (NO_GPU_IMPL==0)
+         KAAPI_PROC_TYPE_CUDA, 
+         NAME(task_body_gpu), /* body GPU */
+  #elif KAAPI_USE_HIP && (NO_GPU_IMPL==0)
+         KAAPI_PROC_TYPE_HIP, 
          NAME(task_body_gpu), /* body GPU */
   #else
+         0,
          0, /* body GPU */
   #endif
          STRNAME,

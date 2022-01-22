@@ -333,7 +333,6 @@ int kaapi_event_fencebuffers(void)
 */
 static void* _kaapi_event_flushimator(void* arg)
 {
-printf("Pthread %s started\n", __FUNCTION__);
   kaapi_event_buffer_t* evb;
   while (1)
   {    

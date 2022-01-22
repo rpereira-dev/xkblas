@@ -443,6 +443,7 @@ kaapi_offload_find_plugins(void)
   current = malloc(sizeof(kaapi_driver_t));
   extern void KAAPI_PLUGIN_ENTRYPOINT(get_host_driver)(kaapi_driver_t* driver);
   KAAPI_PLUGIN_ENTRYPOINT(get_host_driver)(current);
+  current->name = "HOST";
   current->handle = 0;
   kaapi_offload_config_devices(current);
   current->next = kaapi_list_drivers;
@@ -458,6 +459,7 @@ kaapi_offload_find_plugins(void)
   current = malloc(sizeof(kaapi_driver_t));
   extern void KAAPI_PLUGIN_ENTRYPOINT(get_cuda_driver)(kaapi_driver_t* driver);
   KAAPI_PLUGIN_ENTRYPOINT(get_cuda_driver)(current);
+  current->name = "CUDA";
   current->handle = 0;
   kaapi_offload_config_devices(current);
   current->next = kaapi_list_drivers;
@@ -473,6 +475,7 @@ kaapi_offload_find_plugins(void)
   current = malloc(sizeof(kaapi_driver_t));
   extern void KAAPI_PLUGIN_ENTRYPOINT(get_hip_driver)(kaapi_driver_t* driver);
   KAAPI_PLUGIN_ENTRYPOINT(get_hip_driver)(current);
+  current->name = "HIP";
   current->handle = 0;
   kaapi_offload_config_devices(current);
   current->next = kaapi_list_drivers;

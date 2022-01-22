@@ -369,6 +369,11 @@ size_t xkblas_get_param(void)
 }
 
 
+int xkblas_get_devicecount(void)
+{
+}
+
+
 /*
 */
 int xkblas_get_ngpus(void)
@@ -1293,7 +1298,8 @@ int xkblas_finalize(void)
     err = kaapi_hashmap_destroy(&xkblas_ctxt->xkblas_ptr2handle);
     kaapi_assert(err ==0);
 
-    *xkblas_ctxt->self = 0;
+//TG: thread may leave and its __thread data specific deallocated?
+//     *xkblas_ctxt->self = 0;
     _xkblas_list_context = xkblas_ctxt->next;
     free(xkblas_ctxt);
   }

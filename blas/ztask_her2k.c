@@ -134,7 +134,7 @@ static void NAME(task_body_cpu)( kaapi_task_t* task, kaapi_thread_t* thread )
   );
 }
 
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_CUDA||KAAPI_USE_HIP
 static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, void* handle )
 {
   NAME(Arg)* arg = (NAME(Arg)*)kaapi_task_getargs(task);

@@ -913,7 +913,7 @@ kaapi_thread_t* kaapi_thread_bind(int proctype, size_t user_size)
     ctxt->sched_idle = 0;
   }
 #if KAAPI_USE_OFFLOAD
-  else if (proctype == KAAPI_PROC_TYPE_GPU)
+  else if ((proctype ==KAAPI_PROC_TYPE_CUDA)||(proctype ==KAAPI_PROC_TYPE_HIP))
   { /* should be also true for other type */
     ctxt->sync = kaapi_sched_sync_offload;
     ctxt->sched_idle = kaapi_sched_idle_offload;
@@ -1898,6 +1898,7 @@ int kaapi_taskformat_init(void)
   kaapi_sync_body = kaapi_format_taskregister_func( kaapi_format_allocate(),
            (void*)kaapi_sync_body_fnc, /* key */
            kaapi_sync_body_fnc, /* body CPU */
+           0, /* arch */
            0, /* body GPU */
            "sync",
            0,
@@ -1920,6 +1921,7 @@ int kaapi_taskformat_init(void)
   kaapi_nop_body = kaapi_format_taskregister_func( kaapi_format_allocate(),
            (void*)kaapi_nop_body_fnc, /* key */
            kaapi_nop_body_fnc, /* body CPU */
+           0, /* arch */
            0, /* body GPU */
            "no op",
            0,
@@ -1942,6 +1944,7 @@ int kaapi_taskformat_init(void)
   kaapi_taskmain_body = kaapi_format_taskregister_func( kaapi_format_allocate(),
            (void*)kaapi_taskmain_body_fnc, /* key */
            kaapi_taskmain_body_fnc, /* body CPU */
+           0, /* arch */
            0, /* body GPU */
            "task main",
            0,

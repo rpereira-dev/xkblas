@@ -153,7 +153,8 @@ struct kaapi_device {
    Kaapi_device here is both the device pluging and serves as instance of device...
 */
 typedef struct kaapi_driver {
-    unsigned int             flags;	        /* Device flags */
+    const char*              name;          /* name of the drvier */
+    unsigned int             flags;	    /* Device flags */
 
     void*                    handle;        /* plugin handle */
 

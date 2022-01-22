@@ -124,7 +124,7 @@ if (${HIP_FOUND})
      string(REGEX REPLACE "^([sdc]).*$" "\\1" precision "${file}")
      add_custom_command (
        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${file_hip}
-       COMMAND ${SHELL_EXECUTABLE} hipify-perl ${file} > ${file_hip}
+       COMMAND ${SHELL_EXECUTABLE} hipify-perl ${file}|sed -e 's+hipComplex+hipblasComplex+g' -e 's+hipDoubleComplex+hipblasDoubleComplex+g' > ${file_hip}
        DEPENDS ${file} 
        DEPENDS zxkblas.h cxkblas.h dxkblas.h sxkblas.h ctask.h dtask.h stask.h
      )

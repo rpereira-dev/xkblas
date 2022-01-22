@@ -176,6 +176,11 @@ static inline int xkblas_blas2cblas_diag( const char* diag )
   }
 }
 
+/* Return the number of device.
+   It is not necessary to initialize XKBlas before the call.
+*/
+extern int xkblas_get_devicecount(void);
+
 /*
 */
 extern int xkblas_init(void);
@@ -372,7 +377,9 @@ extern int xkblas_memory_free(void);
 */
 extern size_t xkblas_get_param(void);
 
-/* Get the number of GPUs 
+/* Get the number of GPUs.
+   XKBlas init should be already call.
+   Returns the number of GPU after interpreation of XKBLAS_NGPU and XKBLAS_GPUSET
 */
 extern int xkblas_get_ngpus(void);
 

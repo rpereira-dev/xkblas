@@ -119,7 +119,7 @@ const char* get_kaapi_info(void)
             "  PERFCTR  : no\n" 
 #endif
             "  IO/THR   : %i\n"
-            "  API      : %i\n", 
+            "  API      : %s\n", 
          STR_EXP(GIT_HASH),
          STR_EXP(XKBLAS_BLASLIB),
          STR_EXP(XKBLAS_CFLAGS),
@@ -144,16 +144,18 @@ const char* get_kaapi_info(void)
 #endif 
 #if KAAPI_USE_OWN_HEAP_ALLOCATOR
          "heap", /* heap allocator */
-#endif 
-#if KAAPI_USE_CUDA_RUNTIME_API
-         "runtime", 
-#elif KAAPI_USE_CUDA_DRIVER_API
-         "driver", 
-#elif KAAPI_USE_HIP
-         "hip", 
+#else
+         "default", /* default allocator */
 #endif 
          (int)(kaapi_default_param.cuda_cache_limit*100),
-         KAAPI_HAVE_IO_THREADS
+         (int)KAAPI_HAVE_IO_THREADS,
+#if KAAPI_USE_CUDA_RUNTIME_API
+         "runtime" 
+#elif KAAPI_USE_CUDA_DRIVER_API
+         "driver" 
+#elif KAAPI_USE_HIP
+         "hip" 
+#endif 
     );
   return buffer; 
 }

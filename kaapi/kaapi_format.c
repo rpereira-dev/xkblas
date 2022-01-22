@@ -199,6 +199,7 @@ kaapi_format_id_t kaapi_format_taskregister_func(
     kaapi_format_t*                fmt,
     void*                          key,
     kaapi_task_bodyfnc_t           body_cpu,
+    int                            arch,
     kaapi_task_bodyfnc_gpu_t       body_gpu,
     const char*                    name,
     kaapi_fmt_fnc_get_name         get_name,
@@ -243,9 +244,8 @@ kaapi_format_id_t kaapi_format_taskregister_func(
   if (body_cpu !=0)
     kaapi_format_taskregister_body(fmt, body_cpu, KAAPI_PROC_TYPE_HOST);
 
-  fmt->entrypoint[KAAPI_PROC_TYPE_GPU] = (kaapi_task_bodyfnc_t)body_gpu;
   if (body_gpu !=0)
-    fmt->mask_arch |= (1U << KAAPI_PROC_TYPE_GPU);
+    kaapi_format_taskregister_body(fmt, (kaapi_task_bodyfnc_t)body_gpu, arch);
 
   return fmt->fmtid;
 }

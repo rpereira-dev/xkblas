@@ -50,10 +50,10 @@ if (KAAPI_USE_CUDA_DRIVER OR KAAPI_USE_CUDA_RT)
   if (NOT ${CUBLAS_FOUND})
     message(FATAL_ERROR "Kaapi is configured with CUDA API but CUBLAS is not found for XKblas !")
   endif()
-  find_path(BLAS_INCLUDE_DIRS cblas.h
-    /usr/include
-    /usr/local/include
-    $ENV{BLAS_HOME}/include)
+#  find_path(BLAS_INCLUDE_DIRS cblas.h
+#    /usr/include
+#    /usr/local/include
+#    $ENV{BLAS_HOME}/include)
 endif()
 
 #Hip
@@ -92,6 +92,7 @@ if (KAAPI_USE_MKL)
   set(BLA_VENDOR Intel10_64lp_seq)
 endif()
 if (KAAPI_USE_OPENBLAS)
+  set(BLA_VENDOR OpenBLAS)
 endif()
 if (NOT KAAPI_USE_MKL AND NOT KAAPI_USE_OPENBLAS)
   message(FATAL_ERROR "XKblas requires you specify the BLAS Vendor library.")
@@ -101,6 +102,11 @@ find_package(BLAS REQUIRED)
 if (NOT ${BLAS_FOUND})
   message(FATAL_ERROR "XKblas requires a BLAS library.")
 endif()
+find_path(BLAS_INCLUDE_DIRS lapacke.h
+    /usr/include
+    /usr/local/include
+)
+add_compile_options(${BLAS_LINKER_FLAGS})
 
 #--- Add common command line options for all subdirectories
 if (KAAPI_USE_CUDA_DRIVER)

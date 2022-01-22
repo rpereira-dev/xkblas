@@ -68,7 +68,7 @@ typedef double CFloat64_t;
 
 #include "xkblas.h"
 #include "flops.h"
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_CUDA||KAAPI_USE_HIP
 #include <cublas_v2.h>
 #endif
 #include "kaapi_impl.h"
@@ -187,7 +187,7 @@ extern int xkblas_auto_map(
 
 
 
-#if KAAPI_USE_CUDA
+#if KAAPI_USE_CUDA||KAAPI_USE_HIP
 static inline cublasOperation_t cblas2cublas_op( int trans )
 {
   switch (trans)
