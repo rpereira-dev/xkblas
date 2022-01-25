@@ -50,6 +50,8 @@
 #undef KAAPI_USE_CUDA_RUNTIME_API
 #define KAAPI_USE_CUDA_RUNTIME_API 1
 
+#define KAAPI_USE_HIP_HANDLE_PER_STREAM 0
+
 #define CUDA_API_PER_THREAD_DEFAULT_STREAM  1
 
 /* There is 2 ways to compile kaapi_pluging_cuda.c:
@@ -101,9 +103,6 @@ static __thread int thread_type = 0;
 */
 #if KAAPI_USE_HWLOC
 #include "hwloc.h"
-#include "hwloc/hip/hip_runtime.h"
-#include "hwloc/cudart.h"
-#include "hwloc/glibc-sched.h"
 #endif
 
 #include "kaapi_impl.h"
@@ -207,7 +206,9 @@ typedef struct {
   cuda_cache_t* cache;
 #endif
   size_t counter[CUDA_MAX_COUNTERS];
-  //hipblasHandle_t    handle;
+#if KAAPI_USE_HIP_HANDLE_PER_STREAM==0
+  hipblasHandle_t    handle;
+#endif
 } kaapi_device_cuda_t;
 
 /* IO stream with specific field for CUDA
@@ -240,7 +241,9 @@ typedef struct kaapi_cuda_io_stream_t {
 #    endif
 #  endif
 #endif
+#if KAAPI_USE_HIP_HANDLE_PER_STREAM==1
   hipblasHandle_t    handle;
+#endif
 } kaapi_cuda_io_stream_t;
 
 /* number of used device for this run */
@@ -992,7 +995,7 @@ static void kaapi_cuda_init_cuda_stream(
   if (type == KAAPI_IO_STREAM_KERN)
   {
     kaapi_assert_debug( thread_type == 0 );
-#if 1 // cublas handle moved to device and shared against the stream
+#if KAAPI_USE_HIP_HANDLE_PER_STREAM==1
     /*
      */
     hipblasStatus_t cres = hipblasCreate(&cios->handle);
@@ -1007,7 +1010,9 @@ static void kaapi_cuda_init_cuda_stream(
     kaapi_assert_debug( ((type == KAAPI_IO_STREAM_H2D) && (thread_type == 1)) 
                      || ((type == KAAPI_IO_STREAM_D2H) && (thread_type == 2)) );
 #endif
+#if KAAPI_USE_HIP_HANDLE_PER_STREAM==1
     cios->handle = 0;
+#endif
   }
 }
 
@@ -1078,7 +1083,7 @@ static void cuda_stream_free(
 )
 {
   kaapi_cuda_io_stream_t* cios = (kaapi_cuda_io_stream_t*)ios;
-#if 1// moved to device
+#if KAAPI_USE_HIP_HANDLE_PER_STREAM==1
   if (cios->handle)
     hipblasDestroy(cios->handle);
 #endif
@@ -1208,10 +1213,8 @@ void* kaapi_cuda_register_thread(void* dummy )
       {
         if (req.op == DEVICE_REGISTER_REQUEST)
         {
-          err = hipHostRegister(req.ptr, req.size, hipHostRegisterPortable);
+          err = hipHostRegister(req.ptr, req.size, hipHostRegisterDefault/*hipHostRegisterPortable*/);
           if (!( (hipSuccess == err) || (hipErrorHostMemoryAlreadyRegistered == err)))
-          //hipError_t err = hipHostRegister( ptr, size, hipHostRegisterPortable );
-          //if ((err != hipSuccess) && (err != hipErrorHostMemoryAlreadyRegistered))
           {
             printf("***[%s]: hipHostRegister error: %i\n", __func__, err);
             req.err = EALREADY;
@@ -1614,6 +1617,10 @@ static int cuda_stream_decode_ioinstruction(
       /* same as cublas */
       stream = &cios->stream;
       struct kaapi_io_kernel* op = &instr->inst.k_io;
+#if KAAPI_USE_HIP_HANDLE_PER_STREAM==0
+      hipblasStatus_t cres = hipblasSetStream( device->handle, cios->stream);
+      kaapi_assert(cres == HIPBLAS_STATUS_SUCCESS);
+#endif
       KAAPI_PLUGIN_TRACE_MSG("%s: instr '%s' exec task:%p, stream: %p\n", __FUNCTION__,
           name_io[instr->type],
           op->task,
@@ -1636,7 +1643,11 @@ static int cuda_stream_decode_ioinstruction(
       kaapi_offload_device_execute_task(
         &device->inherited,
         op->task,
+#if KAAPI_USE_HIP_HANDLE_PER_STREAM==0
+        device->handle
+#else
         cios->handle
+#endif
       );
 #if CONFIG_SYNCHRONOUS_KERNEL
 #  if KAAPI_USE_CUDA_DRIVER_API
@@ -2409,7 +2420,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_destroy)(kaapi_device_t* dev)
   fprintf(stdout, "cuda:%s: device %lu init\n", __FUNCTION__, (uintptr_t)device);
 #endif
   kaapi_localitydomain_destroy(device->inherited.ld);
-#if 0
+#if KAAPI_USE_HIP_HANDLE_PER_STREAM==0
   if (device->handle)
     hipblasDestroy(device->handle);
 #endif
@@ -2580,9 +2591,12 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
 #endif
   kaapi_cuda_plugin_unlock();
 
+#if KAAPI_USE_HIP_HANDLE_PER_STREAM==0
+  res = hipSetDevice(kaapi_device_ids[dev->device_id]);
+#endif
   rocblas_initialize();
 
-#if 0
+#if KAAPI_USE_HIP_HANDLE_PER_STREAM==0
   hipblasStatus_t cres = hipblasCreate(&device->handle);
   kaapi_assert(cres == HIPBLAS_STATUS_SUCCESS);
 #endif
@@ -2721,7 +2735,7 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_start)(kaapi_device_t*
   cpu_set_t save_schedset;
   cpu_set_t schedset;
   cpu_set_t schedset_map;
-#if KAAPI_USE_HWLOC
+#if KAAPI_USE_HWLOC && KAAPI_USE_HIP==0
   hwloc_cpuset_t cpuset;
   hwloc_obj_t obj;
 
@@ -2786,7 +2800,7 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_start)(kaapi_device_t*
   err = pthread_create(&device->tidio[1], &attr, kaapi_cuda_D2H_io_thread, dev);
   kaapi_assert(err ==0);
 #endif
-#if KAAPI_USE_HWLOC
+#if KAAPI_USE_HWLOC && KAAPI_USE_HIP==0
   hwloc_bitmap_free(cpuset);
 #endif
   pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &save_schedset);
@@ -2943,8 +2957,11 @@ KAAPI_PLUGIN_ENTRYPOINT(get_cublas_handle)(kaapi_device_t* dev)
 #if _PLUGIN_DEBUG
   fprintf(stdout, "hip:%s: device %d cublas_handle\n", __FUNCTION__, dev->device_id);
 #endif
-  //return (void*)(uintptr_t)device->handle;
+#if KAAPI_USE_HIP_HANDLE_PER_STREAM==0
+  return (void*)(uintptr_t)device->handle;
+#else
   return 0;
+#endif
 }
 
 
