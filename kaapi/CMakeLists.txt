@@ -11,6 +11,10 @@ add_custom_command (
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+if (${HWLOC_FOUND})
+  add_compile_options("-DKAAPI_USE_HWLOC=1")
+endif()
+
 if (${PAPI_FOUND})
   add_compile_options("-DKAAPI_USE_PAPI=1")
 else()
@@ -50,12 +54,14 @@ endif()
 #else()
 #endif()
 #
-#if (${HWLOC_FOUND})
-#else()
-#endif()
 
 add_library(kaapi SHARED  ${CMAKE_CURRENT_BINARY_DIR}/git_hash.h kaapi.h kaapi_error.h kaapi_atomic.h kaapi_format.c kaapi_impl.c kaapi_task.c kaapi_rt.c kaapi_hashmap.c kaapi_barrier.c kaapi_memory.c kaapi_offload_stream.c kaapi_offload.c kaapi_offload_device.c kaapi_ld.c kaapi_dbg.c kaapi_plugin_host.c ${ADDITIONAL_SOURCES})
 target_link_libraries(kaapi Threads::Threads)
+
+if (${HWLOC_FOUND})
+  include_directories(${HWLOC_INCLUDE_DIRS})
+  target_link_libraries(kaapi ${HWLOC_LIBRARIES})
+endif()
 
 if (${CUDA_DRIVER_FOUND})
   include_directories(${CUDA_DRIVER_INCLUDE_DIRS})

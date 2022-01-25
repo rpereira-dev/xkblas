@@ -65,6 +65,10 @@ if (KAAPI_USE_HIP)
     message(FATAL_ERROR "Kaapi is configured with HIP, but hip installation could not be found!")
   endif()
 
+  find_package(ROCBLAS)
+  if (NOT ${ROCBLAS_FOUND})
+    message(FATAL_ERROR "Kaapi is configured with HIP, but rocblas could not be found!")
+  endif()
   find_package(HIPBLAS)
   if (NOT ${HIPBLAS_FOUND})
     message(FATAL_ERROR "Kaapi is configured with HIP, but hipblas could not be found!")
@@ -86,7 +90,6 @@ endif()
 #--- HWLOC
 find_package(HWLOC)
 
-
 #--- BLAS
 if (KAAPI_USE_MKL)
   set(BLA_VENDOR Intel10_64lp_seq)
@@ -102,10 +105,17 @@ find_package(BLAS REQUIRED)
 if (NOT ${BLAS_FOUND})
   message(FATAL_ERROR "XKblas requires a BLAS library.")
 endif()
-find_path(BLAS_INCLUDE_DIRS lapacke.h
+if (KAAPI_USE_MKL)
+  find_path(BLAS_INCLUDE_DIRS mkl_lapacke.h
+    $ENV{MKLROOT}/include
+  )
+endif()
+if (KAAPI_USE_OPENBLAS)
+  find_path(BLAS_INCLUDE_DIRS lapacke.h
     /usr/include
     /usr/local/include
-)
+  )
+endif()
 add_compile_options(${BLAS_LINKER_FLAGS})
 
 #--- Add common command line options for all subdirectories
@@ -161,6 +171,8 @@ endif()
 
 if (KAAPI_USE_MKL)
   add_compile_options("-DKAAPI_BLAS_USE_MKL=1")
+  add_compile_options("-DMKL_ILP64")
+  add_compile_options("-m64")
   add_compile_options("-DXKBLAS_BLASLIB=\"libmkl_intel_ilp64.so\"")
 endif()
 if (KAAPI_USE_OPENBLAS)

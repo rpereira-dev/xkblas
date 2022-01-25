@@ -21,10 +21,6 @@ find_path(HIPBLAS_PREFIX
     NAMES include/hipblas.h
     HINTS $ENV{HIPBLAS_PATH}
 )
-find_path(ROCBLAS_PREFIX
-    NAMES include/internal/rocblas-functions.h include/internal/rocblas-auxiliary.h
-    HINTS $ENV{ROCBLAS_PATH}
-)
 
 find_library(HIPBLAS_LIBRARIES
     # Pick the static library first for easier run-time linking.
@@ -32,10 +28,6 @@ find_library(HIPBLAS_LIBRARIES
     HINTS ${HIPBLAS_PREFIX}/lib ${HILTIDEPS}/lib
 )
 
-find_path(ROCBLAS_INCLUDE_DIRS
-    NAMES internal/rocblas-functions.h internal/rocblas-auxiliary.h
-    HINTS ${ROCBLAS_PREFIX}/include ${HILTIDEPS}/include
-)
 find_path(HIPBLAS_INCLUDE_DIRS
     NAMES hipblas.h
     HINTS ${HIPBLAS_PREFIX}/include ${HILTIDEPS}/include
@@ -45,10 +37,6 @@ include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(HIPBLAS DEFAULT_MSG
     HIPBLAS_LIBRARIES
     HIPBLAS_INCLUDE_DIRS
-)
-find_package_handle_standard_args(ROCBLAS DEFAULT_MSG
-    ROCBLAS_LIBRARIES
-    ROCBLAS_INCLUDE_DIRS
 )
 mark_as_advanced(
     HIPBLAS_PREFIX_DIRS

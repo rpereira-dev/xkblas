@@ -79,7 +79,7 @@ foreach(file IN LISTS GENERATED_SOURCES)
       COMMAND ${CMAKE_SOURCE_DIR}/gen_precision_one.sh ${precision} ${CMAKE_CURRENT_SOURCE_DIR}/${source} ${CMAKE_CURRENT_BINARY_DIR}
       DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${source} ${CMAKE_SOURCE_DIR}/gen_precision_one.sh 
   )
-  message(STATUS "Gen file ${file} == precision ${precision} from ${source}")
+  #message(STATUS "Gen file ${file} == precision ${precision} from ${source}")
 endforeach()
 
 
@@ -96,16 +96,16 @@ foreach(file IN LISTS SOURCES_Z)
   list(APPEND ASOURCES_Z "${CMAKE_CURRENT_SOURCE_DIR}/${file}")
 endforeach()
 set(SOURCES_Z ${ASOURCES_Z})
-message(STATUS "Generated Source Z:" ${SOURCES_Z})
+#message(STATUS "Generated Source Z:" ${SOURCES_Z})
 
 #Append directory to generated file
 foreach(file IN LISTS GENERATED_SOURCES)
-  message(STATUS "Change paths to ${file}")
+  #message(STATUS "Change paths to ${file}")
   list(APPEND AGENERATED_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/${file}")
 endforeach()
 
 set(GENERATED_SOURCES ${AGENERATED_SOURCES})
-message(STATUS "Generated Source:" ${GENERATED_SOURCES})
+#message(STATUS "Generated Source:" ${GENERATED_SOURCES})
 
 #--- XKBLAS
 if (${HIP_FOUND})
@@ -124,11 +124,11 @@ if (${HIP_FOUND})
      string(REGEX REPLACE "^([sdc]).*$" "\\1" precision "${file}")
      add_custom_command (
        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${file_hip}
-       COMMAND ${SHELL_EXECUTABLE} hipify-perl ${file}|sed -e 's+hipComplex+hipblasComplex+g' -e 's+hipDoubleComplex+hipblasDoubleComplex+g' > ${file_hip}
+       COMMAND ${SHELL_EXECUTABLE} hipify-perl ${file}|sed -e 's+hipComplex+hipblasComplex+g' -e 's+hipDoubleComplex+hipblasDoubleComplex+g' -e 's+cublasChemm+hipblasChemm+g' -e 's+cublasCher2k+hipblasCher2k+g' -e 's+cublasCherk+hipblasCherk+g' -e 's+cublasCsymm+hipblasCsymm+g' -e 's+cublasCsyr2k+hipblasCsyr2k+g' -e 's+cublasCsyrk+hipblasCsyrk+g' -e 's+cublasCtrmm+hipblasCtrmm+g' -e 's+cublasCtrsm+hipblasCtrsm+g' -e 's+cublasDsymm+hipblasDsymm+g' -e 's+cublasDsyr2k+hipblasDsyr2k+g' -e 's+cublasDsyrk+hipblasDsyrk+g' -e 's+cublasDtrmm+hipblasDtrmm+g' -e 's+cublasSsymm+hipblasSsymm+g' -e 's+cublasSsyr2k+hipblasSsyr2k+g' -e 's+cublasSsyrk+hipblasSsyrk+g' -e 's+cublasStrmm+hipblasStrmm+g' -e 's+cublasZhemm+hipblasZhemm+g' -e 's+cublasZher2k+hipblasZher2k+g' -e 's+cublasZherk+hipblasZherk+g' -e 's+cublasZsymm+hipblasZsymm+g' -e 's+cublasZsyr2k+hipblasZsyr2k+g' -e 's+cublasZsyrk+hipblasZsyrk+g' -e 's+cublasZtrmm+hipblasZtrmm+g' -e 's+cublasZtrsm+hipblasZtrsm+g' > ${file_hip}
        DEPENDS ${file} 
        DEPENDS zxkblas.h cxkblas.h dxkblas.h sxkblas.h ctask.h dtask.h stask.h
      )
-     message(STATUS "Hipyfied: ${file} -> ${CMAKE_CURRENT_BINARY_DIR}/${file_hip}")
+     #message(STATUS "Hipyfied: ${file} -> ${CMAKE_CURRENT_BINARY_DIR}/${file_hip}")
      list(APPEND HIPYFIED_FILE ${CMAKE_CURRENT_BINARY_DIR}/${file_hip})
   endforeach()
   add_library(xkblas SHARED internal_register.h common.h xkblas.h ztask_internal.h ctask_internal.h dtask_internal.h stask_internal.h ${HEADER_FILE} ${HIPYFIED_FILE}) 
@@ -139,7 +139,7 @@ else()
   ) 
 endif()
 
-target_link_libraries(xkblas kaapi ${BLAS_LIBRARIES} ${CUBLAS_LIBRARIES})
+target_link_libraries(xkblas kaapi ${CUBLAS_LIBRARIES} ${HIPBLAS_LIBRARIES} ${ROCBLAS_LIBRARIES})
 set_target_properties(xkblas PROPERTIES LINKER_LANGUAGE C)
 
 install(TARGETS xkblas DESTINATION lib)
