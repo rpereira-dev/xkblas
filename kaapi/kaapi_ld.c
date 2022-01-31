@@ -141,11 +141,11 @@ int kaapi_localitydomain_attach(
     goto out;
   }
   kaapi_assert( KAAPI_LD_COUNTTYPE == __builtin_popcountl(KAAPI_LD_ALLTYPE));
-  kaapi_atomic_lock(&kaapi_ldlock);
   int idx = __builtin_ffs((unsigned int)type);
   kaapi_assert( idx != 0);
   --idx;
 
+  kaapi_atomic_lock(&kaapi_ldlock);
   if (kaapi_all_lddomains ==0)
   {
     kaapi_all_lddomains = calloc(sizeof(kaapi_localitydomain_type_t), KAAPI_LD_COUNTTYPE);

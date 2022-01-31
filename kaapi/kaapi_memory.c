@@ -3137,7 +3137,7 @@ int kaapi_dsm_register_device(
   else
     device->asid = kaapi_memory_create_asid(
       0, /* global id */
-      ldid, /* before: KAAPI_ATOMIC_INCR(&kaapi_dsm_asid_lid), lid */
+      ldid, 
       arch
     );
 
