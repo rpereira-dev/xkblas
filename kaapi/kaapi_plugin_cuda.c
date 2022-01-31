@@ -46,7 +46,7 @@
 #include <assert.h>
 #include <stdarg.h>
 
-#define CUDA_API_PER_THREAD_DEFAULT_STREAM  1
+#define KAAPI_USE_PERSTREAM_BLASHANDLE  0
 
 /* There is 2 ways to compile kaapi_pluging_cuda.c:
   - the historical implementation based on the driver API
@@ -200,7 +200,9 @@ typedef struct {
   cuda_cache_t* cache;
 #endif
   size_t counter[CUDA_MAX_COUNTERS];
-  //cublasHandle_t    handle;
+#if KAAPI_USE_PERSTREAM_BLASHANDLE==0
+  cublasHandle_t    handle;
+#endif
 } kaapi_device_cuda_t;
 
 /* IO stream with specific field for CUDA
@@ -233,7 +235,9 @@ typedef struct kaapi_cuda_io_stream_t {
 #    endif
 #  endif
 #endif
+#if KAAPI_USE_PERSTREAM_BLASHANDLE==1
   cublasHandle_t    handle;
+#endif
 } kaapi_cuda_io_stream_t;
 
 /* number of used device for this run */
@@ -985,7 +989,7 @@ static void kaapi_cuda_init_cuda_stream(
   if (type == KAAPI_IO_STREAM_KERN)
   {
     kaapi_assert_debug( thread_type == 0 );
-#if 1 // cublas handle moved to device and shared against the stream
+#if KAAPI_USE_PERSTREAM_BLASHANDLE==1
     /*
      */
     cublasStatus_t cres = cublasCreate(&cios->handle);
@@ -1000,7 +1004,9 @@ static void kaapi_cuda_init_cuda_stream(
     kaapi_assert_debug( ((type == KAAPI_IO_STREAM_H2D) && (thread_type == 1)) 
                      || ((type == KAAPI_IO_STREAM_D2H) && (thread_type == 2)) );
 #endif
+#if KAAPI_USE_PERSTREAM_BLASHANDLE
     cios->handle = 0;
+#endif
   }
 }
 
@@ -1071,7 +1077,7 @@ static void cuda_stream_free(
 )
 {
   kaapi_cuda_io_stream_t* cios = (kaapi_cuda_io_stream_t*)ios;
-#if 1// moved to device
+#if KAAPI_USE_PERSTREAM_BLASHANDLE
   if (cios->handle)
     cublasDestroy(cios->handle);
 #endif
@@ -1301,9 +1307,11 @@ static int cuda_stream_decode_ioinstruction(
 #elif KAAPI_USE_CUDA_RUNTIME_API
   cudaError_t res = cudaSuccess;
   cudaStream_t* stream = 0;
+#if 1//KAAPI_DEBUG
   int devid;
   cudaGetDevice(&devid);
   kaapi_assert(devid == kaapi_device_ids[device->inherited.device_id]);
+#endif
   cudaSetDevice(kaapi_device_ids[device->inherited.device_id]);
 #endif
   uint8_t type; /* 1D, 2D */
@@ -1626,10 +1634,19 @@ static int cuda_stream_decode_ioinstruction(
 #    endif
 #  endif
 #endif
+#if KAAPI_USE_PERSTREAM_BLASHANDLE==0
+      /* the call + execute_task should be atomic */
+      cublasStatus_t cres = cublasSetStream(device->handle, *stream);
+      kaapi_assert(cres == CUBLAS_STATUS_SUCCESS);
+#endif
       kaapi_offload_device_execute_task(
         &device->inherited,
         op->task,
+#if KAAPI_USE_PERSTREAM_BLASHANDLE
         cios->handle
+#else
+        device->handle
+#endif
       );
 #if CONFIG_SYNCHRONOUS_KERNEL
 #  if KAAPI_USE_CUDA_DRIVER_API
@@ -1664,12 +1681,20 @@ static int cuda_stream_decode_ioinstruction(
    but whithout calling callback
  */
 static int cuda_stream_advance_pending(
-    kaapi_device_t* device,
+    kaapi_device_t* dev,
     kaapi_io_stream_t* ios,
     int blocking
 )
 {
   KAAPI_PLUGIN_TRACE_IN
+
+  kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev;
+#if 1//KAAPI_DEBUG
+  int devid;
+  cudaGetDevice(&devid);
+  kaapi_assert(devid == kaapi_device_ids[device->inherited.device_id]);
+#endif
+  cudaSetDevice(kaapi_device_ids[device->inherited.device_id]);
 
 #if KAAPI_USE_CUDA_DRIVER_API
   CUresult res;
@@ -1789,7 +1814,7 @@ static int cuda_stream_advance_pending(
         break;
 
       default:
-        fprintf(stderr, "%i:: bad instruction type at pos:%li\n", device->ld->idx, ios_okp);
+        fprintf(stderr, "%i:: bad instruction type at pos:%li\n", dev->ld->idx, ios_okp);
         kaapi_assert(0);
         break;
     }
@@ -2380,7 +2405,7 @@ int KAAPI_PLUGIN_ENTRYPOINT(host_register_testwait)(
 /*
 */
 KAAPI_CLASS_ENTRYPOINT kaapi_device_t* 
-KAAPI_PLUGIN_ENTRYPOINT(device_create)(int dev)
+KAAPI_PLUGIN_ENTRYPOINT(device_create)(kaapi_driver_t* driver, int dev)
 {
 #if _PLUGIN_DEBUG
   fprintf(stdout, "cuda:%s: device %d init\n", __FUNCTION__, dev);
@@ -2388,6 +2413,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_create)(int dev)
   kaapi_device_cuda_t* cudadevice = (kaapi_device_cuda_t*)malloc(sizeof(kaapi_device_cuda_t));
   memset(cudadevice, 0, sizeof(kaapi_device_cuda_t) );
   cudadevice->inherited.device_id = dev;
+  _kaapi_offload_config_data_field_device(driver, &cudadevice->inherited);
   return (kaapi_device_t*)cudadevice;
 }
 
@@ -2402,7 +2428,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_destroy)(kaapi_device_t* dev)
   fprintf(stdout, "cuda:%s: device %lu init\n", __FUNCTION__, (uintptr_t)device);
 #endif
   kaapi_localitydomain_destroy(device->inherited.ld);
-#if 0
+#if KAAPI_USE_PERSTREAM_BLASHANDLE==0
   if (device->handle)
     cublasDestroy(device->handle);
 #endif
@@ -2571,12 +2597,12 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
 #endif
   kaapi_cuda_plugin_unlock();
 
-#if 0
+#if KAAPI_USE_PERSTREAM_BLASHANDLE==0
   cublasStatus_t cres = cublasCreate(&device->handle);
   kaapi_assert(cres == CUBLAS_STATUS_SUCCESS);
+  printf("Create handle: %p for device %p / %i\n", device->handle, dev, dev->device_id);
 #endif
 out:
-
   KAAPI_OFFLOAD_TRACE_OUT
   return err;
 }
@@ -2932,8 +2958,11 @@ KAAPI_PLUGIN_ENTRYPOINT(get_cublas_handle)(kaapi_device_t* dev)
 #if _PLUGIN_DEBUG
   fprintf(stdout, "cuda:%s: device %d cublas_handle\n", __FUNCTION__, dev->device_id);
 #endif
-  //return (void*)(uintptr_t)device->handle;
+#if KAAPI_USE_PERSTREAM_BLASHANDLE==0
+  return (void*)(uintptr_t)device->handle;
+#else
   return 0;
+#endif
 }
 
 

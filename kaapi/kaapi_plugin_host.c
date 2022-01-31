@@ -483,7 +483,7 @@ uint64_t KAAPI_PLUGIN_ENTRYPOINT(host_unregister)(
 
 /*
 */
-KAAPI_CLASS_ENTRYPOINT kaapi_device_t* KAAPI_PLUGIN_ENTRYPOINT(device_create)(int dev)
+KAAPI_CLASS_ENTRYPOINT kaapi_device_t* KAAPI_PLUGIN_ENTRYPOINT(device_create)(kaapi_driver_t* driver, int dev)
 {
   KAAPI_OFFLOAD_TRACE_IN
   kaapi_device_host_t* hostdevice = (kaapi_device_host_t*)malloc( sizeof(kaapi_device_host_t));
@@ -492,6 +492,9 @@ KAAPI_CLASS_ENTRYPOINT kaapi_device_t* KAAPI_PLUGIN_ENTRYPOINT(device_create)(in
 #endif
   memset(hostdevice, 0, sizeof(kaapi_device_host_t) );
   hostdevice->inherited.device_id = dev;
+  _kaapi_offload_config_data_field_device(driver, &hostdevice->inherited);
+  kaapi_offload_device_init( &hostdevice->inherited );
+  kaapi_offload_device_commit( &hostdevice->inherited );
   KAAPI_OFFLOAD_TRACE_OUT
 
   return &hostdevice->inherited;

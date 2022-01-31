@@ -45,7 +45,6 @@
 
 #ifndef _KAAPI_OFFLOAD_H_
 #define _KAAPI_OFFLOAD_H_
-#include <stdio.h>
 
 #define KAAPI_PLUGIN_PREFIX_NAME "KAAPI_PLUGIN_"
 #define KAAPI_PLUGIN_ENTRYPOINT_NAME( func_name ) KAAPI_PLUGIN_PREFIX_NAME #func_name
@@ -59,6 +58,20 @@ static inline unsigned int kaapi_offload_get_num_devices(void)
 #else
 
 struct kaapi_driver;
+
+typedef enum {
+  KAAPI_DEVICE_STATE_CREATE,
+  KAAPI_DEVICE_STATE_INIT,
+  KAAPI_DEVICE_STATE_COMMIT,
+  KAAPI_DEVICE_STATE_DOSTART,
+  KAAPI_DEVICE_STATE_START,
+  KAAPI_DEVICE_STATE_STOP,
+  KAAPI_DEVICE_STATE_STOPPED,
+  KAAPI_DEVICE_STATE_FINALISE,
+  KAAPI_DEVICE_STATE_FINALIZED,
+  KAAPI_DEVICE_STATE_DESTROY,
+  KAAPI_DEVICE_STATE_DESTROYED
+} kaapi_device_state_t;
 
 typedef enum {
   KAAPI_DEVICEOP_NOP =0,
@@ -88,18 +101,18 @@ typedef struct  {
    a communication stream between host and the ressource
 */
 struct kaapi_device {
-    kaapi_memory_device_t       memdev;     /* casted to kaapi_device */
-    kaapi_offload_stream_t      stream;     /* communication streams host<->device */
-    kaapi_localitydomain_t*     ld;         /* the device locality domain */
-    kaapi_context_t*            ctxt;       /* running thread */
-    kaapi_atomic_t              cnt_push;   /* number of times the ressource is pushed */
-    unsigned int                device_id;  /* Internal id for a specific device type (ordering) */
+    kaapi_memory_device_t       memdev;            /* casted to kaapi_device */
+    kaapi_offload_stream_t      stream;            /* communication streams host<->device */
+    kaapi_localitydomain_t*     ld;                /* the device locality domain */
+    kaapi_context_t*            ctxt;              /* running thread */
+    kaapi_atomic_t              cnt_push;          /* number of times the ressource is pushed */
+    unsigned int                device_id;         /* Internal id for a specific device type (ordering) */
     pthread_t                   tid;
     struct kaapi_driver*        driver;
-    uint64_t                    spawn_count;   /* number of tasks */
-    uint64_t                    exec_count;    /* number of tasks completed */
-    int volatile                finalize;      /* true iff driver stop device */
-    int                         is_initialized;/* True if driver is initialized */
+    uint64_t                    spawn_count;       /* number of tasks */
+    uint64_t                    exec_count;        /* number of tasks completed */
+    int volatile                finalize;          /* true iff driver stop device */
+    volatile kaapi_device_state_t state;           /* True if driver is initialized */
   
     double                      time_tasks;        /* cumulative time for all executed tasks */
     double                      flops_tasks;       /* cumulative flops for all executed tasks */
@@ -107,29 +120,31 @@ struct kaapi_device {
     uint64_t                    pendingtasks;      /* #tasks (between prepare data and end of execution) */
     double                      flops_pendingtasks;/* idem for pending tasks (between prepare data and end of execution) */
     double                      data_pendingtasks; /* idem for pending tasks */
-    kaapi_offload_perfcounter_t perfcnt;       /* per task */
-    const char*                 name;          /* Device name */
-    void*                       handle;        /* device handle, e.g. cublas handle for GPU*/
+    kaapi_offload_perfcounter_t perfcnt;           /* per task */
+    const char*                 name;              /* Device name */
 
-    pthread_mutex_t             lock;          /* used to synchronize device thread */
-    pthread_cond_t              cond;          /* and cpu threads if any */
-    pthread_cond_t              cond_sleep;    /* and cpu threads if any */
-    int                         issleeping;    /* */
+    size_t                      mem_limit;
+    size_t                      mem_total;
+
+    pthread_mutex_t             lock;              /* used to synchronize device thread */
+    pthread_cond_t              cond;              /* and cpu threads if any */
+    pthread_cond_t              cond_sleep;        /* and cpu threads if any */
+    int                         issleeping;        /* */
     struct {
-      kaapi_device_op_t      op;            /* op request for a device */
+      kaapi_device_op_t      op;                   /* op request for a device */
       uintptr_t              arg;
-      kaapi_atomic64_t*      counter;       /* for MEMSYNC or WRITEBACK request */
-      int                    err;           /* error returned by the request */
+      kaapi_atomic64_t*      counter;              /* for MEMSYNC or WRITEBACK request */
+      int                    err;                  /* error returned by the request */
     } request;
   
 #if KAAPI_PIPELINE_GPUTASK
     /* pipline: a way to enforce execution order of kernel to device */
     pthread_mutex_t             pipe_lock __attribute__((aligned(KAAPI_CACHE_LINE_SIZE)));
     uint64_t                    pipe_size;
-    kaapi_task_t**              pipeline;      /* circular buffer to store pipeline of task to run on the device */
-    uint64_t                    p_write;       /* next position in the pipeline to write a new task */
-    uint64_t                    p_ready;       /* position of the first ready task submitted to stream but not yet tested finish */
-    uint64_t                    p_finish;      /* position in the stream of the next task to finish */
+    kaapi_task_t**              pipeline;          /* circular buffer to store pipeline of task to run on the device */
+    uint64_t                    p_write;           /* next position in the pipeline to write a new task */
+    uint64_t                    p_ready;           /* position of the first ready task submitted to stream but not yet tested finish */
+    uint64_t                    p_finish;          /* position in the stream of the next task to finish */
 #endif
 #if KAAPI_USE_PERFCOUNTER
     uint32_t                    cnt_task;
@@ -142,9 +157,9 @@ struct kaapi_device {
 #endif
 #endif
   
-    kaapi_atomic16_t            cnt_pending;   /* number of tasks waiting for data (not too much) */
-    kaapi_atomic16_t            cnt_ready;     /* number of ready tasks inserted into device stream  (not too much) */
-    kaapi_atomic32_t            cnt_exec;      /* number of tasks executed */
+    kaapi_atomic16_t            cnt_pending;       /* number of tasks waiting for data (not too much) */
+    kaapi_atomic16_t            cnt_ready;         /* number of ready tasks inserted into device stream  (not too much) */
+    kaapi_atomic32_t            cnt_exec;          /* number of tasks executed */
 };
 
 
@@ -202,7 +217,7 @@ typedef struct kaapi_driver {
     );
 
     /* create device object and initialize device_id field with argument */
-    kaapi_device_t* (*f_device_create)(int);
+    kaapi_device_t* (*f_device_create)(struct kaapi_driver*, int);
     int (*f_device_destroy)(kaapi_device_t*);
     /* initialize device fields, especially with virtual functions */
     const char* (*f_device_info)(kaapi_device_t*);
@@ -274,13 +289,15 @@ static inline kaapi_address_space_id_t kaapi_offload_self_device_get_asid(void)
 
 /** \ingroup Offload
   It inits a device and attaches to the current thread.
- */
+  Called by the thread that manages the device.
+*/
 extern int kaapi_offload_device_init(kaapi_device_t* const device);
 
 /** \ingroup Offload
   It commits a device.
   Called after all inits have been call on each devices
- */
+  Called by the thread that manages the device.
+*/
 extern int kaapi_offload_device_commit(kaapi_device_t* const device);
 
 
@@ -291,7 +308,7 @@ extern const char* kaapi_offload_device_info(kaapi_device_t* const device);
 
 /** \ingroup Offload
   It inits a device and attaches to the current thread.
- */
+*/
 extern int kaapi_offload_device_start(kaapi_device_t* const device);
 
 /** \ingroup Offload
@@ -415,6 +432,7 @@ static inline int kaapi_offload_device_accept_new_task( kaapi_device_t* device )
   return 0;
 }
 
+
 /*
 */
 extern int _kaapi_compute_load_device(
@@ -425,6 +443,11 @@ extern int _kaapi_compute_load_device(
     int* imax,  /* of size at least KAAPI_IMAX */
     float* pload
 );
+
+
+/*
+*/
+extern void _kaapi_offload_config_data_field_device(kaapi_driver_t* driver, kaapi_device_t* device);
 
 #endif // #if defined(KAAPI_USE_OFFLOAD)
 

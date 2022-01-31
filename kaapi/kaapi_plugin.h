@@ -132,7 +132,7 @@ KAAPI_PLUGIN_ENTRYPOINT(host_unregister)(
 /*
  */
 KAAPI_CLASS_ENTRYPOINT struct kaapi_device*
-KAAPI_PLUGIN_ENTRYPOINT(device_create)(int dev);
+KAAPI_PLUGIN_ENTRYPOINT(device_create)(kaapi_driver_t* driver, int dev);
 
 /*
  */
@@ -175,4 +175,8 @@ KAAPI_PLUGIN_ENTRYPOINT(device_attach)(struct kaapi_device*);
 KAAPI_CLASS_ENTRYPOINT int
 KAAPI_PLUGIN_ENTRYPOINT(device_detach)(struct kaapi_device*);
 
+/*
+*/
+KAAPI_CLASS_ENTRYPOINT void*
+KAAPI_PLUGIN_ENTRYPOINT(get_cublas_handle)(kaapi_device_t* dev);
 #endif
