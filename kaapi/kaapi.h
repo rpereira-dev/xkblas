@@ -216,6 +216,11 @@ extern unsigned int kaapi_thread_kid( kaapi_thread_t* );
  */
 extern int kaapi_get_concurrency (void);
 
+/** Returns the total number of devices that can be used by Kaapi to offload
+    task computation
+*/
+extern unsigned int kaapi_offload_ndevices(void);
+
 
 
 /* ========================================================================= */
