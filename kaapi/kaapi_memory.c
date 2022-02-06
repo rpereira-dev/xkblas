@@ -1316,6 +1316,7 @@ static size_t kaapi_memory_cache_evict_fromlist(
   kaapi_cache_entry_t* curr = list->end;
   kaapi_cache_entry_t* pcurr;
 
+  size_t size_view = 0;
   size_t size2 = 2*size;
   kaapi_assert( &kaapi_offload_self_device()->memdev == device );
 
@@ -1327,46 +1328,52 @@ static size_t kaapi_memory_cache_evict_fromlist(
      && kaapi_memory_replica_is_valid_excepton(curr->mdi, lid)
     )
     {
+      size_view = (size_t)-1;
+
       /* lock memory if... */
       kaapi_atomic_lock(&curr->mdi->replicas[lid]->lock);
-      printf("Make copy data: mdi:%p, lid: %lu\n", curr->mdi,lid);
-
-      kaapi_assert_debug( kaapi_memory_replica_is_allocated(curr->mdi, lid) );
-
-      kaapi_memory_replica_unset_valid(curr->mdi, lid);
-
-      kaapi_assert_debug( kaapi_memory_replica_is_valid_somewhere(curr->mdi) );
-      kaapi_assert_debug( list == curr->mdi->replicas[lid]->cachelist );
-
-      kaapi_memory_replica_unset_allocated(curr->mdi, lid);
-      kaapi_assert( !kaapi_memory_replica_is_xfer(curr->mdi, lid) );
-
-      size_t size_view = kaapi_memory_view_size( &curr->mdi->replicas[lid]->view );
-      kaapi_assert_debug( curr->mdi->replicas[lid]->ptr.asid == device->asid );
-      kaapi_memory_free(curr->mdi->replicas[lid]->ptr, size_view );
-      curr->mdi->replicas[lid]->ptr = kaapi_make_nullpointer(cache->asid);
-      curr->mdi->replicas[lid]->cachelist = 0;
-      curr->mdi->replicas[lid]->cacheentry = 0;
-
+      if (kaapi_memory_replica_is_notpinned(curr->mdi, lid)
+       && kaapi_memory_replica_is_valid_excepton(curr->mdi, lid))
+      {
+        printf("Make copy data: mdi:%p, lid: %lu\n", curr->mdi,lid);
+  
+        kaapi_assert_debug( kaapi_memory_replica_is_allocated(curr->mdi, lid) );
+  
+        kaapi_memory_replica_unset_valid(curr->mdi, lid);
+  
+        kaapi_assert_debug( kaapi_memory_replica_is_valid_somewhere(curr->mdi) );
+        kaapi_assert_debug( list == curr->mdi->replicas[lid]->cachelist );
+  
+        kaapi_memory_replica_unset_allocated(curr->mdi, lid);
+        kaapi_assert( !kaapi_memory_replica_is_xfer(curr->mdi, lid) );
+  
+        size_view = kaapi_memory_view_size( &curr->mdi->replicas[lid]->view );
+        kaapi_assert_debug( curr->mdi->replicas[lid]->ptr.asid == device->asid );
+        kaapi_memory_free(curr->mdi->replicas[lid]->ptr, size_view );
+        curr->mdi->replicas[lid]->ptr = kaapi_make_nullpointer(cache->asid);
+        curr->mdi->replicas[lid]->cachelist = 0;
+        curr->mdi->replicas[lid]->cacheentry = 0;
+      }  
       /* unlock memory if... */
       kaapi_atomic_unlock(&curr->mdi->replicas[lid]->lock);
 
-      if (size2 < size_view) size2 = 0;
-      else size2 -= size_view;
+      if (size_view != (size_t)-1)
+      {
+        if (size2 < size_view) size2 = 0;
+        else size2 -= size_view;
 
-      /* erase entry from cache list */
-      if (curr->next !=0) curr->next->prev = pcurr;
-      else list->end = pcurr;
-      if (curr->prev !=0) curr->prev->next = curr->next;
-      else list->beg = curr->next;
-      curr->prev = 0;
+        /* erase entry from cache list */
+        if (curr->next !=0) curr->next->prev = pcurr;
+        else list->end = pcurr;
+        if (curr->prev !=0) curr->prev->next = curr->next;
+        else list->beg = curr->next;
+        curr->prev = 0;
 
-      kaapi_atomic_lock(&cache->lock);
-      curr->next = cache->freelist;
-      cache->freelist = curr;
-      kaapi_atomic_unlock(&cache->lock);
-
-    }
+        kaapi_atomic_lock(&cache->lock);
+        curr->next = cache->freelist;
+        cache->freelist = curr;
+        kaapi_atomic_unlock(&cache->lock);
+      }}
     curr = pcurr;
   }
 
