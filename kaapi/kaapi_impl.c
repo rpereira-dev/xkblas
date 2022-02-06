@@ -163,18 +163,33 @@ int __kaapi_has_enough_dataspace( kaapi_thread_t* thread, size_t size)
 /* Default value reset in kaapi_init.
    Warning to keep them coherent.
 */
+#if 0 // DEBUG 
+#warning "Set default value for debug"
+#define KAAPI_GPU_CONC_D2H 1
+#define KAAPI_GPU_CONC_H2D 1
+#define KAAPI_GPU_CONC_D2D 1
+#define KAAPI_GPU_CONC_KER 1
+#define KAAPI_GPU_CONC_KER_COUNT 1
+#else
+#define KAAPI_GPU_CONC_D2H 1
+#define KAAPI_GPU_CONC_H2D 1
+#define KAAPI_GPU_CONC_D2D 1
+#define KAAPI_GPU_CONC_KER 4
+#define KAAPI_GPU_CONC_KER_COUNT 8
+#endif
+
 kaapi_rtparam_t kaapi_default_param = {
   .stackblocsize         = KAAPI_STACKBLOCSIZE,
   .sys_ngpus             = (uint8_t)-1,
   .ngpus                 = (uint8_t)-1,
   .gpu_set               = ~0,
   .cuda_stream_capacity  = 64,
-  .cuda_conc_d2h         = 2,   /* output: D2H */
-  .cuda_conc_stream_kernel = 4,
-  .cuda_conc_kernel      = 8,
-  .cuda_conc_h2d         = 2,   /* output: H2D */
+  .cuda_conc_d2h         = KAAPI_GPU_CONC_D2H,   /* output: D2H */
+  .cuda_conc_stream_kernel = KAAPI_GPU_CONC_KER,
+  .cuda_conc_kernel      = KAAPI_GPU_CONC_KER_COUNT,
+  .cuda_conc_h2d         = KAAPI_GPU_CONC_H2D,   /* output: H2D */
 #if KAAPI_USE_STREAM_D2D
-  .cuda_conc_d2d         = 2,   /* output: D2D */
+  .cuda_conc_d2d         = KAAPI_GPU_CONC_D2D,   /* output: D2D */
 #else
   .cuda_conc_d2d         = 0,   /* output: D2D */
 #endif
@@ -309,12 +324,12 @@ int kaapi_init(void)
   kaapi_default_param.ngpus                 = (uint8_t)-1;
   kaapi_default_param.gpu_set               = ~0;
   kaapi_default_param.cuda_stream_capacity  = 64;
-  kaapi_default_param.cuda_conc_d2h         = 2;
-  kaapi_default_param.cuda_conc_stream_kernel= 4;
-  kaapi_default_param.cuda_conc_kernel      = 8;
-  kaapi_default_param.cuda_conc_h2d         = 2;
+  kaapi_default_param.cuda_conc_d2h         = KAAPI_GPU_CONC_D2H;
+  kaapi_default_param.cuda_conc_stream_kernel= KAAPI_GPU_CONC_KER;
+  kaapi_default_param.cuda_conc_kernel      = KAAPI_GPU_CONC_KER_COUNT;
+  kaapi_default_param.cuda_conc_h2d         = KAAPI_GPU_CONC_H2D;
 #if KAAPI_USE_STREAM_D2D
-  kaapi_default_param.cuda_conc_d2d         = 2;
+  kaapi_default_param.cuda_conc_d2d         = KAAPI_GPU_CONC_D2D;
 #else
   kaapi_default_param.cuda_conc_d2d         = 0;
 #endif
