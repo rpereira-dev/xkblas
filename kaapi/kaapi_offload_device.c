@@ -1165,7 +1165,6 @@ void* kaapi_offload_device_thread( void* arg )
   kaapi_device_t* device = (kaapi_device_t*)arg;
   kaapi_assert(device->driver->f_device_attach(device) ==0);
 
-  printf("**** Device thread for device %i started\n",device->device_id);
   /* basic initialisation */
   kaapi_offload_device_init(device);
   kaapi_offload_device_commit(device);
@@ -1206,7 +1205,6 @@ void* kaapi_offload_device_thread( void* arg )
   do {
     if (device->state == KAAPI_DEVICE_STATE_STOP)
     {
-printf("%p:: Device %p: thread stopped\n",pthread_self(), device);
       device->state = KAAPI_DEVICE_STATE_STOPPED;
       kaapi_assert(0 == pthread_cond_signal(&device->cond_sleep));
       break;
@@ -1218,7 +1216,6 @@ printf("%p:: Device %p: thread stopped\n",pthread_self(), device);
 
   kaapi_offload_device_pop( device );
   _kaapi_offload_device_finalize(device);
-printf("%p:: Device %p: thread stopped\n",pthread_self(), device);
   device->state = KAAPI_DEVICE_STATE_FINALIZED;
 
 #if KAAPI_DEBUG
