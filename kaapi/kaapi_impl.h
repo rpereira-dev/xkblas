@@ -91,7 +91,7 @@ BUG: if set to 0 / PIPELINE set to 0 => deadlock
 #define KAAPI_MAX_PREFETCH_WINDOW 2
 
 /* to allow transfert between GPUi to GPUj if data is under xfer data to GPUi*/
-#define KAAPI_USE_FAVOR_D2D_1 0
+#define KAAPI_USE_FAVOR_D2D_1 1
 
 /* to allow to route data through NVlink if 2 GPUs is not interconnected */
 #define KAAPI_USE_D2D_ROUTE 0
