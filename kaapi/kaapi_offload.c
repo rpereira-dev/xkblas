@@ -161,6 +161,7 @@ static bool kaapi_offload_load_plugin(
   DLSYM (get_flags);
   DLSYM (get_type);
   DLSYM (get_number);
+  DLSYM (get_ndevices);
   DLSYM (init);
   DLSYM (finalize);
   DLSYM (host_register);
@@ -439,7 +440,7 @@ kaapi_offload_find_plugins(void)
   unsigned int type = current->f_get_type();
   kaapi_assert( type < KAAPI_PROC_TYPE_MAX );
   kaapi_drivers_bytype[type] = current;
-  kaapi_offload_config_devices(current);
+  //kaapi_offload_config_devices(current);
 }
 #endif
 
@@ -455,7 +456,7 @@ kaapi_offload_find_plugins(void)
   unsigned int type = current->f_get_type();
   kaapi_assert( type < KAAPI_PROC_TYPE_MAX );
   kaapi_drivers_bytype[type] = current;
-  kaapi_offload_config_devices(current);
+  //kaapi_offload_config_devices(current);
 }
 #endif
 
@@ -471,7 +472,7 @@ kaapi_offload_find_plugins(void)
   unsigned int type = current->f_get_type();
   kaapi_assert( type < KAAPI_PROC_TYPE_MAX );
   kaapi_drivers_bytype[type] = current;
-  kaapi_offload_config_devices(current);
+  //kaapi_offload_config_devices(current);
 }
 #endif
 
@@ -481,6 +482,7 @@ kaapi_offload_find_plugins(void)
 
 #endif
 
+
 /*
 */
 unsigned int kaapi_offload_get_num_devices(void)
@@ -488,6 +490,23 @@ unsigned int kaapi_offload_get_num_devices(void)
   return kaapi_offload_num_devices;
 }
 
+/*
+*/
+unsigned int kaapi_offload_ndevices(void)
+{
+  kaapi_offload_init(0);
+
+  unsigned int ndevices = 0;
+  /* */
+  kaapi_driver_t* current = kaapi_list_drivers;
+  while (current !=0)
+  {
+    if (current->f_get_type() != KAAPI_PROC_TYPE_HOST)
+      ndevices += current->f_get_ndevices();
+    current = current->next;
+  }
+  return ndevices;
+}
 
 /* This function is  make all communications progress through all the stream.
    A a thread or a set of threads management communication progress for the device, this
@@ -547,21 +566,27 @@ int kaapi_offload_poll_devices(void)
 
 /*
 */
+static int kaapi_offload_init_called = 0;
 int kaapi_offload_init(int flag)
 {
+  
   KAAPI_OFFLOAD_TRACE_IN
+  if (kaapi_offload_init_called ==0)
+  {
+    kaapi_offload_init_called = 1;
 
-  /* global vars. init */
-  memset(kaapi_drivers_bytype, 0, sizeof(kaapi_drivers_bytype));
-
-  /* load device plugins and functions 
-     The driver starts a thread to initialize/commit the device.
-  */
-  kaapi_offload_find_plugins();
-
+    /* global vars. init */
+    memset(kaapi_drivers_bytype, 0, sizeof(kaapi_drivers_bytype));
+  
+    /* load device plugins and functions 
+       The driver starts a thread to initialize/commit the device.
+    */
+    kaapi_offload_find_plugins();
+  }
   KAAPI_OFFLOAD_TRACE_OUT
   return 0;
 }
+
 
 /*
 */
@@ -572,7 +597,25 @@ int kaapi_offload_start(void)
   fprintf(stdout, "%s: #devices = %i\n", __FUNCTION__, kaapi_offload_num_devices );
   fflush(stdout);
 #endif
-  
+  /* configure all devices from all driver */
+  /* force creation / configuration of HOST driver first */
+  kaapi_offload_config_devices(kaapi_drivers_bytype[KAAPI_PROC_TYPE_HOST]);
+#if KAAPI_USE_CUDA
+  kaapi_offload_config_devices(kaapi_drivers_bytype[KAAPI_PROC_TYPE_CUDA]);
+#endif
+#if KAAPI_USE_HIP
+  kaapi_offload_config_devices(kaapi_drivers_bytype[KAAPI_PROC_TYPE_HIP]);
+#endif
+
+#if 0 /* does not impose order... see juste above */
+  kaapi_driver_t* current = kaapi_list_drivers;
+  while (current !=0)
+  {
+    kaapi_offload_config_devices(current);
+    current = current->next;
+  }
+#endif
+
   /* initialize the host device */
   if (kaapi_offload_num_devices >0)
   {

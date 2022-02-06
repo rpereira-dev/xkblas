@@ -178,6 +178,7 @@ typedef struct kaapi_driver {
     unsigned int (*f_get_flags)(void); /* flags: not really used */
     unsigned int (*f_get_type)(void);  /* type of ressource CPU,GPU etc */
     unsigned int (*f_get_number)(void);/* number of devices managed by the driver */
+    unsigned int (*f_get_ndevices)(void);/* return the number of devices available to the driver */
 
     /* life cycle functions for the driver of devices (1 device == 1 ressource) */
     int (*f_init)(void);
