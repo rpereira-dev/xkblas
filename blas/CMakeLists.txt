@@ -139,8 +139,22 @@ else()
   ) 
 endif()
 
-target_link_libraries(xkblas kaapi ${CUBLAS_LIBRARIES} ${HIPBLAS_LIBRARIES} ${ROCBLAS_LIBRARIES})
-set_target_properties(xkblas PROPERTIES LINKER_LANGUAGE C)
+
+# use, i.e. don't skip the full RPATH for the build tree
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+
+# when building, don't use the install RPATH already
+# (but later on when installing)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+
+# add the automatically determined parts of the RPATH
+# which point to directories outside the build tree to the install RPATH
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+set_target_properties(xkblas PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE) 
+
+target_link_libraries(xkblas PUBLIC kaapi)
+target_link_libraries(xkblas PRIVATE ${CUBLAS_LIBRARIES} ${HIPBLAS_LIBRARIES} ${ROCBLAS_LIBRARIES})
+#set_target_properties(xkblas PROPERTIES LINKER_LANGUAGE C)
 
 install(TARGETS xkblas DESTINATION lib)
 install(FILES xkblas.h ${CMAKE_CURRENT_BINARY_DIR}/sxkblas.h ${CMAKE_CURRENT_BINARY_DIR}/dxkblas.h ${CMAKE_CURRENT_BINARY_DIR}/cxkblas.h zxkblas.h DESTINATION include)
