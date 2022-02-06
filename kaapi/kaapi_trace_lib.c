@@ -204,6 +204,84 @@ int kaapi_event_get_name( int8_t evtno, int8_t kind, char* buffer, int ssize)
 
 
 /* ------------------------------------------------------------------------------------------- */
+
+/* Human readable name for event mask */
+size_t kaapi_event_get_name_mask( uint64_t eventmask, size_t size, char* buffer)
+{
+  ssize_t s;
+  char sep=' ';
+  size_t save_size;
+  for (int i=0; i<KAAPI_EVT_LAST; ++i)
+  {
+    if (eventmask & (1UL<<i))
+    {
+      if (sep != ' ')  
+      {
+        s = snprintf(buffer,size,"%c",sep);
+        buffer += s; 
+        if (size >s) size -= s; 
+        else 
+        {
+          size = 0;
+          break;
+        }
+      }
+      s = snprintf(buffer,size,"%s", kaapi_event_name[i]);
+      buffer += s; 
+      sep=',';
+      if (size >s) size -= s; 
+      else 
+      {
+        size = 0;
+        break;
+      }
+    }
+  }
+  return save_size - size;
+}
+
+#if KAAPI_USE_PERFCOUNTER==1
+/* Human readable name for event mask */
+size_t kaapi_perfctr_get_name_mask( kaapi_perf_idset_t  perfctr_idset, size_t size, char* buffer)
+{
+  ssize_t s;
+  size_t save_size = size;
+  char sep=' ';
+
+  for (int cnt=0; cnt<kaapi_perf_idset_size(perfctr_idset); ++cnt)
+  {
+    if (kaapi_perf_idset_test(&perfctr_idset, cnt))
+    {
+      if (sep != ' ')  
+      {
+        s = snprintf(buffer,size,"%c",sep);
+        buffer += s;
+        if (size >s) size -= s;
+        else
+        {
+          size = 0;
+          break;
+        }
+      }
+
+      s = snprintf(buffer, size,kaapi_tracelib_perfid_to_name( (kaapi_perf_id_t)cnt ));
+      buffer += s;
+      sep=',';
+      if (size >s) size -= s;
+      else
+      {
+        size = 0;
+        break;
+      }
+    }
+  }
+
+  return save_size - size;
+}
+#endif
+
+
+/* ------------------------------------------------------------------------------------------- */
 /*
    Meta data about performance counter
 */

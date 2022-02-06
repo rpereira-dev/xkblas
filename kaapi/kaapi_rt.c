@@ -38,6 +38,7 @@
 
 #include "git_hash.h"
 #include "kaapi_impl.h"
+#include "kaapi_trace.h"
 //#include "kaapi_error.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -74,6 +75,15 @@ const char* get_kaapi_info(void)
   static char buffer[8192];
   static int isinit = 0;
   if (isinit ==0)
+  {
+    int err;
+#if KAAPI_USE_PERFCOUNTER
+    static char buffer_perfctr[1024];
+    err = kaapi_perfctr_get_name_mask( kaapi_tracelib_param.perfctr_idset, 1024, buffer_perfctr);
+#endif
+    static char buffer_eventmask[1024];
+    err = kaapi_event_get_name_mask( kaapi_tracelib_param.eventmask, 1024, buffer_eventmask);
+ 
     snprintf( buffer, 8192, 
             "  Git last commit: %s\n"
             "  BlasLib  : %s\n"
@@ -114,9 +124,14 @@ const char* get_kaapi_info(void)
 #endif
             "  CACHE_LIM: %i\n" 
 #if KAAPI_USE_PERFCOUNTER
-            "  PERFCTR  : yes\n" 
+            "  PERFCTR  : %s\n" 
 #else
-            "  PERFCTR  : no\n" 
+            "  PERFCTR  : disable\n" 
+#endif
+#if KAAPI_USE_TRACELIB
+            "  TRACE    : %s\n" 
+#else
+            "  TRACE    : disable\n" 
 #endif
             "  IO/THR   : %i\n"
             "  API      : %s\n", 
@@ -148,15 +163,22 @@ const char* get_kaapi_info(void)
          "default", /* default allocator */
 #endif 
          (int)(kaapi_default_param.cuda_cache_limit*100),
+#if KAAPI_USE_PERFCOUNTER
+         (kaapi_perf_idset_empty(&kaapi_tracelib_param.perfctr_idset) ? "no_recorded" : buffer_perfctr ),
+#endif
+#if KAAPI_USE_TRACELIB
+         (kaapi_tracelib_param.eventmask==0 ? "no_recorded" : buffer_eventmask ),
+#endif
          (int)KAAPI_HAVE_IO_THREADS,
 #if KAAPI_USE_CUDA_RUNTIME_API
-         "runtime" 
+         "cuda runtime" 
 #elif KAAPI_USE_CUDA_DRIVER_API
-         "driver" 
+         "cuda driver" 
 #elif KAAPI_USE_HIP
          "hip" 
 #endif 
     );
+  }
   return buffer; 
 }
 

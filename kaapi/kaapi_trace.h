@@ -562,6 +562,14 @@ extern void kaapi_tracelib_taskwait_end(
 /* utility */
 extern size_t kaapi_tracelib_count_perfctr(void);
 
+#if KAAPI_USE_PERFCOUNTER==1
+/* Human readable name for event mask */
+extern size_t kaapi_perfctr_get_name_mask( kaapi_perf_idset_t  perfctr_idset, size_t ssize, char* buffer);
+#endif
+
+/* Human readable name for event mask */
+extern size_t kaapi_event_get_name_mask( uint64_t eventmask, size_t ssize, char* buffer);
+
 /* Human readable name of events */
 extern int kaapi_event_get_name( int8_t evtno, int8_t kind, char* buffer, int ssize);
 
