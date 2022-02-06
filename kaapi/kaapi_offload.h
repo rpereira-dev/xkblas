@@ -282,7 +282,6 @@ extern kaapi_device_t* kaapi_offload_self_device(void);
 static inline kaapi_address_space_id_t kaapi_offload_self_device_get_asid(void)
 {
     kaapi_assert_debug(kaapi_offload_self_device() != NULL);
-    kaapi_assert_debug(kaapi_offload_self_device()->is_initialized == true);
     return kaapi_offload_self_device()->memdev.asid;
 }
 

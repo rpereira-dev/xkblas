@@ -552,6 +552,7 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* 
   device->inherited.ld = ld;
   kaapi_localitydomain_attach( KAAPI_LD_NUMA, 0, ld );
   kaapi_dsm_register_device(&kaapi_the_dsm, &dev->memdev, dev->driver->f_get_type(), ld->ldid );
+  dev->state == KAAPI_DEVICE_STATE_INIT;
 
   KAAPI_OFFLOAD_TRACE_OUT
   return 0;
@@ -565,6 +566,7 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_commit)(kaapi_device_t
 {
   KAAPI_OFFLOAD_TRACE_IN
   kaapi_device_host_t* device = (kaapi_device_host_t*)dev;
+  dev->state == KAAPI_DEVICE_STATE_COMMIT;
   KAAPI_OFFLOAD_TRACE_OUT
   return 0;
 }
@@ -591,7 +593,7 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_start)(kaapi_device_t*
 #if _PLUGIN_DEBUG
   //fprintf(stdout, "host:%s: device %d start\n", __FUNCTION__, dev->device_id);
 #endif
-
+  dev->state = KAAPI_DEVICE_STATE_START;
   KAAPI_OFFLOAD_TRACE_OUT
   return 0;
 }
@@ -606,7 +608,7 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_stop)(kaapi_device_t* 
 #if _PLUGIN_DEBUG
   fprintf(stdout, "host:%s: device %d stop\n", __FUNCTION__, dev->device_id);
 #endif
-
+  dev->state = KAAPI_DEVICE_STATE_STOPPED;
   KAAPI_OFFLOAD_TRACE_OUT
   return 0;
 }
@@ -622,6 +624,7 @@ KAAPI_CLASS_ENTRYPOINT void KAAPI_PLUGIN_ENTRYPOINT(device_finalize)(kaapi_devic
 #endif
   kaapi_dsm_unregister_device(&kaapi_the_dsm, &dev->memdev);
   kaapi_localitydomain_deattach( KAAPI_LD_NUMA, dev->ld );
+  dev->state = KAAPI_DEVICE_STATE_FINALIZED;
   KAAPI_OFFLOAD_TRACE_OUT
 }
 

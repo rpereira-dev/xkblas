@@ -498,7 +498,6 @@ unsigned int kaapi_offload_get_num_devices(void)
 int kaapi_offload_poll_device( kaapi_device_t* device)
 {
   int err =0;
-  kaapi_assert_debug( device->is_initialized );
   kaapi_assert_debug( kaapi_offload_self_device() == device );
 
 #if KAAPI_USE_STREAM_D2D

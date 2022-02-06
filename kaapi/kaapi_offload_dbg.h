@@ -49,7 +49,9 @@
 
 /* Debug flag */
 //#define _OFFLOAD_DEBUG  1
+#ifndef _OFFLOAD_DEBUG  
 #define _OFFLOAD_DEBUG  0
+#endif
 
 #if _OFFLOAD_DEBUG
 #include <stdio.h>

@@ -58,6 +58,9 @@ static pthread_mutex_t  truc_max = PTHREAD_MUTEX_INITIALIZER;
 static float global_max_cpudelay = 0;
 static uint64_t date_global_max  = 0;
 
+
+static void _kaapi_offload_device_finalize(kaapi_device_t* const device);
+
 #if KAAPI_SLEEP_DEVICETHREAD 
 /* same as wakeup without lock/unlock */
 static void kaapi_offload_device_wakeup_(kaapi_device_t* const device)
@@ -1162,9 +1165,11 @@ void* kaapi_offload_device_thread( void* arg )
   kaapi_device_t* device = (kaapi_device_t*)arg;
   kaapi_assert(device->driver->f_device_attach(device) ==0);
 
+  printf("**** Device thread for device %i started\n",device->device_id);
+  /* basic initialisation */
   kaapi_offload_device_init(device);
   kaapi_offload_device_commit(device);
-  kaapi_assert( device->state == KAAPI_DEVICE_STATE_COMMIT);
+  kaapi_assert( (device->state == KAAPI_DEVICE_STATE_COMMIT)||(device->state == KAAPI_DEVICE_STATE_DOSTART));
 
   kaapi_thread_t* thread = kaapi_thread_bind(device->driver->f_get_type(),0);
   if (thread ==0) return 0;
@@ -1189,9 +1194,11 @@ void* kaapi_offload_device_thread( void* arg )
   while (device->state != KAAPI_DEVICE_STATE_DOSTART)
      kaapi_assert(0 == pthread_cond_wait(&device->cond_sleep, &device->lock));
   device->state = KAAPI_DEVICE_STATE_START;
+  kaapi_assert(0 == pthread_cond_signal(&device->cond_sleep));
   kaapi_assert(0 == pthread_mutex_unlock(&device->lock));
   
 
+  /* infinite loop */
   int err = kaapi_sched_idle_offload(thread, _kaapi_device_finalize, device);
   kaapi_assert((err==0)||(err==EINTR));
 
@@ -1199,24 +1206,21 @@ void* kaapi_offload_device_thread( void* arg )
   do {
     if (device->state == KAAPI_DEVICE_STATE_STOP)
     {
+printf("%p:: Device %p: thread stopped\n",pthread_self(), device);
       device->state = KAAPI_DEVICE_STATE_STOPPED;
       kaapi_assert(0 == pthread_cond_signal(&device->cond_sleep));
-    }
-    else if (device->state == KAAPI_DEVICE_STATE_FINALISE)
-    {
-      kaapi_dsm_unregister_device(&kaapi_the_dsm, &device->memdev);
-      kaapi_localitydomain_deattach( KAAPI_LD_GPU, device->ld );
-      device->state = KAAPI_DEVICE_STATE_FINALIZED;
-      kaapi_assert(0 == pthread_cond_signal(&device->cond_sleep));
-    }
-    else if (device->state ==  KAAPI_DEVICE_STATE_DESTROY)
       break;
+    }
     kaapi_assert(0 == pthread_cond_wait(&device->cond_sleep, &device->lock));
-  } while (device->state !=  KAAPI_DEVICE_STATE_DESTROY);  
+  } while (device->state != KAAPI_DEVICE_STATE_DESTROY);  
 
   kaapi_localitydomain_destroy(device->ld);
 
   kaapi_offload_device_pop( device );
+  _kaapi_offload_device_finalize(device);
+printf("%p:: Device %p: thread stopped\n",pthread_self(), device);
+  device->state = KAAPI_DEVICE_STATE_FINALIZED;
+
 #if KAAPI_DEBUG
   if (err != EINTR)
   {
@@ -1244,11 +1248,6 @@ int kaapi_offload_device_init(kaapi_device_t* const device)
   fflush(stdout);
 #endif
   int err = 0;
-  if (device->state != KAAPI_DEVICE_STATE_CREATE) 
-  {
-    err = EINVAL;
-    goto return_value;
-  }
 
   kaapi_driver_t* driver = device->driver;
   err = driver->f_device_init(device);
@@ -1306,7 +1305,11 @@ int kaapi_offload_device_init(kaapi_device_t* const device)
   fprintf(stdout, "%s: device '%s' successfully initialized\n", __FUNCTION__, device->name ==0 ? "<no name>": device->name );
   fflush(stdout);
 #endif
-  device->state = KAAPI_DEVICE_STATE_INIT;
+  kaapi_assert(0 == pthread_mutex_lock(&device->lock));
+  if (device->state == KAAPI_DEVICE_STATE_CREATE)
+    device->state = KAAPI_DEVICE_STATE_INIT;
+  kaapi_assert(0 == pthread_cond_signal(&device->cond_sleep));
+  kaapi_assert(0 == pthread_mutex_unlock(&device->lock));
 
 return_value:
   KAAPI_OFFLOAD_TRACE_OUT
@@ -1324,11 +1327,6 @@ int kaapi_offload_device_commit(kaapi_device_t* const device)
   fflush(stdout);
 #endif
   int err = 0;
-  if (device->state != KAAPI_DEVICE_STATE_INIT)
-  {
-    err = EINVAL;
-    goto return_value;
-  }
 
   kaapi_driver_t* driver = device->driver;
   err = driver->f_device_commit(device);
@@ -1339,7 +1337,11 @@ int kaapi_offload_device_commit(kaapi_device_t* const device)
     fflush(stdout);
 #endif
   }
-  device->state = KAAPI_DEVICE_STATE_COMMIT;
+  kaapi_assert(0 == pthread_mutex_lock(&device->lock));
+  if (device->state == KAAPI_DEVICE_STATE_INIT)
+    device->state = KAAPI_DEVICE_STATE_COMMIT;
+  kaapi_assert(0 == pthread_cond_signal(&device->cond_sleep));
+  kaapi_assert(0 == pthread_mutex_unlock(&device->lock));
 
 return_value:
   KAAPI_OFFLOAD_TRACE_OUT
@@ -1366,11 +1368,11 @@ int kaapi_offload_device_start(kaapi_device_t* const device)
   fflush(stdout);
 #endif
   int err = 0;
-  if (device->state != KAAPI_DEVICE_STATE_COMMIT)
-  {
-    err = EINVAL;
-    goto return_value;
-  }
+
+  kaapi_assert(0 == pthread_mutex_lock(&device->lock));
+  while (device->state != KAAPI_DEVICE_STATE_COMMIT)
+    kaapi_assert(0 == pthread_cond_wait(&device->cond_sleep, &device->lock));
+  kaapi_assert(0 == pthread_mutex_unlock(&device->lock));
 
   kaapi_driver_t* driver = device->driver;
   err = driver->f_device_start(device);
@@ -1405,7 +1407,7 @@ void kaapi_offload_device_stop(kaapi_device_t* const device)
   if (device->state == KAAPI_DEVICE_STATE_START)
   {
     device->driver->f_device_stop(device);
-    kaapi_assert(device->state == KAAPI_DEVICE_STATE_STOPPED);
+    kaapi_assert(device->state >= KAAPI_DEVICE_STATE_STOPPED);
   }
 #if KAAPI_LOG_DELAY
   fclose(device->flog_delay);
@@ -1424,30 +1426,36 @@ void kaapi_offload_device_free_memory(kaapi_device_t* const device)
 }
 
 
-/* Called by f_device_stop driver function to finalise the device
+/* Called by the owner thread that manages the device
 */
-void _kaapi_offload_device_finalize(kaapi_device_t* const device)
+static void _kaapi_offload_device_finalize(kaapi_device_t* const device)
 {
   KAAPI_OFFLOAD_TRACE_IN
   KAAPI_OFFLOAD_TRACE_MSG("IN %s: current_device:%p,%i to finalize\n", __FUNCTION__,
                 (void*)device, (device==0 ? -1 : device->device_id)
   );
 
-  if (device->state == KAAPI_DEVICE_STATE_STOP)
-  {
-    device->driver->f_device_finalize(device);
-    kaapi_assert(device->state == KAAPI_DEVICE_STATE_FINALIZED);
+  kaapi_assert(device->state == KAAPI_DEVICE_STATE_STOPPED);
 
-    device->driver->f_device_destroy(device);
-  }
+  kaapi_dsm_unregister_device(&kaapi_the_dsm, &device->memdev);
+  kaapi_localitydomain_deattach( KAAPI_LD_GPU, device->ld );
+  device->driver->f_device_finalize(device);
+  kaapi_assert(device->state == KAAPI_DEVICE_STATE_FINALIZED);
+
+
   KAAPI_OFFLOAD_TRACE_OUT
 }
 
+/* Finalize is called when the thread is stopped (see kaapi_offload_device_thread).
+   Here call destroy that wait the thread and destroy the object
+*/
 void kaapi_offload_device_finalize(kaapi_device_t* const device)
 {
   KAAPI_OFFLOAD_TRACE_IN
+  device->driver->f_device_destroy(device);
   KAAPI_OFFLOAD_TRACE_OUT
 }
+
 
 
 void kaapi_offload_device_sleep(kaapi_device_t* const device)
@@ -1537,8 +1545,8 @@ size_t kaapi_offload_get_mem_info(
   if (mem_limit) *mem_limit = (size_t)-1UL;
   if (device->state >= KAAPI_DEVICE_STATE_COMMIT)
   {
-    *mem_total = device->mem_total;
-    *mem_limit = device->mem_limit;
+    if (mem_total) *mem_total = device->mem_total;
+    if (mem_limit) *mem_limit = device->mem_limit;
   }
   KAAPI_OFFLOAD_TRACE_OUT
   return retval;

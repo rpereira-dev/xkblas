@@ -101,7 +101,11 @@ static __thread int thread_type = 0;
 */
 #if KAAPI_USE_HWLOC
 #include "hwloc.h"
+#include "hwloc/rsmi.h"
+#include "hwloc/glibc-sched.h"
 #endif
+
+#define _OFFLOAD_DEBUG 1
 
 #include "kaapi_impl.h"
 #include "kaapi_trace.h"
@@ -109,7 +113,7 @@ static __thread int thread_type = 0;
 
 /*
 */
-#define _PLUGIN_NAME   "cuda"
+#define _PLUGIN_NAME   "hip"
 #define _PLUGIN_DEBUG   0
 
 #if KAAPI_USE_DYNLOADER
@@ -539,12 +543,12 @@ static void cuda_mem_cache_destroy(kaapi_device_cuda_t* dev)
 #if KAAPI_USE_CUDA_DRIVER_API
   hipFree((hipDeviceptr_t)dev->cache->base);
 #elif KAAPI_USE_CUDA_RUNTIME_API
-  hipFree(dev->cache->base);
+  hipFree((void*)dev->cache->base);
 #endif
   free(dev->cache);
 }
 
-static uintptr_t cuda_mem_alloc_cache(kaapi_memory_device_t* dev, size_t size)
+static uintptr_t cuda_mem_alloc_cache(kaapi_memory_device_t* dev, size_t size, int* flag)
 {
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev->device;
   uintptr_t ptr;
@@ -1756,10 +1760,14 @@ static int cuda_stream_advance_pending(
           if (res == hipErrorNotReady)
 #elif KAAPI_USE_CUDA_RUNTIME_API
           res = hipEventQuery( cios->end_events[idx] );
+          //res = hipEventSynchronize( cios->end_events[idx] );
           kaapi_assert_debug((res == hipErrorNotReady)  || (res == hipSuccess));
           if (res == hipErrorNotReady)
 #endif
-            pthread_yield();
+          {
+            goto break_label;
+            //pthread_yield();
+          }
           else {
 #if KAAPI_USE_TRACELIB==1
             if (op->type != KAAPI_IO_KERN)
@@ -1802,6 +1810,7 @@ static int cuda_stream_advance_pending(
         break;
     }
   }
+break_label:
   /* all events have been tested, test the prev_iosokp has been incremented */
   ios_okp = ios->ok_p;
   if (prev_iosokp != ios_okp-1) 
@@ -2098,13 +2107,14 @@ static int kaapi_plugin_create_thread_HPI(kaapi_device_t* dev)
   cpu_set_t save_schedset;
   cpu_set_t schedset;
   cpu_set_t schedset_map;
-#if KAAPI_USE_HWLOC && KAAPI_USE_HIP==0
+#if KAAPI_USE_HWLOC 
   hwloc_cpuset_t cpuset;
   hwloc_obj_t obj;
 
   CPU_ZERO(&schedset);
   cpuset = hwloc_bitmap_alloc();
-  err = hwloc_cudart_get_device_cpuset( topology, kaapi_device_ids[dev->device_id], cpuset );
+  //err = hwloc_cudart_get_device_cpuset( topology, kaapi_device_ids[dev->device_id], cpuset );
+  err = hwloc_rsmi_get_device_cpuset( topology, kaapi_device_ids[dev->device_id], cpuset );
   if (err == 0)
   {
 #if 0
@@ -2500,28 +2510,11 @@ KAAPI_PLUGIN_ENTRYPOINT(device_destroy)(kaapi_device_t* dev)
 #if _PLUGIN_DEBUG
   fprintf(stdout, "cuda:%s: device %lu init\n", __FUNCTION__, (uintptr_t)device);
 #endif
-  kaapi_offload_stream_destroy(&dev->stream);
-#if KAAPI_PIPELINE_GPUTASK
-  kaapi_assert(0== pthread_mutex_destroy(&dev->pipe_lock));
-#endif
 
-#if KAAPI_CUDA_CACHE
-  if (!getenv("KAAPI_NO_GPUALLOCATOR"))
-    cuda_mem_cache_destroy(device);
-#endif
-
-  kaapi_assert(0 == pthread_mutex_lock(&dev->lock));
+  int err = pthread_join(dev->tid, 0);
+  kaapi_assert(err ==0);
   dev->state = KAAPI_DEVICE_STATE_DESTROY;
 
-  kaapi_offload_device_wakeup(dev);
-  while (dev->state == KAAPI_DEVICE_STATE_DESTROYED)
-    kaapi_assert(0 == pthread_cond_wait(&dev->cond_sleep, &dev->lock));
-  kaapi_assert(0 == pthread_mutex_unlock(&dev->lock));
-
-#if KAAPI_USE_PERSTREAM_BLASHANDLE==0
-  if (device->handle)
-    hipblasDestroy(device->handle);
-#endif
   free(device->inherited.ld);
   free(device);
   return 0;
@@ -2830,8 +2823,8 @@ KAAPI_PLUGIN_ENTRYPOINT(device_start)(kaapi_device_t* dev)
   kaapi_assert(plugin_initialized == true);
 
   kaapi_assert(0 == pthread_mutex_lock(&dev->lock));
-  dev->state = KAAPI_DEVICE_STATE_START;
-  kaapi_offload_device_wakeup(&device->inherited);
+  dev->state = KAAPI_DEVICE_STATE_DOSTART;
+  kaapi_assert(0 == pthread_cond_signal(&dev->cond_sleep));
   while (dev->state != KAAPI_DEVICE_STATE_START)
     kaapi_assert(0 == pthread_cond_wait(&dev->cond_sleep, &dev->lock));
   kaapi_assert(0 == pthread_mutex_unlock(&dev->lock));
@@ -2856,7 +2849,9 @@ KAAPI_PLUGIN_ENTRYPOINT(device_stop)(kaapi_device_t* dev)
 
   kaapi_assert(0 == pthread_mutex_lock(&dev->lock));
   dev->state = KAAPI_DEVICE_STATE_STOP;
-  kaapi_offload_device_wakeup(&device->inherited);
+  kaapi_assert(0 == pthread_mutex_unlock(&dev->lock));
+  kaapi_offload_device_wakeup( dev );
+  kaapi_assert(0 == pthread_mutex_lock(&dev->lock));
   while (dev->state == KAAPI_DEVICE_STATE_STOP)
     kaapi_assert(0 == pthread_cond_wait(&dev->cond_sleep, &dev->lock));
   kaapi_assert(0 == pthread_mutex_unlock(&dev->lock));
@@ -2878,12 +2873,10 @@ KAAPI_PLUGIN_ENTRYPOINT(device_finalize)(kaapi_device_t* dev)
 #endif
   kaapi_assert(plugin_initialized == true);
 
-  kaapi_assert(0 == pthread_mutex_lock(&dev->lock));
-  dev->state = KAAPI_DEVICE_STATE_FINALISE;
-  kaapi_offload_device_wakeup(&device->inherited);
-  while (dev->state == KAAPI_DEVICE_STATE_FINALIZED)
-    kaapi_assert(0 == pthread_cond_wait(&dev->cond_sleep, &dev->lock));
-  kaapi_assert(0 == pthread_mutex_unlock(&dev->lock));
+  kaapi_offload_stream_destroy(&dev->stream);
+#if KAAPI_PIPELINE_GPUTASK
+  kaapi_assert(0== pthread_mutex_destroy(&dev->pipe_lock));
+#endif
 
 #if KAAPI_CUDA_CACHE
   if (!getenv("KAAPI_NO_GPUALLOCATOR"))
@@ -2898,16 +2891,24 @@ KAAPI_PLUGIN_ENTRYPOINT(device_finalize)(kaapi_device_t* dev)
   CudaCheckError(res);
 #endif
 
-#if KAAPI_DEBUG
-  if (getenv("KAAPI_VERBOSE"))
-  {
-    printf("%i, MEM, %li, %li\n", device->inherited.device_id, device->size_alloc, device->size_free);
-    printf("%i, H2D, %li, %li\n", device->inherited.device_id, COUNTER_CNT_H2D, COUNTER_SIZE_H2D);
-    printf("%i, D2H, %li, %li\n", device->inherited.device_id, COUNTER_CNT_D2H, COUNTER_SIZE_D2H);
-    printf("%i, D2D, %li, %li\n", device->inherited.device_id, COUNTER_CNT_D2D, COUNTER_SIZE_D2D);
-  }
+#if KAAPI_USE_PERSTREAM_BLASHANDLE==0
+  if (device->handle)
+    hipblasDestroy(device->handle);
 #endif
 
+#if 1//KAAPI_DEBUG
+  if (getenv("KAAPI_VERBOSE"))
+  {
+# if KAAPI_USE_PERFCOUNTER
+    printf("%i, TASK: %li\n", device->inherited.device_id, dev->cnt_task);
+# endif
+    printf("%i, MEM : %li, %li\n", device->inherited.device_id, device->size_alloc, device->size_free);
+    printf("%i, H2D : %li, %li\n", device->inherited.device_id, COUNTER_CNT_H2D, COUNTER_SIZE_H2D);
+    printf("%i, D2H : %li, %li\n", device->inherited.device_id, COUNTER_CNT_D2H, COUNTER_SIZE_D2H);
+    printf("%i, D2D : %li, %li\n", device->inherited.device_id, COUNTER_CNT_D2D, COUNTER_SIZE_D2D);
+  }
+#endif
+  dev->state = KAAPI_DEVICE_STATE_FINALIZED;
   KAAPI_OFFLOAD_TRACE_OUT
 }
 
