@@ -105,7 +105,7 @@ static __thread int thread_type = 0;
 #include "hwloc/glibc-sched.h"
 #endif
 
-#define _OFFLOAD_DEBUG 1
+//#define _OFFLOAD_DEBUG 1
 
 #include "kaapi_impl.h"
 #include "kaapi_trace.h"
@@ -1204,7 +1204,7 @@ void* kaapi_cuda_register_thread(void* dummy )
       {
         if (req.op == DEVICE_REGISTER_REQUEST)
         {
-          err = hipHostRegister(req.ptr, req.size, hipHostRegisterDefault/*hipHostRegisterPortable*/);
+          err = hipHostRegister(req.ptr, req.size, hipHostRegisterPortable);
           if (!( (hipSuccess == err) || (hipErrorHostMemoryAlreadyRegistered == err)))
           {
             printf("***[%s]: hipHostRegister error: %i\n", __func__, err);
@@ -2093,7 +2093,10 @@ static void* kaapi_cuda_D2H_io_thread( void* arg )
 #endif
 
 
-static int kaapi_plugin_create_thread_HPI(kaapi_device_t* dev)
+/* Start the thread to manage the device with CPUSET 
+   of core closed to the device
+*/
+static int kaapi_plugin_create_thread_HIP(kaapi_device_t* dev)
 {
   KAAPI_OFFLOAD_TRACE_IN
   int err;
@@ -2225,6 +2228,23 @@ KAAPI_PLUGIN_ENTRYPOINT(get_number)(void)
   assert(plugin_initialized == true);
   return kaapi_device_count;
 }
+
+
+
+/*
+*/
+KAAPI_CLASS_ENTRYPOINT unsigned int
+KAAPI_PLUGIN_ENTRYPOINT(get_ndevices)(void)
+{ 
+  int device_count;
+#if KAAPI_USE_CUDA_DRIVER_API
+  CudaCheckError(hipDeviceGetCount(&device_count));
+#elif KAAPI_USE_CUDA_RUNTIME_API
+  CudaCheckError(hipGetDeviceCount(&device_count));
+#endif
+  return (unsigned int)device_count;
+}
+
 
 
 /*
@@ -2496,7 +2516,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_create)(kaapi_driver_t* driver, int dev)
   memset(cudadevice, 0, sizeof(kaapi_device_cuda_t) );
   cudadevice->inherited.device_id = dev;
   _kaapi_offload_config_data_field_device(driver, &cudadevice->inherited);
-  kaapi_plugin_create_thread_HPI(&cudadevice->inherited);
+  kaapi_plugin_create_thread_HIP(&cudadevice->inherited);
   return &cudadevice->inherited;
 }
 
@@ -2507,9 +2527,7 @@ KAAPI_CLASS_ENTRYPOINT int
 KAAPI_PLUGIN_ENTRYPOINT(device_destroy)(kaapi_device_t* dev)
 {
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev;
-#if _PLUGIN_DEBUG
-  fprintf(stdout, "cuda:%s: device %lu init\n", __FUNCTION__, (uintptr_t)device);
-#endif
+  KAAPI_OFFLOAD_TRACE_IN
 
   int err = pthread_join(dev->tid, 0);
   kaapi_assert(err ==0);
@@ -2517,6 +2535,8 @@ KAAPI_PLUGIN_ENTRYPOINT(device_destroy)(kaapi_device_t* dev)
 
   free(device->inherited.ld);
   free(device);
+
+  KAAPI_OFFLOAD_TRACE_OUT
   return 0;
 }
 
@@ -2528,9 +2548,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
 {
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev;
   KAAPI_OFFLOAD_TRACE_IN
-#if _PLUGIN_DEBUG
-  fprintf(stdout, "cuda:%s: device %d in\n", __FUNCTION__, dev->device_id);
-#endif
+
   int err = 0;
   int pi;
 
@@ -2582,7 +2600,9 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
   CudaCheckError(res);
   /* */
   hipCtxSynchronize();
+
 #elif KAAPI_USE_CUDA_RUNTIME_API
+
   struct hipDeviceProp_t prop;
   hipError_t res;
   res = hipSetDevice(kaapi_device_ids[dev->device_id]);
@@ -2669,17 +2689,11 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
   CudaCheckError(res);
 #endif
 
-#if _PLUGIN_DEBUG
-  fprintf(stdout, "cuda:%s: cuda %d out\n", __FUNCTION__, dev->device_id);
-#endif
-
-#if 1 // KAAPI_DEBUG
+#if KAAPI_DEBUG
   int devid;
   hipGetDevice(&devid);
   kaapi_assert(devid == kaapi_device_ids[device->inherited.device_id]);
 #endif
-  //res = hipSetDevice(kaapi_device_ids[dev->device_id]);
-  //CudaCheckError(res);
   rocblas_initialize();
 
 #if KAAPI_USE_PERSTREAM_BLASHANDLE==0
@@ -2699,9 +2713,6 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_commit)(kaapi_device_t
 {
   KAAPI_OFFLOAD_TRACE_IN
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev;
-#if _PLUGIN_DEBUG
-  fprintf(stdout, "host:%s: device %d start\n", __FUNCTION__, dev->device_id);
-#endif
 
   /* all other devices 'peer' context have been initialized, enable peer */
 #if CONFIG_USE_P2P
@@ -2712,13 +2723,11 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_commit)(kaapi_device_t
   CudaCheckError(res);
 #elif KAAPI_USE_CUDA_RUNTIME_API
   hipError_t res;
-#if 1 // KAAPI_DEBUG
+#if KAAPI_DEBUG
   int devid;
   hipGetDevice(&devid);
   kaapi_assert(devid == kaapi_device_ids[device->inherited.device_id]);
 #endif
-  //res = hipSetDevice(kaapi_device_ids[dev->device_id]);
-  //CudaCheckError(res);
 #endif
 
   /* similar to cuda_perf_device but with ldid index in place of cuda device number */
@@ -2799,9 +2808,9 @@ KAAPI_CLASS_ENTRYPOINT const char* KAAPI_PLUGIN_ENTRYPOINT(device_info)(kaapi_de
   _print_mask(buf1, 10, device->affinity[0]);
   _print_mask(buf2, 10, device->affinity[1]);
   _print_mask(buf3, 10, device->affinity[2]);
-  snprintf(buffer, 256, "%s, %i async engine(s), %.2f (GB), cache limit %.2f (GB), affinity: %s,%s,%s",
+  snprintf(buffer, 256, "%s, %i conc. kernels %.2f (GB), cache limit %.2f (GB), affinity: %s,%s,%s",
     device->prop.name,
-    device->prop.async_engines,
+    device->prop.concurrent,
     ((double)dev->mem_total)/1024.0/1024.0/1024.0,
     ((double)dev->mem_limit)/1024.0/1024.0/1024.0,
     buf1, buf2, buf3
@@ -2817,9 +2826,6 @@ KAAPI_PLUGIN_ENTRYPOINT(device_start)(kaapi_device_t* dev)
   KAAPI_OFFLOAD_TRACE_IN
 
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev;
-#if _PLUGIN_DEBUG
-  fprintf(stdout, "hip:%s: device %d in\n", __FUNCTION__, dev->device_id);
-#endif
   kaapi_assert(plugin_initialized == true);
 
   kaapi_assert(0 == pthread_mutex_lock(&dev->lock));
@@ -2842,9 +2848,6 @@ KAAPI_PLUGIN_ENTRYPOINT(device_stop)(kaapi_device_t* dev)
   KAAPI_OFFLOAD_TRACE_IN
 
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev;
-#if _PLUGIN_DEBUG
-  fprintf(stdout, "hip:%s: device %d in\n", __FUNCTION__, dev->device_id);
-#endif
   kaapi_assert(plugin_initialized == true);
 
   kaapi_assert(0 == pthread_mutex_lock(&dev->lock));
@@ -2860,6 +2863,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_stop)(kaapi_device_t* dev)
   return 0;
 }
 
+
 /*
 */
 KAAPI_CLASS_ENTRYPOINT void 
@@ -2868,9 +2872,6 @@ KAAPI_PLUGIN_ENTRYPOINT(device_finalize)(kaapi_device_t* dev)
   KAAPI_OFFLOAD_TRACE_IN
 
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev;
-#if _PLUGIN_DEBUG
-  fprintf(stdout, "hip:%s: device %d in\n", __FUNCTION__, dev->device_id);
-#endif
   kaapi_assert(plugin_initialized == true);
 
   kaapi_offload_stream_destroy(&dev->stream);
@@ -2896,7 +2897,6 @@ KAAPI_PLUGIN_ENTRYPOINT(device_finalize)(kaapi_device_t* dev)
     hipblasDestroy(device->handle);
 #endif
 
-#if 1//KAAPI_DEBUG
   if (getenv("KAAPI_VERBOSE"))
   {
 # if KAAPI_USE_PERFCOUNTER
@@ -2907,7 +2907,6 @@ KAAPI_PLUGIN_ENTRYPOINT(device_finalize)(kaapi_device_t* dev)
     printf("%i, D2H : %li, %li\n", device->inherited.device_id, COUNTER_CNT_D2H, COUNTER_SIZE_D2H);
     printf("%i, D2D : %li, %li\n", device->inherited.device_id, COUNTER_CNT_D2D, COUNTER_SIZE_D2D);
   }
-#endif
   dev->state = KAAPI_DEVICE_STATE_FINALIZED;
   KAAPI_OFFLOAD_TRACE_OUT
 }
@@ -2919,9 +2918,6 @@ KAAPI_CLASS_ENTRYPOINT int
 KAAPI_PLUGIN_ENTRYPOINT(device_attach)(kaapi_device_t* dev)
 {
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev;
-#if _PLUGIN_DEBUG
-  fprintf(stdout, "hip:%s: hip %d attach\n", __FUNCTION__, dev->device_id);
-#endif
   assert(plugin_initialized == true);
 
 #if KAAPI_USE_CUDA_DRIVER_API
@@ -2943,9 +2939,6 @@ KAAPI_CLASS_ENTRYPOINT int
 KAAPI_PLUGIN_ENTRYPOINT(device_detach)(kaapi_device_t* dev)
 {
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev;
-#if _PLUGIN_DEBUG
-  fprintf(stdout, "hip:%s: hip %d detach\n", __FUNCTION__, dev->device_id);
-#endif
   assert(plugin_initialized == true);
 
 #if KAAPI_USE_CUDA_DRIVER_API
@@ -2966,9 +2959,6 @@ KAAPI_CLASS_ENTRYPOINT void*
 KAAPI_PLUGIN_ENTRYPOINT(get_cublas_handle)(kaapi_device_t* dev)
 {
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev;
-#if _PLUGIN_DEBUG
-  fprintf(stdout, "hip:%s: device %d cublas_handle\n", __FUNCTION__, dev->device_id);
-#endif
 #if KAAPI_USE_PERSTREAM_BLASHANDLE==0
   return (void*)(uintptr_t)device->handle;
 #else
@@ -2989,6 +2979,7 @@ void KAAPI_PLUGIN_ENTRYPOINT(get_hip_driver)(kaapi_driver_t* driver)
   EP (get_flags);
   EP (get_type);
   EP (get_number);
+  EP (get_ndevices);
   EP (init);
   EP (finalize);
   EP (host_register);

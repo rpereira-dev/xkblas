@@ -412,6 +412,17 @@ KAAPI_PLUGIN_ENTRYPOINT(get_number)(void)
 
 /*
 */
+KAAPI_CLASS_ENTRYPOINT unsigned int
+KAAPI_PLUGIN_ENTRYPOINT(get_ndevices)(void)
+{
+  KAAPI_PLUGIN_TRACE_IN
+  KAAPI_PLUGIN_TRACE_OUT
+  return 1;
+}
+
+
+/*
+*/
 KAAPI_CLASS_ENTRYPOINT int
 KAAPI_PLUGIN_ENTRYPOINT(init)(void)
 {
@@ -680,6 +691,7 @@ void KAAPI_PLUGIN_ENTRYPOINT(get_host_driver)(kaapi_driver_t* driver)
   EP (get_flags);
   EP (get_type);
   EP (get_number);
+  EP (get_ndevices);
   EP (init);
   EP (finalize);
   EP (host_register);

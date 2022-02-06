@@ -94,6 +94,11 @@ KAAPI_PLUGIN_ENTRYPOINT(get_number)(void);
 
 /*
  */
+KAAPI_CLASS_ENTRYPOINT unsigned int
+KAAPI_PLUGIN_ENTRYPOINT(get_ndevices)(void);
+
+/*
+ */
 KAAPI_CLASS_ENTRYPOINT int
 KAAPI_PLUGIN_ENTRYPOINT(init)(void);
 
