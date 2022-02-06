@@ -1335,7 +1335,7 @@ static size_t kaapi_memory_cache_evict_fromlist(
       if (kaapi_memory_replica_is_notpinned(curr->mdi, lid)
        && kaapi_memory_replica_is_valid_excepton(curr->mdi, lid))
       {
-        printf("Make copy data: mdi:%p, lid: %lu\n", curr->mdi,lid);
+//        printf("Make copy data: mdi:%p, lid: %lu\n", curr->mdi,lid);
   
         kaapi_assert_debug( kaapi_memory_replica_is_allocated(curr->mdi, lid) );
   
@@ -1387,7 +1387,7 @@ static size_t kaapi_memory_cache_evict_fromlist(
     {
       if (!kaapi_memory_replica_is_valid_excepton(curr->mdi, lid) && !kaapi_memory_replica_is_xfer(curr->mdi, kaapi_local_asid))
       {
-        printf("Make copy to host before evict data\n");
+//        printf("Make copy to host before evict data\n");
         int err = kaapi_dsm_prefetch_on( &kaapi_the_dsm, kaapi_local_asid,
           curr->mdi,
           0, 0, 0, 0
@@ -1442,7 +1442,7 @@ static void kaapi_memory_print_cache_stats(
 
     curr = curr->prev;
   }
-  printf("Eviction from device: %li\n", lid );
+//  printf("Eviction from device: %li\n", lid );
 #if KAAPI_DEBUG
   printf("  -- size_alloc: %li, size_dev_alloc: %li, size_free: %li\n", lid, device->size_alloc, device->size_dev_alloc, device->size_free);
 #endif
@@ -3261,7 +3261,10 @@ int kaapi_dsm_unregister_device(
   kaapi_the_dsm.nodes[lid] = 0;
 
 #if KAAPI_DEBUG
-  printf("%i::Memory Device unregister, memory alloc:%li, free:%li\n", lid, device->size_alloc, device->size_free);
+  if (getenv("KAAPI_VERBOSE"))
+  {
+    printf("%i::Memory Device unregister, memory alloc:%li, free:%li\n", lid, device->size_alloc, device->size_free);
+  }
   device_size_alloc += device->size_alloc;
   device_size_free += device->size_free;
 #endif
@@ -3321,7 +3324,8 @@ int kaapi_dsm_finalize( void )
 
 #if KAAPI_DEBUG
   /* print device->size_alloc for each device */
-  printf("KAAPI DSM Finalize: memory alloc: %li, free: %li\n", device_size_alloc, device_size_free );
+  if (getenv("KAAPI_VERBOSE"))
+    printf("KAAPI DSM Finalize: memory alloc: %li, free: %li\n", device_size_alloc, device_size_free );
 #endif
 
   kaapi_memory_freehashmap( &kaapi_the_dsm.nodes[0]->ht, kaapi_local_asid );
