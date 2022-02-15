@@ -163,7 +163,7 @@ int __kaapi_has_enough_dataspace( kaapi_thread_t* thread, size_t size)
 /* Default value reset in kaapi_init.
    Warning to keep them coherent.
 */
-#if 0 // DEBUG 
+#if KAAPI_USE_HIP // DEBUG 
 #warning "Set default value for debug"
 #define KAAPI_GPU_CONC_D2H 1
 #define KAAPI_GPU_CONC_H2D 1
@@ -171,9 +171,9 @@ int __kaapi_has_enough_dataspace( kaapi_thread_t* thread, size_t size)
 #define KAAPI_GPU_CONC_KER 1
 #define KAAPI_GPU_CONC_KER_COUNT 1
 #else
-#define KAAPI_GPU_CONC_D2H 1
-#define KAAPI_GPU_CONC_H2D 1
-#define KAAPI_GPU_CONC_D2D 1
+#define KAAPI_GPU_CONC_D2H 2
+#define KAAPI_GPU_CONC_H2D 2
+#define KAAPI_GPU_CONC_D2D 2
 #define KAAPI_GPU_CONC_KER 4
 #define KAAPI_GPU_CONC_KER_COUNT 8
 #endif
