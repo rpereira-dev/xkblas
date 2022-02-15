@@ -181,7 +181,6 @@ typedef struct {
   size_t         free_mem;
   size_t         size_alloc;
   size_t         size_free;
-  size_t         mem_limit;
 
   /* device properties (from NVIDIA website) */
   struct {
@@ -190,7 +189,6 @@ typedef struct {
     bool map;          /* if the device can map host memory into the CUDA address space */
     bool concurrent;   /* if the device supports executing multiple kernels within the same context simultaneously */
     int async_engines; /* Number of asynchronous engines */
-    size_t mem_total;  /* total GPU memory size in bytes */
     char name[64];     /* GPU name */
   } prop;
 #if KAAPI_HAVE_IO_THREADS
@@ -616,7 +614,7 @@ static uintptr_t cuda_alloc(kaapi_memory_device_t* dev, size_t size, int* flag)
   kaapi_device_cuda_t* device = (kaapi_device_cuda_t*)dev->device;
 
   /* here we limit the size of allocated memory for the cache system */
-  if (((device->size_alloc - device->size_free) + size) > device->mem_limit)
+  if (((device->size_alloc - device->size_free) + size) > device->inherited.mem_limit)
   {
     if (flag) *flag = KAAPI_MEMORY_DEVICE_FLAG_FULL;
     return 0;
@@ -653,7 +651,7 @@ static uintptr_t cuda_alloc(kaapi_memory_device_t* dev, size_t size, int* flag)
 
   if (flag)
   {
-    if ( 1.0*(device->size_alloc - device->size_free) / device->mem_limit >= 0.9)
+    if ( 1.0*(device->size_alloc - device->size_free) / device->inherited.mem_limit >= 0.9)
       *flag = KAAPI_MEMORY_DEVICE_FLAG_MOSTLY_FULL;
   }
   return (uintptr_t)ptr;
@@ -829,13 +827,14 @@ static size_t cuda_get_mem_info(kaapi_memory_device_t* dev, size_t* mem_total, s
 #if _PLUGIN_DEBUG
   fprintf(stdout, "cuda:%s: device %d init\n", __FUNCTION__, device->inherited.device_id);
 #endif
-  if (mem_total) *mem_total = device->prop.mem_total;
-  if (mem_limit) *mem_limit = device->mem_limit;
+  if (mem_total) *mem_total = device->inherited.mem_total;
+  if (mem_limit) *mem_limit = device->inherited.mem_limit;
 #if _PLUGIN_DEBUG
   fprintf(stdout, "cuda:%s: device %d init\n", __FUNCTION__, device->inherited.device_id, (mem_total ==0 ? -1 : *mem_total), (mem_limit ==0 ? -1 : *mem_limit));
 #endif
-  return device->prop.mem_total;
+  return device->inherited.mem_total;
 }
+
 
 
 /*
@@ -2589,7 +2588,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
     pi = 1;
   device->prop.async_engines = pi;
 
-  res = cuDeviceTotalMem(&device->prop.mem_total, device->cu_device);
+  res = cuDeviceTotalMem(&dev->mem_total, device->cu_device);
   CudaCheckError(res);
 
   memset(device->prop.name, 0, 64*sizeof(char));
@@ -2659,7 +2658,7 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
     device->free_mem = (size_t)free;
   }
   /* limit the memory allocation: reserve about 180MB for runing something */
-  device->mem_limit = (size_t)((double)kaapi_default_param.cuda_cache_limit
+  dev->mem_limit = (size_t)((double)kaapi_default_param.cuda_cache_limit
           * (double)(device->free_mem-180UL*1024UL*1024UL));
   dev->memdev.f_get_source = cuda_get_source;
 
@@ -2760,6 +2759,8 @@ KAAPI_CLASS_ENTRYPOINT int KAAPI_PLUGIN_ENTRYPOINT(device_commit)(kaapi_device_t
 #  elif KAAPI_USE_CUDA_RUNTIME_API
         res = cudaDeviceEnablePeerAccess(kaapi_device_ids[kaapi_device_list[j]->inherited.device_id], 0 );
         CudaCheckError(res);
+#warning
+printf("Device %i enable Peer Access with device %i\n", device->inherited.device_id, kaapi_device_list[j]->inherited.device_id);
 # endif
         verboseok = 1;
       }
@@ -2807,8 +2808,8 @@ KAAPI_CLASS_ENTRYPOINT const char* KAAPI_PLUGIN_ENTRYPOINT(device_info)(kaapi_de
   snprintf(buffer, 256, "%s, %i async engine(s), %.2f (GB), cache limit %.2f (GB), affinity: %s,%s,%s",
     device->prop.name,
     device->prop.async_engines,
-    ((double)device->prop.mem_total)/1024.0/1024.0/1024.0,
-    ((double)device->mem_limit)/1024.0/1024.0/1024.0,
+    ((double)dev->mem_total)/1024.0/1024.0/1024.0,
+    ((double)dev->mem_limit)/1024.0/1024.0/1024.0,
     buf1, buf2, buf3
   );
   return buffer;

@@ -1540,7 +1540,7 @@ size_t kaapi_offload_get_mem_info(
   size_t retval = (size_t)-1UL;
   if (mem_total) *mem_total = (size_t)-1UL;
   if (mem_limit) *mem_limit = (size_t)-1UL;
-  if (device->state >= KAAPI_DEVICE_STATE_COMMIT)
+  // kaapi_assert(device->state >= KAAPI_DEVICE_STATE_COMMIT);
   {
     if (mem_total) *mem_total = device->mem_total;
     if (mem_limit) *mem_limit = device->mem_limit;
