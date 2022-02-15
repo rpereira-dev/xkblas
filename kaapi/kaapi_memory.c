@@ -443,7 +443,6 @@ kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
   kaapi_atomic_lock(&device->mem_lock);
   if ((device->free_chunk_list ==0) && (device->main_chunk ==0))
   {
-//printf("%p do main chunk alloc on device: %p\n",pthread_self(), device);
     kaapi_assert( device->main_chunk == 0);
     /* first : get limit cache_size and reserve it */
     int flag = KAAPI_MEMORY_DEVICE_FLAG_NONE;
@@ -451,6 +450,7 @@ kaapi_pointer_t kaapi_memory_alloc(kaapi_address_space_id_t asid, size_t size)
     kaapi_offload_get_mem_info(device->device, 0, &size_chunk0 );
     //size_chunk0 = 1024*1024*8*128;
     size_chunk0 &= ~ 7UL; // round down to align to 8
+    printf("%p:: DO main chunk alloc on device: %p size: %lu\n",pthread_self(), device->device, size_chunk0);
     kaapi_alloc_chunk_t* chunk0 = malloc(sizeof(kaapi_alloc_chunk_t));
     chunk0->device_ptr = device->f_alloc(device,size_chunk0, &flag);
     kaapi_assert (chunk0->device_ptr !=0);
@@ -712,8 +712,6 @@ int kaapi_memory_freelist_destroy(kaapi_memory_device_t* device )
 
 int kaapi_memory_set_info( int kind, size_t value )
 {
-  if (getenv("KAAPI_VERBOSE"))
-    printf("[xkaapi] preferred block size to %zu\n", value );
   return 0;
 }
 
@@ -751,8 +749,6 @@ int kaapi_memory_set_info( int kind, size_t value )
       }
     }
     TILE_SIZE = value;
-    if (getenv("KAAPI_VERBOSE")) 
-      printf("[xkaapi] preferred block size to %zu\n", value );
   }
 #endif
   else
