@@ -189,6 +189,13 @@ extern int xkblas_init(void);
 */
 extern int xkblas_finalize(void);
 
+/** Returns the total number of devices that can be used by Kaapi 
+    to offload task computation
+   Returns 0 in case of success else an error code.
+   Error code: EINVAL bad value for count (e.g. null pointer)
+*/
+extern int xkblas_get_devices_count(int* count);
+
 /*
 */
 extern void xkblas_load_sym(void** ptr, const char* name);

@@ -1100,6 +1100,17 @@ static int xkblas_ismode_math_tc(void)
   return xkblas_default_math == XKBLAS_TENSOR_OP_MATH;
 }
 
+
+/*
+*/
+int xkblas_get_devices_count(int* count)
+{ 
+  if (count ==0) return EINVAL;
+  *count = kaapi_offload_ndevices(); 
+  return 0;
+}
+
+
 /*
 */
 static int init_count = 0;
@@ -1201,7 +1212,6 @@ int xkblas_init(void)
   {
     extern const char* get_kaapi_version(void);
     extern const char* get_kaapi_info(void);
-    printf("[XKBlas init] %s\n", get_kaapi_version() );
     printf("[XKBlas info]\n%s%s[XKBlas info]\n", get_kaapi_info(), get_xkblas_info() );
 
     /* Some information about hierarchy
