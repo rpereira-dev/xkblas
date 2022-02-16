@@ -48,6 +48,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+/* VERION */
+#define XKBLAS_VERSION 0040
+
 /* */
 #if defined(__STDC_NO_COMPLEX__)
 # error "Compiler support for complex number is required."
@@ -194,7 +197,7 @@ extern int xkblas_finalize(void);
    Returns 0 in case of success else an error code.
    Error code: EINVAL bad value for count (e.g. null pointer)
 */
-extern int xkblas_get_devices_count(int* count);
+extern int xkblas_get_device_count(int* count);
 
 /*
 */

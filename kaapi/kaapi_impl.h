@@ -70,7 +70,7 @@
 /* To activate use of OCR data management. Should be the default when ok.
 BUG: if set to 0 / PIPELINE set to 0 => deadlock 
 */
-#define KAAPI_USE_OCR 0
+#define KAAPI_USE_OCR 1
 
 /* To activate or not the loadbalancing between GPUs
 */

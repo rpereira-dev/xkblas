@@ -1103,7 +1103,7 @@ static int xkblas_ismode_math_tc(void)
 
 /*
 */
-int xkblas_get_devices_count(int* count)
+int xkblas_get_device_count(int* count)
 { 
   if (count ==0) return EINVAL;
   *count = kaapi_offload_ndevices(); 
