@@ -1765,8 +1765,8 @@ static int cuda_stream_advance_pending(
           if (res == hipErrorNotReady)
 #endif
           {
-            goto break_label;
-            //pthread_yield();
+            //goto break_label;
+            pthread_yield();
           }
           else {
 #if KAAPI_USE_TRACELIB==1
@@ -2665,6 +2665,10 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
   dev->mem_limit = (size_t)((double)kaapi_default_param.cuda_cache_limit
           * (double)(device->free_mem-180UL*1024UL*1024UL));
   dev->memdev.f_get_source = cuda_get_source;
+
+#if KAAPI_DEBUG
+  printf("Device %p / %i: total mem: %ul, limit mem: %ul, free mem: %ul\n", dev, dev->device_id, dev->mem_total, dev->mem_limit, device->free_mem);
+#endif
 
 #if KAAPI_CUDA_CACHE
   if (!getenv("KAAPI_NO_GPUALLOCATOR"))

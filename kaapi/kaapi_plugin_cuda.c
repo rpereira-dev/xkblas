@@ -1199,6 +1199,7 @@ void* kaapi_cuda_register_thread(void* dummy )
         if (req.op == DEVICE_REGISTER_REQUEST)
         {
           err = cudaHostRegister(req.ptr, req.size, cudaHostRegisterPortable);
+          //printf("%p:: cudaHostRegister ptr: %p, size: %lu\n", pthread_self(), req.ptr, req.size);
           if (!( (cudaSuccess == err) || (cudaErrorHostMemoryAlreadyRegistered == err)))
           //CUresult err = cuMemHostRegister( ptr, size, CU_MEMHOSTREGISTER_PORTABLE );
           //if ((err != CUDA_SUCCESS) && (err != CUDA_ERROR_HOST_MEMORY_ALREADY_REGISTERED))
