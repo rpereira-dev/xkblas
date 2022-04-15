@@ -130,11 +130,13 @@ static void NAME(task_body_cpu)( kaapi_task_t* task, kaapi_thread_t* thread )
 static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, void* handle )
 {
   NAME(Arg)* arg = (NAME(Arg)*)kaapi_task_getargs(task);
+  cublasStatus_t res;
   cublasZsyrk((cublasHandle_t)handle,
         cblas2cublas_uplo(arg->uplo), cblas2cublas_op(arg->trans),
         arg->n, arg->k,
         (const cuDoubleComplex*)&arg->alpha, arg->A.data, arg->lda,
         (const cuDoubleComplex*)&arg->beta, arg->B.data, arg->ldb);
+  kaapi_assert(res == CUBLAS_STATUS_SUCCESS);
 }
 #endif
 

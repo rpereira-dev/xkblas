@@ -43,6 +43,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -77,7 +78,7 @@ const char* get_kaapi_info(void)
   if (isinit ==0)
   {
     int err;
-#if KAAPI_USE_PERFCOUNTER
+#if KAAPI_USE_PERFCOUNTER==1
     static char buffer_perfctr[1024];
     err = kaapi_perfctr_get_name_mask( kaapi_tracelib_param.perfctr_idset, 1024, buffer_perfctr);
 #endif
@@ -173,9 +174,7 @@ const char* get_kaapi_info(void)
 #endif
          (int)KAAPI_HAVE_IO_THREADS,
 #if KAAPI_USE_CUDA_RUNTIME_API
-         "cuda runtime" 
-#elif KAAPI_USE_CUDA_DRIVER_API
-         "cuda driver" 
+         "cuda" 
 #elif KAAPI_USE_HIP
          "hip" 
 #endif 

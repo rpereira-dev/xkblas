@@ -167,13 +167,15 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
       arg->Am, arg->An, arg->Bm, arg->Bn
   );
 #endif
-  cublasZtrsm((cublasHandle_t)handle,
+  cublasStatus_t res;
+  res = cublasZtrsm((cublasHandle_t)handle,
         cblas2cublas_side(arg->side), cblas2cublas_uplo(arg->uplo),
         cblas2cublas_op(arg->transA), cblas2cublas_diag(arg->diag),
         arg->m, arg->n,
         (const cuDoubleComplex*)&arg->alpha,
         arg->A.data, arg->lda,
         arg->B.data, arg->ldb);
+  kaapi_assert(res == CUBLAS_STATUS_SUCCESS);
 }
 #endif
 

@@ -22,7 +22,7 @@
 #define _testing_zauxiliary_h_
 
 #include "common.h"
-#if defined(KAAPI_BLAS_USE_OPENBLAS)
+#if defined(KAAPI_BLAS_USE_OPENBLAS)||defined(KAAPI_BLAS_USE_CRAYBLAS)
 #  include <cblas.h>
 #  include <lapacke.h>
 #elif defined(KAAPI_BLAS_USE_MKL)

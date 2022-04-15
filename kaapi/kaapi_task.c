@@ -941,7 +941,14 @@ kaapi_thread_t* kaapi_thread_bind(int proctype, size_t user_size)
   memset(&ctxt->perf_regs, 0, sizeof(ctxt->perf_regs));
 #endif
 #if KAAPI_USE_TRACELIB==1
+#  if 0
   memset(&ctxt->kproc, 0, sizeof(ctxt->kproc));
+#  else
+  { char* ptr = (char*)&ctxt->kproc;
+    for (int i=0; i<sizeof(ctxt->kproc); ++i)
+      ptr[i]=0;
+  }
+#  endif
 #endif
 
   if (0 != kaapi_queue_init(ctxt->queue, bloc0, QUEUE_DEFAULT_SIZE))
@@ -1118,7 +1125,8 @@ int kaapi_team_attach(kaapi_team_t* team, kaapi_thread_t* thread, int idx)
   kaapi_ld_type_t ldtype = 0;
   if (ctxt->proctype == KAAPI_PROC_TYPE_CPU)
     ldtype = KAAPI_LD_NUMA;
-  else if (ctxt->proctype == KAAPI_PROC_TYPE_GPU)
+  else if ((ctxt->proctype == KAAPI_PROC_TYPE_CUDA)
+        || (ctxt->proctype == KAAPI_PROC_TYPE_HIP))
     ldtype = KAAPI_LD_GPU;
   else kaapi_assert(0);
 
@@ -1977,11 +1985,13 @@ int kaapi_taskformat_finalize(void)
 int kaapi_taskmodule_init(void)
 {
   KAAPI_ATOMIC_WRITE(&_kaapi_thread_tid, 0);
+  return 0;
 }
 
 /*
 */
 int kaapi_taskmodule_finalize(void)
 {
+  return 0;
 }
 

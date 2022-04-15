@@ -386,6 +386,7 @@ int xkblas_zhemm_async( int side, int uplo, int M, int N,
             }
         }
     }
+    return 0;
 }
 
 /* hemm */

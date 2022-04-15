@@ -1118,6 +1118,7 @@ static int cuda_stream_decode_ioinstruction(
       
       KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
          1 /* begin */, op->reserved );
+      uint64_t delay = kaapi_get_elapsedns();
       switch (type)
       {
         case KAAPI_MEMORY_VIEW_1D:
@@ -1128,8 +1129,9 @@ static int cuda_stream_decode_ioinstruction(
           {
             case KAAPI_IO_COPY_H2H:
               memcpy( dest, src, size );
-              KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
-                 2 /* end */, op->reserved );
+              delay = kaapi_get_elapsedns()-delay;
+              KAAPI_EVENT_PUSH2( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
+                 2 /* end */, op->reserved, delay );
               res = 0;
             break;
             case KAAPI_IO_COPY_H2D:
@@ -1220,9 +1222,10 @@ static int cuda_stream_decode_ioinstruction(
       res = cudaStreamSynchronize( *stream );
       CudaCheckError(res);
 #if KAAPI_USE_TRACELIB==1
+      delay = kaapi_get_elapsedns()-delay;
       if ((type != KAAPI_MEMORY_VIEW_1D) && (instr->type != KAAPI_IO_COPY_H2H)
-        KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
-         2 /* end */, op->reserved );
+        KAAPI_EVENT_PUSH2( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
+         2 /* end */, op->reserved, delay );
 #endif
       ++ios->ok_p;
 #elif CONFIG_USE_EVENT 
@@ -1270,6 +1273,7 @@ static int cuda_stream_decode_ioinstruction(
       kaapi_assert(res == cudaSuccess);
 #  endif
 #endif
+      uint64_t delay = kaapi_get_elapsedns();
 #if KAAPI_USE_PERSTREAM_BLASHANDLE==0
       /* the call + execute_task should be atomic */
       cublasStatus_t cres = cublasSetStream(device->handle, *stream);
@@ -1285,10 +1289,11 @@ static int cuda_stream_decode_ioinstruction(
 #endif
       );
 #if CONFIG_SYNCHRONOUS_KERNEL
+      delay = kaapi_get_elapsedns() -delay;
       res = cudaStreamSynchronize( *stream );
       kaapi_assert(res == CUDA_SUCCESS);
-      KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_KERN,
-         2 /* end */, op->reserved );
+      KAAPI_EVENT_PUSH2( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_KERN,
+         2 /* end */, op->reserved, delay );
       ++ios->ok_p;
 #elif CONFIG_USE_EVENT 
       res = cudaEventRecord(cios->end_events[ ios->pos_wp % ios->count ], *stream );
@@ -1377,15 +1382,24 @@ static int cuda_stream_advance_pending(
             pthread_yield();
           else {
 #if KAAPI_USE_TRACELIB==1
+            float delay; /* ms */
+            res = cudaEventElapsedTime ( &delay, cios->start_events[idx], cios->end_events[idx] );
+            if (res != cudaSuccess) {
+              printf("   invalid Cuda event state at: %lu non fifo order ?\n", idx );
+              delay = 0;
+              kaapi_assert(0);
+            }
             if (op->type != KAAPI_IO_KERN)
             {
-              KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
-                 2 /* end */, op->inst.c_io.reserved );
+              KAAPI_EVENT_PUSH2( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_CPY,
+                 2 /* end */, op->inst.c_io.reserved, (uint64_t)(1000000.0*delay));
+//printf("Delay CPY: %lu\n", (uint64_t)(1000000.0*delay));
             }
             else
             {
-              KAAPI_EVENT_PUSH1( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_KERN,
-                 2 /* end */, op->inst.k_io.reserved );
+              KAAPI_EVENT_PUSH2( &kaapi_self_context()->kproc, KAAPI_EVT_OFFLOAD_KERN,
+                 2 /* end */, op->inst.k_io.reserved, (uint64_t)(1000000.0*delay));
+//printf("Delay KERNEL: %lu\n", (uint64_t)(1000000.0*delay));
             }
 #endif
             if (prev_iosokp+1 == ios_okp) ++prev_iosokp;
@@ -1508,6 +1522,7 @@ static int cuda_stream_process_pending(
             kaapi_assert(0);
           }
 
+          /* second*/
           status.gpu_delay *= 1e-3;
           status.cpu_delay = op->t2 - op->t1; 
 #endif

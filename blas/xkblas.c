@@ -288,6 +288,7 @@ printf("%p:: %30.30s matrix: %p %lix%li (dim), %lix%li (tile), tile: (%lix%li), 
 
   /* to debug... */
   Ah->gen = ctxt->xkblas_generation_cache;
+  return 0;
 }
 
 
@@ -369,6 +370,7 @@ size_t xkblas_get_param(void)
 
 int xkblas_get_devicecount(void)
 {
+  return 0;
 }
 
 
@@ -533,7 +535,7 @@ int xkblas_register_memory( void* ptr, size_t sz )
 int xkblas_unregister_memory( void* ptr, size_t sz )
 {
   uint64_t handle = xkblas_unregister_memory_async(ptr, sz); 
-  xkblas_register_memory_waitall();
+  return xkblas_register_memory_waitall();
 }
 
 /*
@@ -902,14 +904,6 @@ static void xkblas_create_taskwriteback(
   /* OCR on the first parameter */
   kaapi_task_set_ld(task, KAAPI_TASK_OCR_PARAM, 0);
 
-#if KAAPI_DEBUG
-  kaapi_ldid_t ldid0 = kaapi_dsm_get_wish_distribution(
-      &kaapi_the_dsm,
-      xkblas_get_handle(Ah,m,n));
-  uint16_t ldid1 = xkblas_get_ld(Ah,m,n);
-  kaapi_assert( ldid0 == ldid1 );
-#endif
-
 #else
   uint16_t ldid = xkblas_get_ld(Ah,m,n);
   kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);
@@ -1183,8 +1177,8 @@ int xkblas_init(void)
   if (getenv("XKBLAS_CACHE_LIMIT"))
     setenv("KAAPI_CUDA_CACHE_LIMIT",getenv("XKBLAS_CACHE_LIMIT"),1);
 
-  const char* m;
-  if (m = getenv("XKBLAS_DEFAULT_MATH"))
+  const char* m = getenv("XKBLAS_DEFAULT_MATH");
+  if (m !=0)
   {
     if ((strcasecmp(m,"TC") ==0)||(strcasecmp(m,"tensorcore") ==0)||(strcasecmp(m,"mix1632") ==0))
       xkblas_default_math = XKBLAS_TENSOR_OP_MATH;
@@ -1232,6 +1226,8 @@ int xkblas_init(void)
   /* */
   kaapi_thread_t* thread = xkblas_self_thread();
   kaapi_begin_dfg( thread, KAAPI_FRAME_FLAG_DFG_OK );
+
+  return 0;
 }
 
 
@@ -1360,6 +1356,7 @@ int xkblas_finalize(void)
   handle_cpublas = 0;
 
   kaapi_finalize();
+  return 0;
 }
 
 
@@ -1441,6 +1438,7 @@ printf("%p:: %30.30s , end sync id: %lu, #handle: %i, #count activated: %i\n\n\n
 #endif
 
   kaapi_begin_dfg( xk_ctxt->kthread, KAAPI_FRAME_FLAG_DFG_OK );
+  return 0;
 }
 
 
@@ -1498,6 +1496,7 @@ int xkblas_memory_invalidate_caches(void)
   ctxt->xkblas_list_sync0 = 0;
   ctxt->xkblas_list_sync0_tail = 0;
 #endif
+  return 0;
 }
 
 
@@ -1526,6 +1525,7 @@ int xkblas_memory_free(void)
   ctxt->xkblas_list_sync0 = 0;
   ctxt->xkblas_list_sync0_tail = 0;
 #endif
+  return 0;
 }
 
 
@@ -1539,6 +1539,7 @@ int xkblas_memory_syncall(void)
   kaapi_memory_synchronize();
   //double t1 = kaapi_get_elapsedtime();
   //printf("Time(s) sync + memory synchronise:%f\n",t1-t0);
+  return 0;
 }
 
 /*
@@ -1848,6 +1849,7 @@ redo_syr2k:
       }
       break;
 
+    case KERN_SWAP:
     default:
       { 
         fact = 1;
@@ -1916,9 +1918,12 @@ int xkblas_auto_map(
       );
     } break;
 
+    case KERN_SWAP:
+      break;
     case KERN_VOID:
       break;
   }
+  return 0;
 }
 
 
@@ -1967,7 +1972,7 @@ const char* get_xkblas_info(void)
   static int isinit = 0;
   if (isinit ==0)
     snprintf( buffer, 8192, 
-            "  TILE_SIZE: %i\n"
+            "  TILE_SIZE: %lu\n"
             "  MODE_MATH: %s\n",
          xkblas_get_param(),
          (xkblas_default_math == XKBLAS_TENSOR_OP_MATH ? "TensorCore" : "Default")

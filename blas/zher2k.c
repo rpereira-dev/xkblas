@@ -379,6 +379,7 @@ int xkblas_zher2k_async( int uplo, int trans, int N, int K,
             }
         }
     }
+    return 0;
 }
 
 

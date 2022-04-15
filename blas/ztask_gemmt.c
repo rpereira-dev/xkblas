@@ -31,6 +31,12 @@
 #include "ztask_internal.h"
 
 
+#define HEAVY_DEBUG 1
+#if HEAVY_DEBUG && PRECISION_d
+#include <math.h>
+#endif
+
+
 #ifdef KAAPI_DEBUG
 #undef KAAPI_DEBUG
 #endif
@@ -203,8 +209,13 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
   kaapi_assert(res == CUBLAS_STATUS_SUCCESS);
 #endif
 
+#if HEAVY_DEBUG && PRECISION_d
+  cuDoubleComplex* bufferC = malloc( sizeof(cuDoubleComplex)*arg->n * arg->n );
+  cudaMemcpy( bufferC, arg->C.data, arg->n*arg->n *sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost );
+#endif
+
   /* no equivalent cublasZgemmt */
-  cublasZgemm((cublasHandle_t)handle,
+  res = cublasZgemm((cublasHandle_t)handle,
       cblas2cublas_op(arg->transA), cblas2cublas_op(arg->transB),
       arg->n, arg->n, arg->k,
       (const cuDoubleComplex*)&arg->alpha,
@@ -213,7 +224,44 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
       (const cuDoubleComplex*)&arg->beta,
       (cuDoubleComplex*)arg->C.data, arg->ldc
   );
+  kaapi_assert(res == CUBLAS_STATUS_SUCCESS);
+
+#if HEAVY_DEBUG && PRECISION_d
+  /* copy data back on buffer, do computation and check result */
+  cuDoubleComplex* bufferA = malloc( sizeof(cuDoubleComplex)*arg->n * arg->k );
+  cuDoubleComplex* bufferB = malloc( sizeof(cuDoubleComplex)*arg->k * arg->n );
+  cudaMemcpy( bufferA, arg->A.data, arg->n * arg->k *sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost );
+  cudaMemcpy( bufferB, arg->B.data, arg->k * arg->n *sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost );
+  xkblas_zgemm_native(
+      arg->transA, arg->transB,
+      arg->n, arg->n, arg->k,
+      &arg->alpha,
+      (Complex64_t*)bufferA, arg->lda,
+      (Complex64_t*)bufferB, arg->ldb,
+      &arg->beta,
+      (Complex64_t*)bufferC, arg->ldc
+  );
+  /* wait kernel */
+  cudaDeviceSynchronize();
+  cuDoubleComplex* bufferC2 = malloc( sizeof(cuDoubleComplex)*arg->n * arg->n );
+  cudaMemcpy( bufferC2, arg->C.data, arg->n*arg->n *sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost );
+
+  double norm_inf = 0;
+  double norm_C = 0;
+  for (long i=0; i< (long)arg->n*(long)arg->n; ++i)
+    {
+       norm_inf = fmax( norm_inf, fabs(bufferC[i]- bufferC2[i]) );
+       norm_C = fmax( norm_C, fabs(bufferC[i]) );
+    }
+  if (norm_inf/norm_C >= 1e-6) { printf("Error\n"); exit(1); }
+  else printf(".");
+  free(bufferC);
+  free(bufferA);
+  free(bufferB);
+  free(bufferC2);
+#endif
 }
+
 #endif
 
 

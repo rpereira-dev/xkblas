@@ -19,7 +19,7 @@
 
 find_path(HIPBLAS_PREFIX
     NAMES include/hipblas.h
-    HINTS $ENV{HIPBLAS_PATH}
+    HINTS $ENV{HIPBLAS_PATH} $ENV{ROCM_PATH}/hipblas
 )
 
 find_library(HIPBLAS_LIBRARIES

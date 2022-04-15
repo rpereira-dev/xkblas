@@ -116,7 +116,6 @@ typedef uint64_t kaapi_perf_idset_t;
 #define KAAPI_PROC_TYPE_CPU      KAAPI_PROC_TYPE_HOST
 #define KAAPI_PROC_TYPE_GPU      KAAPI_PROC_TYPE_CUDA
 
-
 /* Fwd decl
 */
 struct kaapi_task;

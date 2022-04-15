@@ -417,10 +417,11 @@ struct state_t : public event_t {
 /* */
 struct task_info : public state_t {
   task_info( )
-    : state_t(), kid(0), fmtid(0), arg(0), param(), perfctr()
+    : state_t(), t_delay(0), kid(0), fmtid(0), arg(0), param(), perfctr()
   {
   }
   uint64_t               t_async;
+  uint64_t               t_delay;
   int                    kid;
   uint64_t               task;
   uint64_t               fmtid;
@@ -436,6 +437,7 @@ struct task_cpy : public state_t {
     : state_t(), src_kid(0), dest_kid(0), size(0), dir(0)
   {
   }
+  uint64_t               t_delay;
   int                    kid;
   uint64_t               task;
   int                    src_kid;
@@ -452,6 +454,7 @@ struct task_ker : public state_t {
     : state_t()
   {
   }
+  uint64_t               t_delay;
   int                    kid;
   uint64_t               taskid;
   uint64_t               task;
@@ -488,6 +491,8 @@ struct kproc_t : public state_t {
 struct parallel_region_t {
   parallel_region_t()
    : fout(0), nproc(0)
+  {}
+  virtual ~parallel_region_t() 
   {}
 
   FILE* fout;
@@ -585,7 +590,7 @@ static void callback_main(
       { /* push */
         if (iter != the_parallel_region->container_task.end())
         {
-          printf("***Bad Push of new task: %p. Already exist !\n", task);
+          printf("***Bad Push of new task: %p. Already exist !\n", (void*)task);
           break;
         }
         ti = new task_info;
@@ -601,20 +606,21 @@ static void callback_main(
       else if (kind==1)
       { /* async start */
         if (iter == the_parallel_region->container_task.end())
-        { printf("***Unknown task: %p!\n", task); break; }
+        { printf("***Unknown task: %p!\n", (void*)task); break; }
         ti->t_async = event->date;
       }
       else if (kind==2)
       { /* start */
         if (iter == the_parallel_region->container_task.end())
-        { printf("***Unknown task: %p!\n", task); break; }
+        { printf("***Unknown task: %p!\n", (void*)task); break; }
         ti->t_start = event->date;
       }
       else if (kind==3)
       { /* stop */
         if (iter == the_parallel_region->container_task.end())
-        { printf("***Unknown task: %p!\n", task); break; }
+        { printf("***Unknown task: %p!\n", (void*)task); break; }
         ti->t_stop = event->date;
+        ti->t_delay = KAAPI_EVENT_DATA(event,3,u);
         the_parallel_region->flush( ti );
         the_parallel_region->container_task.erase( task );
       }
@@ -669,7 +675,7 @@ static void callback_main(
       { /* push */
         if (iter != the_parallel_region->container_task_cpy.end())
         {
-          printf("***Bad Push of new task cpy: %p. Already exist !\n", taskid);
+          printf("***Bad Push of new task cpy: %p. Already exist !\n", (void*)taskid);
           break;
         }
         ti = new task_cpy;
@@ -691,14 +697,15 @@ static void callback_main(
       else if (kind==1)
       { /* begin */
         if (iter == the_parallel_region->container_task_cpy.end())
-        { printf("***Unkown task cpy: %p!\n", taskid); break; }
+        { printf("***Unkown task cpy: %p!\n", (void*)taskid); break; }
         ti->t_start = event->date;
       }
       else if (kind==2)
       { /* end */
         if (iter == the_parallel_region->container_task_cpy.end())
-        { printf("***Unkown task cpy: %p!\n", taskid); break; }
+        { printf("***Unkown task cpy: %p!\n", (void*)taskid); break; }
         ti->t_stop = event->date;
+        ti->t_delay = KAAPI_EVENT_DATA(event,1,u);
         the_parallel_region->flush( ti );
         the_parallel_region->container_task_cpy.erase( taskid );
       }
@@ -743,8 +750,9 @@ static void callback_main(
       else if (kind==2)
       { /* end */
         if (iter == the_parallel_region->container_task_ker.end())
-        { fprintf(stdout, "***%i::%" PRIu64 " [end] Unknown task ker: %p\n", kid, event->date, taskid); break; }
+        { fprintf(stdout, "***%i::%" PRIu64 " [end] Unknown task ker: %p\n", kid, event->date, (void*)taskid); break; }
         ti->t_stop = event->date;
+        ti->t_delay = KAAPI_EVENT_DATA(event,1,u);
         the_parallel_region->flush( ti );
         the_parallel_region->container_task_ker.erase( taskid );
         //printf("Erase: taskid:%i\n", taskid );
@@ -1024,13 +1032,13 @@ void csv_parallel_region_t::flush( task_info* ti)
   fprintf(csv_parallel_region_t::fout_task,
     "%i,%s,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%"  PRIu64 ",%s,%lu\n",
     ti->kid,type_name[the_parallel_region->container_kproc[ti->kid].type],
-    ti->t_push, ti->t_start, ti->t_stop, ti->delay(),name, ti->task 
+    ti->t_push, ti->t_start, ti->t_stop, ti->t_delay, name, ti->task 
   );
 #else
   fprintf(csv_parallel_region_t::fout_task,
     "%i,%s,%.15f,%.15f,%.15f,%.15f,%s,%lu\n",
     ti->kid,type_name[the_parallel_region->container_kproc[ti->kid].type],
-    ns2s(ti->t_push), ns2s(ti->t_start), ns2s(ti->t_stop), ns2s(ti->delay()),name, ti->task 
+    ns2s(ti->t_push), ns2s(ti->t_start), ns2s(ti->t_stop), ns2s(ti->t_delay), name, ti->task 
   );
 #endif
 }
@@ -1046,13 +1054,13 @@ void csv_parallel_region_t::flush( task_cpy* ti )
   fprintf(csv_parallel_region_t::fout_cpy,
     "%i,%s,%i,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%"  PRIu64 ",%"  PRIu64 ",%i\n",
     ti->kid,type_name[type], ti->stream,
-    ti->t_push, ti->t_start, ti->t_stop, ti->delay(), ti->size, ti->dir 
+    ti->t_push, ti->t_start, ti->t_stop, ti->t_delay, ti->size, ti->dir 
   );
 #else
   fprintf(csv_parallel_region_t::fout_cpy,
     "%i,%s,%i,%.15f,%.15f,%.15f,%.15f,%"  PRIu64 ",%i\n",
     ti->kid,type_name[type], ti->stream,
-    ns2s(ti->t_push), ns2s(ti->t_start), ns2s(ti->t_stop), ns2s(ti->delay()), ti->size, ti->dir 
+    ns2s(ti->t_push), ns2s(ti->t_start), ns2s(ti->t_stop), ns2s(ti->t_delay), ti->size, ti->dir 
   );
 #endif
 }
@@ -1071,13 +1079,13 @@ void csv_parallel_region_t::flush( task_ker* ti)
   fprintf(csv_parallel_region_t::fout_kern,
     "%i,%s,%i,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%"  PRIu64 ",%s,%lu\n",
     ti->kid,type_name[the_parallel_region->container_kproc[ti->kid].type], ti->stream,
-    ti->t_push, ti->t_start, ti->t_stop, ti->delay(),name, ti->task 
+    ti->t_push, ti->t_start, ti->t_stop, ti->t_delay,name, ti->task 
   );
 #else
   fprintf(csv_parallel_region_t::fout_kern,
     "%i,%s,%i,%.15f,%.15f,%.15f,%.15f,%s,%lu\n",
     ti->kid,type_name[the_parallel_region->container_kproc[ti->kid].type], ti->stream,
-    ns2s(ti->t_push), ns2s(ti->t_start), ns2s(ti->t_stop), ns2s(ti->delay()),name, ti->task
+    ns2s(ti->t_push), ns2s(ti->t_start), ns2s(ti->t_stop), ns2s(ti->t_delay),name, ti->task
   );
 #endif
 }

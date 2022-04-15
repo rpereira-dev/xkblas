@@ -155,20 +155,6 @@ int xkblas_ztrsm_async(
     /* get default tile size and initialize internal descriptor if not yet */
     size_t NB = xkblas_auto_tilesize(KERN_TRSM,N,NRHS,NA);
 
-#if 00// TO force synchronous call: may be this should be provided as runtime option
-printf("Trsm: N=%i, NRHS=%i, NB=%i\n", N,NRHS,NB);
-return  xkblas_ztrsm_native(
-  side, uplo, transA, diag, 
-  N, NRHS,
-  alpha, A, LDA, 
-         B, LDB );
-#endif
-#if BUG_2022_03_18 && defined(PRECISION_d)
-{
-  printf("%p:: %30.30s: N: %li, NRHS: %li, READ(%p), READWRITE(%p)\n", pthread_self(), __FUNCTION__, N, NRHS, A, B ); 
-}
-#endif
-
     xkblas_matrix_descr_t* Ah = xkblas_find(A);
     xkblas_matrix_descr_t* Bh = xkblas_find(B);
     if (!xkblas_matrix_descr_isinit(Ah))
@@ -494,7 +480,8 @@ return  xkblas_ztrsm_native(
             }
         }
     }
-  }
+    return 0;
+}
 
 
 /* trsm */

@@ -19,17 +19,17 @@
 
 find_path(ROCBLAS_PREFIX_DIRS
     NAMES include/internal/rocblas-functions.h include/internal/rocblas-auxiliary.h
-    HINTS $ENV{ROCBLAS_PATH}
+    HINTS $ENV{ROCBLAS_PATH} $ENV{ROCM_PATH}/rocblas
 )
 
 find_library(ROCBLAS_LIBRARIES
     # Pick the static library first for easier run-time linking.
     NAMES librocblas.so
-    HINTS ${ROCBLAS_PREFIX}/lib ${HILTIDEPS}/lib
+    HINTS ${ROCBLAS_PREFIX_DIRS}/lib ${HILTIDEPS}/lib 
 )
 find_path(ROCBLAS_INCLUDE_DIRS
     NAMES internal/rocblas-functions.h internal/rocblas-auxiliary.h
-    HINTS ${ROCBLAS_PREFIX_DIRS}/include ${HILTIDEPS}/include
+    HINTS ${ROCBLAS_PREFIX_DIRS}/include ${HILTIDEPS}/include 
 )
 
 include(FindPackageHandleStandardArgs)

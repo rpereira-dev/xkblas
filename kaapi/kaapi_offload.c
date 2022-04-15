@@ -281,8 +281,11 @@ kaapi_offload_config_devices(kaapi_driver_t* driver)
     switch (type) {
       case KAAPI_PROC_TYPE_HOST:
         break;
+#if KAAPI_USE_CUDA
       case KAAPI_PROC_TYPE_CUDA:
+#elif KAAPI_USE_HIP
       case KAAPI_PROC_TYPE_HIP :
+#endif
         arg->ld = malloc(sizeof(kaapi_localitydomain_t));
         kaapi_localitydomain_init(arg->ld, 0);
         kaapi_localitydomain_attach( KAAPI_LD_GPU, 0, arg->ld );
@@ -473,9 +476,7 @@ kaapi_offload_find_plugins(void)
   kaapi_drivers_bytype[type] = current;
   //kaapi_offload_config_devices(current);
 }
-#endif
-
-#if KAAPI_USE_HIP
+#elif KAAPI_USE_HIP
 {
   current = malloc(sizeof(kaapi_driver_t));
   extern void KAAPI_PLUGIN_ENTRYPOINT(get_hip_driver)(kaapi_driver_t* driver);
@@ -619,8 +620,7 @@ int kaapi_offload_start(void)
   kaapi_offload_config_devices(kaapi_drivers_bytype[KAAPI_PROC_TYPE_HOST]);
 #if KAAPI_USE_CUDA
   kaapi_offload_config_devices(kaapi_drivers_bytype[KAAPI_PROC_TYPE_CUDA]);
-#endif
-#if KAAPI_USE_HIP
+#elif KAAPI_USE_HIP
   kaapi_offload_config_devices(kaapi_drivers_bytype[KAAPI_PROC_TYPE_HIP]);
 #endif
 
@@ -630,8 +630,7 @@ int kaapi_offload_start(void)
 
 #if KAAPI_USE_CUDA
   driver = kaapi_drivers_bytype[KAAPI_PROC_TYPE_CUDA];
-#endif
-#if KAAPI_USE_HIP
+#elif KAAPI_USE_HIP
   driver = kaapi_drivers_bytype[KAAPI_PROC_TYPE_HIP];
 #endif
   int ndevices = driver->f_get_number();

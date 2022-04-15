@@ -45,7 +45,7 @@
 #ifndef KAAPI_USE_SLEEP
 #define KAAPI_SLEEP_DEVICETHREAD 1 /* default: activate a sleeping state for device thread [Yet experimental feature] */
 #else
-#define KAAPI_SLEEP_DEVICETHREAD KAAPI_USE_SLEEP /* else take the value of KAAPI_USE_SLEEP
+#define KAAPI_SLEEP_DEVICETHREAD KAAPI_USE_SLEEP /* else take the value of KAAPI_USE_SLEEP */
 #endif
 
 #ifndef KAAPI_USE_DYNLOADER
@@ -83,7 +83,7 @@ BUG: if set to 0 / PIPELINE set to 0 => deadlock
 
 #if KAAPI_PIPELINE_GPUTASK
 /* reorder stream execution on GPU */
-#define KAAPI_REORDER_TASK_EXEC 1
+#define KAAPI_REORDER_TASK_EXEC 0
 #endif
 
 /* do not use prefetch for successor task */
@@ -94,18 +94,17 @@ BUG: if set to 0 / PIPELINE set to 0 => deadlock
 /* to allow transfert between GPUi to GPUj if data is under xfer data to GPUi*/
 #if KAAPI_USE_HIP
 #  define KAAPI_USE_FAVOR_D2D_1 0 /* HIP with MI50onPCIE */
+#  define KAAPI_USE_STREAM_D2D  0 /* to use specific stream for D2D operation. */
+#  define KAAPI_USE_TOPO_D2D    0 /* to use D2D topology and performance group */
 #else
 #  define KAAPI_USE_FAVOR_D2D_1 1
+#  define KAAPI_USE_STREAM_D2D  1 /* to use specific stream for D2D operation. */
+#  define KAAPI_USE_TOPO_D2D    1 /* to use D2D topology and performance group */
 #endif
 
 /* to allow to route data through NVlink if 2 GPUs is not interconnected */
 #define KAAPI_USE_D2D_ROUTE 0
 
-/* to use specific stream for D2D operation. */
-#define KAAPI_USE_STREAM_D2D 1
-
-/* to use D2D topology and performance group */
-#define KAAPI_USE_TOPO_D2D 1
 
 /* Mark that we compile source of the library.
    Only used to avoid to include public definitition of some types.
@@ -217,7 +216,7 @@ struct kaapi_queue;
 
 
 /* ========================================================================= */
-/* Data type
+/* Data type                                                                 */
 /* ========================================================================= */
 
 /* steal request header */
@@ -342,7 +341,7 @@ typedef struct kaapi_stack_allocator {
 
 
 /* ========================================================================= */
-/* Thread representation in Kaapi
+/* Thread representation in Kaapi                                            */
 /* ========================================================================= */
 
 /* Thread context = private part of kaapi_thread_t

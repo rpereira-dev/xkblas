@@ -234,17 +234,6 @@ int xkblas_zsyr2k_async( int uplo, int trans, int N, int K,
     }
 #endif
 
-#if 0
-int loadgpu[20];
-for (int i=0; i<20; ++i)
-  loadgpu[i] = 0;
-
-int load[Cmt][Cnt];
-for (int i=0; i<Cmt; ++i)
-  for (int j=0; j<Cnt; ++j)
-    load[i][j] = 0;
-#endif
-
     for (n = 0; n < Cnt; n++) {
         tempnn = n == Cnt-1 ? Cn-n*Cnb : Cnb;
 
@@ -273,10 +262,6 @@ for (int i=0; i<Cmt; ++i)
                     *alpha, A(n, k), ldan, /* ldan * K */
                            B(n, k), ldbn,
                     zbeta, C(n, n), ldcn); /* ldc  * N */
-#if 0
-    loadgpu[xkblas_get_ld(C(n,n))] += 1;
-    load[n][n] +=1;
-#endif
             }
             for (m = mmin; m < mmax; m++) {
                 tempmm = m == Cmt-1 ? Cm-m*Cmb : Cmb;
@@ -292,21 +277,12 @@ for (int i=0; i<Cmt; ++i)
                             *alpha, A(m, k), ldam,  /* ldam * K */
                                     B(n, k), ldbn,  /* ldan * K */
                             zbeta,  C(m, n), ldcm); /* ldc  * N */
-#if 0
-    loadgpu[xkblas_get_ld(C(m,n))] += 1;
-    load[m][n] +=1;
-#endif
-
                     INSERT_TASK_zgemm(
                             CblasNoTrans, CblasTrans,
                             tempmm, tempnn, tempkn, 
                             *alpha, B(m, k), ldbm,  /* ldam * K */
                                    A(n, k), ldan,  /* ldan * K */
                             zone,  C(m, n), ldcm); /* ldc  * N */
-#if 0
-    loadgpu[xkblas_get_ld(C(m,n))] += 1;
-    load[m][n] +=1;
-#endif
                 }
             }
         }
@@ -351,27 +327,7 @@ for (int i=0; i<Cmt; ++i)
             }
         }
     }
-
-#if 0
-for (int i=0; i<20; ++i)
-  printf("Load[%o] = %i\n",i,loadgpu[i]);
-printf("load:\n");
-for (int i=0; i<Cmt; ++i)
-{
-  for (int j=0; j<Cnt; ++j)
-    printf(" %02i",load[i][j]);
-  printf("\n");
-}
-printf("Mapping:\n");
-for (int i=0; i<Cmt; ++i)
-{
-  for (int j=0; j<Cnt; ++j)
-    if (load[i][j] >0)
-      printf(" %4i",xkblas_get_ld(C(i,j))-1);
-    else printf("     ");
-  printf("\n");
-}
-#endif
+    return 0;
 }
 
 /* syr2k */

@@ -18,7 +18,8 @@ option(KAAPI_USE_TRACE "Use tracing facility for post mortem analysis (gantt, do
 option(KAAPI_USE_PERFCTR "Add support for performance counter in the trace of execution. If PAPI is found then hardware performance counters are also available." OFF)
 
 option(KAAPI_USE_MKL "Use MKL" OFF)
-option(KAAPI_USE_OPENBLAS "Use MKL" OFF)
+option(KAAPI_USE_OPENBLAS "Use OpenBLAS" OFF)
+option(KAAPI_USE_CRATBLAS "Use Cray LIBSCI" OFF)
 
 option(KAAPI_USE_SLEEP "Sleep thread is nothing to do" ON)
 
@@ -97,10 +98,13 @@ endif()
 if (KAAPI_USE_MKL)
   set(BLA_VENDOR Intel10_64lp_seq)
 endif()
+if (KAAPI_USE_CRAYBLAS)
+  set(BLA_VENDOR Generic)
+endif()
 if (KAAPI_USE_OPENBLAS)
   set(BLA_VENDOR OpenBLAS)
 endif()
-if (NOT KAAPI_USE_MKL AND NOT KAAPI_USE_OPENBLAS)
+if (NOT KAAPI_USE_MKL AND NOT KAAPI_USE_OPENBLAS AND NOT KAAPI_USE_CRAYBLAS)
   message(FATAL_ERROR "XKblas requires you specify the BLAS Vendor library.")
 endif()
 
@@ -113,12 +117,12 @@ if (KAAPI_USE_MKL)
     $ENV{MKLROOT}/include
   )
 endif()
-if (KAAPI_USE_OPENBLAS)
+if (KAAPI_USE_CRAYBLAS)
   find_path(BLAS_INCLUDE_DIRS lapacke.h
-    /usr/include
-    /usr/local/include
+    ${CRAY_LIBSCI_PREFIX_DIR}/include 
   )
 endif()
+
 add_compile_options(${BLAS_LINKER_FLAGS})
 
 #--- Add common command line options for all subdirectories
@@ -172,6 +176,10 @@ if (KAAPI_USE_MKL)
   add_compile_options("-DMKL_ILP64")
   add_compile_options("-m64")
   add_compile_options("-DXKBLAS_BLASLIB=\"libmkl_intel_ilp64.so\"")
+endif()
+if (KAAPI_USE_CRAYBLAS)
+  add_compile_options("-DKAAPI_BLAS_USE_CRAYBLAS=1")
+  add_compile_options("-DXKBLAS_BLASLIB=\"libsci_cray.so\"")
 endif()
 if (KAAPI_USE_OPENBLAS)
   add_compile_options("-DKAAPI_BLAS_USE_OPENBLAS=1")

@@ -41,7 +41,6 @@ On a build directory enter:
 ```
 where options are:
 * Selection of the target GPUs with its toolkit (only one choice is simultaneously possible):
-  * ```-DKAAPI_USE_CUDA_DRIVER=ON```: 
   * ```-DKAAPI_USE_CUDA_RT=ON```: 
   * ```-DKAAPI_USE_HIP=ON```:
 * Selection of the Vendor BLAS library (only one choice is simultaneously possible): 

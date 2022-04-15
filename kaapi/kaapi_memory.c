@@ -417,7 +417,7 @@ static size_t print_list_free_chunk( kaapi_memory_device_t* device, char* buffer
   while ((size >0) &&  (curr !=0))
   {
     sizefree += curr->size;
-    int sz = snprintf(buffer, size, "[%p, sz:%li] ", curr->device_ptr, curr->size );
+    int sz = snprintf(buffer, size, "[%p, sz:%li] ", (void*)curr->device_ptr, curr->size );
     buffer += sz;
     size -= sz;
     curr = curr->freelink; 
@@ -1471,11 +1471,11 @@ static void kaapi_memory_print_cache_stats(
   printf("  -- size_alloc: %li, size_dev_alloc: %li, size_free: %li\n", lid, device->size_alloc, device->size_dev_alloc, device->size_free);
 #endif
   printf("  -- list: %s\n", msg);
-  printf("Total size : %ul\n", (unsigned long int)total_size);
-  printf("XValid size: %ul  (%.2f)\n", (unsigned long int)invalid_size, 100.0*((double)invalid_size)/(double)total_size);
-  printf("Pinned size: %ul  (%.2f)\n", (unsigned long int)pinned_size, 100.0*((double)pinned_size)/(double)total_size);
-  printf("Xfer  size : %ul  (%.2f)\n", (unsigned long int)xfer_size, 100.0*((double)xfer_size)/(double)total_size);
-  printf("Xfer  size : %ul  (%.2f)\n", (unsigned long int)xferb_size, 100.0*((double)xferb_size)/(double)total_size);
+  printf("Total size : %lu\n", (unsigned long int)total_size);
+  printf("XValid size: %lu  (%.2f)\n", (unsigned long int)invalid_size, 100.0*((double)invalid_size)/(double)total_size);
+  printf("Pinned size: %lu  (%.2f)\n", (unsigned long int)pinned_size, 100.0*((double)pinned_size)/(double)total_size);
+  printf("Xfer  size : %lu  (%.2f)\n", (unsigned long int)xfer_size, 100.0*((double)xfer_size)/(double)total_size);
+  printf("Xfer  size : %lu  (%.2f)\n", (unsigned long int)xferb_size, 100.0*((double)xferb_size)/(double)total_size);
 }
 
 /* Initiate communication from device to the host.
@@ -3363,7 +3363,7 @@ static void print_info()
   for (int i=0; i<kaapi_offload_get_num_devices(); ++i)
   {
     kaapi_device_t* device = kaapi_offload_device(i);
-    printf(" exec:%i   <-> spawn:%i + push:%i  = %i\n", 
+    printf(" exec:%lu   <-> spawn:%lu + push:%lu  = %lu\n", 
       device->exec_count, 
       device->spawn_count, 
       device->ld->queue->push_count, 
@@ -3372,7 +3372,7 @@ static void print_info()
     c2 += device->spawn_count;
     c3 += device->ld->queue->push_count;
   }
-  printf("Total: exec:%i <-> spawn:%i + push:%i = %i\n", c1, c2, c3, c2+c3);
+  printf("Total: exec:%lu <-> spawn:%lu + push:%lu = %lu\n", c1, c2, c3, c2+c3);
 #if KAAPI_DEBUG
   extern void kaapi_offload_print_stream_info(kaapi_offload_stream_t* stream);
   for (int i=1; i<kaapi_offload_get_num_devices(); ++i)

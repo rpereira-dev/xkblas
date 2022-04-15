@@ -48,7 +48,7 @@ typedef double CFloat64_t;
 #endif
 
 #ifndef KAAPI_NO_INCLUDE_BLAS_H
-#if defined(KAAPI_BLAS_USE_OPENBLAS)
+#if defined(KAAPI_BLAS_USE_OPENBLAS) || defined(KAAPI_BLAS_USE_CRAYBLAS)
 #  include <cblas.h>
 #  include <lapacke.h>
 #elif defined(KAAPI_BLAS_USE_MKL)

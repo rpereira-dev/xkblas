@@ -200,6 +200,7 @@ int kaapi_event_get_name( int8_t evtno, int8_t kind, char* buffer, int ssize)
     break;
   };
   snprintf(buffer, ssize, "%s-%s", kaapi_event_name[evtno], kindstr );
+  return 0;
 }
 
 
@@ -264,7 +265,7 @@ size_t kaapi_perfctr_get_name_mask( kaapi_perf_idset_t  perfctr_idset, size_t si
         }
       }
 
-      s = snprintf(buffer, size,kaapi_tracelib_perfid_to_name( (kaapi_perf_id_t)cnt ));
+      s = snprintf(buffer, size, "%s", kaapi_tracelib_perfid_to_name( (kaapi_perf_id_t)cnt ));
       buffer += s;
       sep=',';
       if (size >s) size -= s;
@@ -447,7 +448,7 @@ static kaapi_perfctr_group_t kaapi_perfctr_group[] = {
             KAAPI_PERF_ID_MASK(KAAPI_PERF_ID_STEALREQ)|
             KAAPI_PERF_ID_MASK(KAAPI_PERF_ID_STEALREQOK)|
             KAAPI_PERF_ID_MASK(KAAPI_PERF_ID_STEALOP)|
-            KAAPI_PERF_ID_MASK(KAAPI_PERF_ID_TASKSTEAL),
+            KAAPI_PERF_ID_MASK(KAAPI_PERF_ID_TASKSTEAL)|
             KAAPI_PERF_ID_MASK(KAAPI_PERF_ID_SYNCINST),
     .mask_pertask = 0
   },
@@ -925,7 +926,15 @@ int kaapi_tracelib_thread_init(
   /* reuse team and per thread data. Init or re-init papi in the both case.
   */
   size_t size = sizeof(kaapi_tracelib_thread_t);
+#if 0
   memset( kproc, 0, size );
+#else
+  { char* ptr = (char*)kproc;
+    for (int i=0; i<size; ++i)
+      ptr[i]=0;
+  }
+#endif
+
   kproc->ctxt         = ctxt;
   kproc->kid          = kid;
   kproc->numaid       = numaid;
@@ -1312,7 +1321,7 @@ void kaapi_tracelib_task_end(
     KAAPI_EVENT_PUSH_PERFCTR(kproc, KAAPI_EVT_TASK_PERFCOUNTER, 1 /*end*/, task, &kproc->task_perfset, kproc->ctxt->perf_regs );
   }
 #endif
-  KAAPI_EVENT_PUSH3(kproc, KAAPI_EVT_TASK_EXEC, 3/*end */, task, 0, kproc->numaid );
+  KAAPI_EVENT_PUSH4(kproc, KAAPI_EVT_TASK_EXEC, 3/*end */, task, 0, kproc->numaid, 0 );
   kproc->task = parent;
 }
 
