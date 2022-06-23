@@ -185,6 +185,8 @@ typedef struct {
 
   /* device properties (from NVIDIA website) */
   struct {
+    int pciBusID;
+    int pciDeviceID;
     bool overlap;      /* if the device can concurrently copy memory between host and device while executing a kernel */
     bool integrated;   /* if the device is integrated with the memory subsystem */
     bool map;          /* if the device can map host memory into the CUDA address space */
@@ -398,7 +400,7 @@ static void _kaapi_get_gpu_topo(void)
       for (int rank = 0; rank < cuda_count_perfrank; ++rank)
       {
         _print_mask( buffer, device_count, cuda_perf_device[device1*cuda_count_perfrank+ rank] );
-        printf(buffer);
+        printf("%s",buffer);
         if (rank != cuda_count_perfrank-1) printf(", ");
       }
       printf("\n");
@@ -1407,13 +1409,11 @@ static int cuda_stream_advance_pending(
 
 #if 0 // 
   int queue_max[4];
-  queue_max[KAAPI_IO_STREAM_H2D]  = 9; 
-  queue_max[KAAPI_IO_STREAM_KERN] = 2; //kaapi_default_param.cuda_conc_kernel; 
-  queue_max[KAAPI_IO_STREAM_D2H]  = 6; 
-#if KAAPI_USE_STREAM_D2D
-  queue_max[KAAPI_IO_STREAM_D2D]  = 4; 
-#endif
-  if ((len_p >1) && (len_p> queue_max[ios->type]))
+  queue_max[KAAPI_IO_STREAM_H2D]  = kaapi_default_param.cuda_conc_kernel; 
+  queue_max[KAAPI_IO_STREAM_KERN] = kaapi_default_param.cuda_conc_kernel; 
+  queue_max[KAAPI_IO_STREAM_D2H]  = kaapi_default_param.cuda_conc_kernel; 
+  queue_max[KAAPI_IO_STREAM_D2D]  = kaapi_default_param.cuda_conc_kernel; 
+  if ((len_p >1) && (len_p>= queue_max[ios->type]))
   {
     int shift = 0; //(ios->type == KAAPI_IO_STREAM_KERN ? 0: len_p/2-1);
     int idx = (ios->ok_p + shift)% ios->count;
@@ -1449,7 +1449,7 @@ static int cuda_stream_advance_pending(
             float delay; /* ms */
             res = hipEventElapsedTime ( &delay, cios->start_events[idx], cios->end_events[idx] );
             if (res != hipSuccess) {
-              printf("   invalid Cuda event state at: %lu non fifo order ?\n", idx );
+              printf("   invalid Cuda event state at: %d non fifo order ?\n", idx );
               delay = 0;
               kaapi_assert(0);
             }
@@ -1578,7 +1578,7 @@ static int cuda_stream_process_pending(
 #  if KAAPI_DEBUG
           res = hipEventQuery( cios->start_events[idx] );
           if (res != hipSuccess)
-            printf("   invalid start_event state at: %lu \n", idx );
+            printf("   invalid start_event state at: %u \n", idx );
 #  endif
           res = hipEventElapsedTime ( &status.gpu_delay, cios->start_events[idx], cios->end_events[idx] );
           if (res != hipSuccess) {
@@ -2146,6 +2146,10 @@ KAAPI_PLUGIN_ENTRYPOINT(device_init)(kaapi_device_t* dev)
   res = hipGetDeviceProperties(&prop, kaapi_device_ids[dev->device_id]);
   CudaCheckError(res);
   
+#ifdef __HIP_PLATFORM_AMD__
+  device->prop.pciBusID = prop.pciBusID;
+  device->prop.pciDeviceID = prop.pciDeviceID;
+#endif
 #ifndef __HIP_PLATFORM_AMD__
   device->prop.overlap = prop.deviceOverlap;
   device->prop.async_engines = prop.asyncEngineCount;
@@ -2308,9 +2312,11 @@ KAAPI_CLASS_ENTRYPOINT const char* KAAPI_PLUGIN_ENTRYPOINT(device_info)(kaapi_de
   _print_mask(buf1, 10, device->affinity[0]);
   _print_mask(buf2, 10, device->affinity[1]);
   _print_mask(buf3, 10, device->affinity[2]);
-  snprintf(buffer, 256, "%s, hip device: %i, %i async engine(s), %.2f (GB), cache limit %.2f (GB), affinity: %s,%s,%s",
+  snprintf(buffer, 256, "%s, hip device: %i, pci: %02x:%02x, %i async engine(s), %.2f (GB), cache limit %.2f (GB), affinity: %s,%s,%s",
     device->prop.name,
     device->inherited.device_id,
+    device->prop.pciBusID,
+    device->prop.pciDeviceID,
     device->prop.async_engines,
     ((double)dev->mem_total)/1024.0/1024.0/1024.0,
     ((double)dev->mem_limit)/1024.0/1024.0/1024.0,
