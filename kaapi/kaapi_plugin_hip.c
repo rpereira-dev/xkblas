@@ -1578,11 +1578,11 @@ static int cuda_stream_process_pending(
 #  if KAAPI_DEBUG
           res = hipEventQuery( cios->start_events[idx] );
           if (res != hipSuccess)
-            printf("   invalid start_event state at: %u \n", idx );
+            printf("   invalid start_event state at: %d \n", idx );
 #  endif
           res = hipEventElapsedTime ( &status.gpu_delay, cios->start_events[idx], cios->end_events[idx] );
           if (res != hipSuccess) {
-            printf("   invalid Cuda event state at: %u non fifo order ?\n", idx );
+            printf("   invalid Cuda event state at: %d non fifo order ?\n", idx );
             status.gpu_delay = 0;
             kaapi_assert(0);
           }
