@@ -30,9 +30,9 @@
 #include "ztask.h"
 #include "ztask_internal.h"
 
-
-#define HEAVY_DEBUG 1
+#define HEAVY_DEBUG 0
 #if HEAVY_DEBUG && PRECISION_d
+#warning "Heavy debug enabled. Execution time is highly slow down."
 #include <math.h>
 #endif
 
@@ -253,7 +253,7 @@ static void NAME(task_body_gpu)( kaapi_task_t* task, kaapi_thread_t* thread, voi
        norm_inf = fmax( norm_inf, fabs(bufferC[i]- bufferC2[i]) );
        norm_C = fmax( norm_C, fabs(bufferC[i]) );
     }
-  if (norm_inf/norm_C >= 1e-6) { printf("Error\n"); exit(1); }
+  if (norm_inf/norm_C >= 1e-10) { printf("Error\n"); exit(1); }
   else printf(".");
   free(bufferC);
   free(bufferA);

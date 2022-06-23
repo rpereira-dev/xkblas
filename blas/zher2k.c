@@ -207,10 +207,11 @@ int xkblas_zher2k_async( int uplo, int trans, int N, int K,
   }
 #endif
 
-    xkblas_auto_map( KERN_HER2K, Ch );
+    xkblas_context_t* xkctxt = xkblas_context_get();
+    xkblas_auto_map( xkctxt, KERN_HER2K, Ch );
 
 #if KAAPI_USE_TRACELIB==1
-    kaapi_context_t* ctxt =kaapi_self_context();
+    kaapi_context_t* ctxt = xkctxt->kctxt;
     kaapi_event_t* evt = KAAPI_EVENT_GET(&ctxt->kproc, KAAPI_EVT_CALL, 0 /*begin*/ );
     if (evt)
     {

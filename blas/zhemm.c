@@ -202,10 +202,11 @@ int xkblas_zhemm_async( int side, int uplo, int M, int N,
 #endif
 
     /* map output of C on ressources */
-    xkblas_auto_map( KERN_HEMM, Ch );
+    xkblas_context_t* xkctxt = xkblas_context_get();
+    xkblas_auto_map( xkctxt, KERN_HEMM, Ch );
 
 #if KAAPI_USE_TRACELIB==1
-    kaapi_context_t* ctxt =kaapi_self_context();
+    kaapi_context_t* ctxt = xkctxt->kctxt;
     kaapi_event_t* evt = KAAPI_EVENT_GET(&ctxt->kproc, KAAPI_EVT_CALL, 0 /*begin*/ );
     if (evt)
     {

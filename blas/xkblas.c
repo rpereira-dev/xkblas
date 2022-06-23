@@ -105,6 +105,7 @@ xkblas_context_t* xkblas_context_alloc(void)
     ctxt->xkblas_generation_cache = 0;
     ctxt->xkblas_matrix_descr_list = 0;
     ctxt->xkblas_modemath = xkblas_default_math;
+    ctxt->kctxt = kctxt;
     ctxt->kthread = kthread;
 
     /* create default kaapi context & thread */
@@ -903,7 +904,6 @@ static void xkblas_create_taskwriteback(
 #if KAAPI_USE_OCR
   /* OCR on the first parameter */
   kaapi_task_set_ld(task, KAAPI_TASK_OCR_PARAM, 0);
-
 #else
   uint16_t ldid = xkblas_get_ld(Ah,m,n);
   kaapi_task_set_ld(task, KAAPI_TASK_LD_BOUND, ldid);
@@ -1868,6 +1868,7 @@ redo_syr2k:
    Hardcoded selection between 1D or 2D mapping depending of the type of kernel
 */
 int xkblas_auto_map(
+  xkblas_context_t* ctxt,
   xkblas_kernel_t kernel,
   xkblas_matrix_descr_t* Ah
 )

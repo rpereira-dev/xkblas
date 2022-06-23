@@ -111,10 +111,11 @@ int xkblas_zswap_async(
     Complex64_t zs;
 
     /* map matrix blocs onto the ressource : do nothing if matrix blocs are already mapped */
-    xkblas_auto_map( KERN_SWAP, Ch );
+    xkblas_context_t* xkctxt = xkblas_context_get();
+    xkblas_auto_map( xkctxt, KERN_SWAP, Ch );
 
 #if KAAPI_USE_TRACELIB==1
-    kaapi_context_t* ctxt =kaapi_self_context();
+    kaapi_context_t* ctxt = xkctxt->kctxt;
     kaapi_event_t* evt = KAAPI_EVENT_GET(&ctxt->kproc, KAAPI_EVT_CALL, 0 /*begin*/ );
     if (evt)
     {
