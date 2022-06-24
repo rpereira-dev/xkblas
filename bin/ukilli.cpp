@@ -1106,7 +1106,7 @@ void csv_parallel_region_t::flush( call_info* ci)
   );
 #endif
   for (int i=0; i<ci->nparam; ++i)
-    fprintf(csv_parallel_region_t::fout_call,",%i",ci->param[i]);
+    fprintf(csv_parallel_region_t::fout_call,",%lu",ci->param[i]);
 
   for (int i=ci->nparam; i<16; ++i)
     fprintf(csv_parallel_region_t::fout_call,",0");

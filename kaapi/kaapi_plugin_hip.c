@@ -783,8 +783,8 @@ static void kaapi_cuda_init_cuda_stream(
      */
     hipblasStatus_t cres = hipblasCreate(&cios->handle);
     kaapi_assert(cres == HIPBLAS_STATUS_SUCCESS);
-    cres = rocblas_set_pointer_mode( cios->handle, rocblas_pointer_mode_host);
-    kaapi_assert(cres == rocblas_status_success);
+    rocblas_status rres = rocblas_set_pointer_mode( cios->handle, rocblas_pointer_mode_host);
+    kaapi_assert(rres == rocblas_status_success);
     cres = hipblasSetStream( cios->handle, cios->stream);
     kaapi_assert(cres == HIPBLAS_STATUS_SUCCESS);
 #endif

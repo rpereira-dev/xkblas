@@ -92,15 +92,9 @@ BUG: if set to 0 / PIPELINE set to 0 => deadlock
 
 
 /* to allow transfert between GPUi to GPUj if data is under xfer data to GPUi*/
-#if KAAPI_USE_HIP
-#  define KAAPI_USE_FAVOR_D2D_1 0 /* HIP with MI50onPCIE */
-#  define KAAPI_USE_STREAM_D2D  0 /* to use specific stream for D2D operation. */
-#  define KAAPI_USE_TOPO_D2D    0 /* to use D2D topology and performance group */
-#else
-#  define KAAPI_USE_FAVOR_D2D_1 1
-#  define KAAPI_USE_STREAM_D2D  1 /* to use specific stream for D2D operation. */
-#  define KAAPI_USE_TOPO_D2D    1 /* to use D2D topology and performance group */
-#endif
+#define KAAPI_USE_FAVOR_D2D_1 1 
+#define KAAPI_USE_STREAM_D2D  1
+#define KAAPI_USE_TOPO_D2D    1
 
 /* to allow to route data through NVlink if 2 GPUs is not interconnected */
 #define KAAPI_USE_D2D_ROUTE 0

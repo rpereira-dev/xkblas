@@ -70,7 +70,12 @@ kaapi_barrier_init (kaapi_barrier_t *barrier)
   KAAPI_ATOMIC_WRITE (&barrier->cycle, 0);
   KAAPI_ATOMIC_WRITE (&barrier->wait_cycle, 0);
   barrier->term = 0;
+#if 0
   memset (barrier->count, 0, KAAPI_BAR_CYCLES * KAAPI_CACHE_LINE_SIZE);
+#else
+  char* ptr = (char*)barrier->count;
+  for (size_t i=0; i<KAAPI_BAR_CYCLES * KAAPI_CACHE_LINE_SIZE; ++i) ptr[i] = 0;
+#endif
 }
 
 void

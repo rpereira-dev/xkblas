@@ -554,6 +554,60 @@ static void xkblas_free_curr_blochandle(void)
 }
 #endif
 
+/* Map all block to 1 GPU
+*/
+int xkblas_map_all(
+  int hlevel, int storage, size_t m, size_t n,
+  const void* A, size_t lda, size_t eltsize,
+  int gpu, int force
+)
+{
+  xkblas_matrix_descr_t* Ah = xkblas_find(A);
+  if (!xkblas_matrix_descr_isinit(Ah)) return EINVAL;
+
+  kaapi_ld_type_t type;
+  switch (hlevel) {
+    case 0: type = KAAPI_LD_BOARD; break;
+    case 1: type = KAAPI_LD_GPU; break;
+    case 2: type = KAAPI_LD_CORE; break;
+    default:
+      printf("[%s] unknown type, returns immediatly\n", __func__);
+#if KAAPI_DEBUG
+      abort();
+#endif
+      return EINVAL;
+  };
+
+  unsigned int count = kaapi_localitydomain_count(type);
+  if (count ==0) return EINVAL;
+
+  size_t Amt = Ah->mt;
+  size_t Ant = Ah->nt;
+
+  kaapi_localitydomain_t* ld = kaapi_localitydomain_get_bytype(type, gpu);
+
+  for (size_t i=0; i<Amt; ++i)
+  {
+    for (size_t j=0; j<Ant; ++j)
+    {
+      uint16_t ldid = xkblas_get_ldid(Ah, i, j );
+      if ((ldid ==(uint16_t)-1) || force)
+      {
+        xkblas_set_ldid(Ah, i, j, ldid = ld->ldid);
+#if KAAPI_USE_OCR
+        kaapi_assert( ldid == kaapi_memory_asid_get_lid(ld->device->memdev.asid) );
+        kaapi_assert(0 == kaapi_dsm_wish_distribution(
+              &kaapi_the_dsm,
+              ld->device->memdev.asid,
+              xkblas_get_handle(Ah, i, j)
+        ));
+#endif
+      }
+    }
+  }
+  return 0;
+}
+
 /* Do not implement type== ALL
    store bloc (i,j) on a grid of ressource GpxGq (i/Bp)%Gp,(j/Bq)%Gq
    If matrix is not found return EINVAL
@@ -1867,12 +1921,16 @@ redo_syr2k:
 /* Map tile of matrix descriptor.
    Hardcoded selection between 1D or 2D mapping depending of the type of kernel
 */
+kaapi_atomic_t count_call ={0};
 int xkblas_auto_map(
   xkblas_context_t* ctxt,
   xkblas_kernel_t kernel,
   xkblas_matrix_descr_t* Ah
 )
 {
+  size_t ngpu = xkblas_get_ngpus();
+  if (ngpu ==0) return EBUSY;
+
   switch (kernel)
   {
     case KERN_SYRK:
@@ -1895,28 +1953,46 @@ int xkblas_auto_map(
     case KERN_HEMM:
     case KERN_HERK:
     case KERN_HER2K:
-    { /* 2D Bloc cyclic */
-      size_t Blkm = 1;
-      size_t Blkn = 1;
-      size_t ngpu = xkblas_get_ngpus();
-      size_t Gm = sqrt(ngpu);
-      size_t Gn = Gm;
-      if (Gm ==0) { Gn = ngpu; Gm = 1; }
-      else {
-        /* find the most square decomposition of ngpu in Gm x Gn */
-        size_t g;
-        for (g = Gm+1; g>0; --g)
-           if (ngpu % g == 0) break;
-        if (g==0) { Gm = ngpu; Gn = 1; }
-        //if (g==0) { Gm = 1; Gn = ngpu; }
-        else { Gm = g; Gn = ngpu/g; }
+    { 
+#if 0 // experimental
+      int dispatch = (Ah->mt*Ah->nt > 32* ngpu); 
+      printf("%s:: tid: %i, kid: %lu => dispatch: %i\n", __FUNCTION__, ctxt->kctxt->tid, ctxt->kctxt->kid, dispatch);
+      if (dispatch)
+#endif
+      {
+        /* 2D Bloc cyclic */
+        size_t Blkm = 1;
+        size_t Blkn = 1;
+        size_t Gm = sqrt(ngpu);
+        size_t Gn = Gm;
+        if (Gm ==0) { Gn = ngpu; Gm = 1; }
+        else {
+          /* find the most square decomposition of ngpu in Gm x Gn */
+          size_t g;
+          for (g = Gm+1; g>0; --g)
+             if (ngpu % g == 0) break;
+          if (g==0) { Gm = ngpu; Gn = 1; }
+          //if (g==0) { Gm = 1; Gn = ngpu; }
+          else { Gm = g; Gn = ngpu/g; }
+        }
+        //printf("Block2D cyclic: Blkm: %i, Blkn: %i, Gm: %i, Gn: %i\n", Blkm, Blkn, Gm, Gn);
+        xkblas_map_2Dblock_cyclic(
+          1, CblasColMajor,
+          Ah->M, Ah->N, Ah->addr, Ah->ld, Ah->eltsize,
+          Blkm, Blkn, Gm, Gn, 0
+        );
       }
-      //printf("Block2D cyclic: Blkm: %i, Blkn: %i, Gm: %i, Gn: %i\n", Blkm, Blkn, Gm, Gn);
-      xkblas_map_2Dblock_cyclic(
-        1, CblasColMajor,
-        Ah->M, Ah->N, Ah->addr, Ah->ld, Ah->eltsize,
-        Blkm, Blkn, Gm, Gn, 0
-      );
+#if 0
+      else 
+      {
+        int GPU= KAAPI_ATOMIC_INCR(&count_call);
+        xkblas_map_all(
+          1, CblasColMajor,
+          Ah->M, Ah->N, Ah->addr, Ah->ld, Ah->eltsize,
+          GPU % ngpu, 0
+        );
+       }
+#endif
     } break;
 
     case KERN_SWAP:
