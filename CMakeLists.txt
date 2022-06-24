@@ -19,9 +19,10 @@ option(KAAPI_USE_PERFCTR "Add support for performance counter in the trace of ex
 
 option(KAAPI_USE_MKL "Use MKL" OFF)
 option(KAAPI_USE_OPENBLAS "Use OpenBLAS" OFF)
-option(KAAPI_USE_CRATBLAS "Use Cray LIBSCI" OFF)
+option(KAAPI_USE_CRAYBLAS "Use Cray LIBSCI" OFF)
 
 option(KAAPI_USE_SLEEP "Sleep thread is nothing to do" ON)
+option(KAAPI_BUILD_TESTING "Compile /testing files" OFF)
 
 #--
 if (KAAPI_USE_HIP AND KAAPI_USE_CUDA_RT)
@@ -196,5 +197,7 @@ include_directories ("kaapi")
 add_subdirectory(kaapi)
 add_subdirectory(bin)
 add_subdirectory(blas)
-add_subdirectory(testing)
+if (KAAPI_BUILD_TESTING)
+  add_subdirectory(testing)
+endif()
 
